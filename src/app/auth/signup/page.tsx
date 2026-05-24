@@ -93,7 +93,7 @@ export default function SignUpPage() {
       return;
     }
 
-    if (!usernameAvailable) {
+    if (usernameAvailable === false) {
       setError("Username is not available");
       return;
     }
@@ -212,11 +212,11 @@ export default function SignUpPage() {
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
                         {checkingUsername ? (
                           <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#ff7a1a]" />
-                        ) : usernameAvailable ? (
+                        ) : usernameAvailable === true ? (
                           <CheckCircle className="h-5 w-5 text-[#ff7a1a]" />
-                        ) : (
+                        ) : usernameAvailable === false ? (
                           <AlertCircle className="h-5 w-5 text-[#ffb36b]" />
-                        )}
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -301,7 +301,7 @@ export default function SignUpPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || !usernameAvailable || !agreedToTerms}
+                  disabled={loading || usernameAvailable === false || !agreedToTerms}
                   className="w-full rounded-[1.25rem] bg-[#f5f0de] py-3 text-sm font-black text-[#0a0a0a] transition hover:bg-[#ff7a1a] disabled:opacity-60"
                 >
                   {loading ? "Creating account..." : "Create account"}

@@ -24,6 +24,11 @@ import {
 
 let persistencePromise: Promise<void> | null = null;
 
+function isPermissionDeniedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /permission/i.test(message) && /denied/i.test(message);
+}
+
 async function ensureAuthPersistence() {
   if (!persistencePromise) {
     persistencePromise = (async () => {
@@ -67,7 +72,9 @@ export async function signUp(
       throw err;
     }
     // DB rules may deny unauthenticated reads — server-side transaction enforces uniqueness
-    console.warn("Client-side username check failed, proceeding:", err);
+    if (!isPermissionDeniedError(err)) {
+      console.warn("Client-side username check failed, proceeding:", err);
+    }
   }
 
   // Sign up with Firebase auth
@@ -189,7 +196,9 @@ export async function checkUsernameAvailability(username: string) {
   try {
     return await isUsernameAvailable(username);
   } catch (err) {
-    console.warn("Username check failed:", err);
+    if (!isPermissionDeniedError(err)) {
+      console.warn("Username check failed:", err);
+    }
     return true; // Allow signup to proceed if check fails
   }
 }
