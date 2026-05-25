@@ -1,5 +1,7 @@
 import { get, ref, update } from "firebase/database";
 import { db } from "@/lib/firebase";
+import { normalizeUsernameKey } from "@/lib/username-utils";
+
 export { getUsernameValidationError, normalizeUsernameKey } from "@/lib/username-utils";
 
 export function getUsernameIndexRef(username: string) {
