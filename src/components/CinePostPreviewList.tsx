@@ -4,6 +4,7 @@ import Link from "next/link";
 import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import CinePostArtwork from "@/components/CinePostArtwork";
 import CinePostListStrip from "@/components/CinePostListStrip";
+import SpoilerText from "@/components/SpoilerText";
 import { CinePostWithDetails, User } from "@/types";
 import { getDisplayUserName } from "@/lib/users";
 
@@ -100,9 +101,11 @@ export default function CinePostPreviewList({
                 </div>
               </div>
 
-              <Link href={`/posts/${post.id}`} className="mt-2 block">
-                <p className="whitespace-pre-wrap text-sm leading-6 text-[#f5f0de]/80">{preview(post.body)}</p>
-              </Link>
+              <div className="mt-2 block">
+                <SpoilerText spoiler={post.contains_spoiler} className="whitespace-pre-wrap text-sm leading-6 text-[#f5f0de]/80">
+                  <Link href={`/posts/${post.id}`}>{preview(post.body)}</Link>
+                </SpoilerText>
+              </div>
 
               <div className="mt-3">
                 <CinePostListStrip items={post.list_items || []} theme={theme} />
@@ -164,9 +167,11 @@ export default function CinePostPreviewList({
                   )}
                 </div>
               </div>
-              <Link href={`/posts/${post.id}`} className="mt-2 block">
-                <p className="whitespace-pre-wrap text-sm leading-6 text-[#f5f0de]/80">{preview(post.body)}</p>
-              </Link>
+              <div className="mt-2 block">
+                <SpoilerText spoiler={post.contains_spoiler} className="whitespace-pre-wrap text-sm leading-6 text-[#f5f0de]/80">
+                  <Link href={`/posts/${post.id}`}>{preview(post.body)}</Link>
+                </SpoilerText>
+              </div>
               <div className="mt-2 flex gap-3 text-xs font-bold text-white/55">
                 <span>{post.likes_count} likes</span>
                 <span>{post.comments_count} comments</span>

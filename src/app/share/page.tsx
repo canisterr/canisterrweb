@@ -10,7 +10,7 @@ import TopActionBanner from "@/components/TopActionBanner";
 import { Content, ShareWithDetails, TMDBMovie, User } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { get, onValue, ref, set } from "firebase/database";
+import { equalTo, get, onValue, orderByChild, query, ref, set } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getMovieDetails, searchMovies } from "@/lib/tmdb";
 import { getShowDetails, searchShows, ShowDetails } from "@/lib/tvmaze";
@@ -259,7 +259,11 @@ function SharePageContent() {
 
         setLoading(false);
 
-        const followsRef = ref(db, "follows");
+        const followsRef = query(
+          ref(db, "follows"),
+          orderByChild("follower_id"),
+          equalTo(currentUser.id)
+        );
         unsubscribeFollowers = onValue(followsRef, (snapshot) => {
           try {
             if (!snapshot.exists()) {
@@ -302,7 +306,11 @@ function SharePageContent() {
           }
         });
 
-        const sharesRef = ref(db, "shares");
+        const sharesRef = query(
+          ref(db, "shares"),
+          orderByChild("sender_id"),
+          equalTo(currentUser.id)
+        );
         unsubscribeShares = onValue(sharesRef, (snapshot) => {
           if (!snapshot.exists()) {
             setSentShares([]);

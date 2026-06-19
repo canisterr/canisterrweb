@@ -13,6 +13,7 @@ import { getUserByUsername, getUserStats, getFollowerCount, getFollowingCount } 
 import { getUserMovieLogs } from "@/lib/logs";
 import { getReactionAverageLabel } from "@/lib/profile";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { Mail, Users, Film, Star, Zap, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -272,7 +273,10 @@ export default function UserProfilePage() {
               recentLogs.map((log) => (
                 <div
                   key={log.id}
-                  onClick={() => router.push(buildLogUrl(log))}
+                  onClick={() => {
+                    setPendingLoadingTitle(log.content?.title);
+                    router.push(buildLogUrl(log));
+                  }}
                   className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer"
                 >
                   <div className="flex gap-4">

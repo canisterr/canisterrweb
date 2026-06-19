@@ -34,6 +34,7 @@ type CreateCinePostInput = {
   listName?: string;
   listCoverUrl?: string | null;
   logId?: string;
+  containsSpoiler?: boolean;
 };
 
 type CinePostQueryOptions = {
@@ -304,6 +305,10 @@ export async function createCinePost(input: CreateCinePostInput): Promise<CinePo
     updated_at: now,
   };
 
+  if (input.containsSpoiler) {
+    post.contains_spoiler = true;
+  }
+
   if (input.content && !input.listId) {
     post.content_id = input.content.id;
   }
@@ -361,6 +366,7 @@ export async function createLogCinePost(
     content,
     posterUrl: log.ticket_image_url || content.poster_url || null,
     logId: log.id,
+    containsSpoiler: log.contains_spoiler,
     tags: [rating, "log"],
   });
 }

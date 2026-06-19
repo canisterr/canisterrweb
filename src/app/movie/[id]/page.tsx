@@ -11,12 +11,13 @@ import ContentCinePosts from "@/components/ContentCinePosts";
 import { User, Movie, MovieReviewWithUser, Content, MovieLog, MovieLogWithContent } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { ref, get } from "firebase/database";
+import { equalTo, get, orderByChild, query, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getMovieDetails } from "@/lib/tmdb";
 import { getMovieReviewFeed } from "@/lib/movie-reviews";
 import { getLogsForContent } from "@/lib/logs";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import {
   ArrowLeft,
   Share2,
@@ -150,8 +151,9 @@ export default function MoviePage() {
       return;
     }
 
-    const logsRef = ref(db, "movie_logs");
-    const logsSnapshot = await get(logsRef);
+    const logsSnapshot = await get(
+      query(ref(db, "movie_logs"), orderByChild("content_id"), equalTo(numericMovieId))
+    );
 
     if (!logsSnapshot.exists()) {
       setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
@@ -215,23 +217,19 @@ export default function MoviePage() {
 
         setUser(currentUser);
 
-        // Fetch movie details from TMDB
-        if (movieId && !isNaN(Number(movieId))) {
-          const movieDetails = await getMovieDetails(Number(movieId));
-          if (movieDetails) {
-            setMovie({ ...movieDetails, created_at: new Date().toISOString() } as MovieDetails);
-          }
+        const numericMovieId = Number(movieId);
+        const [movieDetails, mergedReviews, , fetchedLogs] = await Promise.all([
+          numericMovieId ? getMovieDetails(numericMovieId) : Promise.resolve(null),
+          getMovieReviewFeed(numericMovieId, "movie"),
+          loadMovieLogData(),
+          getLogsForContent(numericMovieId, "movie", 100),
+        ]);
+
+        if (movieDetails) {
+          setMovie({ ...movieDetails, created_at: new Date().toISOString() } as MovieDetails);
         }
-
-        // Fetch reviews from both explicit reviews table and movie log notes.
-        const mergedReviews = await getMovieReviewFeed(Number(movieId), "movie");
         setReviews(mergedReviews);
-
-        // Fetch reaction breakdown for this movie
-        await loadMovieLogData();
-
-        // Fetch all logs for this movie (to show friends' logs)
-        let logs = await getLogsForContent(Number(movieId), "movie", 100);
+        let logs = fetchedLogs;
         logs = logs.filter(
           (log) =>
             Number(log.content_id) === Number(movieId) &&
@@ -564,7 +562,10 @@ export default function MoviePage() {
                   {myReviewLog && (
                     <button
                       type="button"
-                      onClick={() => router.push(buildLogUrl(myReviewLog))}
+                      onClick={() => {
+                        setPendingLoadingTitle(movie?.title || myReviewLog.content?.title);
+                        router.push(buildLogUrl(myReviewLog));
+                      }}
                       className="mt-4 block w-full rounded-2xl border border-white/10 bg-white/5 p-3.5 text-left transition-colors hover:border-white/20 hover:bg-white/10"
                     >
                       <div className="mb-2.5 flex items-center justify-between gap-3">
@@ -602,7 +603,10 @@ export default function MoviePage() {
                                 <button
                                   type="button"
                                   className="flex flex-col items-center text-center"
-                                  onClick={() => router.push(buildLogUrl(log))}
+                                  onClick={() => {
+                                    setPendingLoadingTitle(movie?.title || log.content?.title);
+                                    router.push(buildLogUrl(log));
+                                  }}
                                   title={`View ${userLabel}'s log`}
                                 >
                                   {log.user.avatar_url ? (
@@ -618,7 +622,10 @@ export default function MoviePage() {
                                   <button
                                     type="button"
                                     className="font-semibold text-white/90 transition hover:underline"
-                                    onClick={() => router.push(buildLogUrl(log))}
+                                    onClick={() => {
+                                      setPendingLoadingTitle(movie?.title || log.content?.title);
+                                      router.push(buildLogUrl(log));
+                                    }}
                                   >
                                     {userLabel}
                                   </button>
@@ -629,7 +636,10 @@ export default function MoviePage() {
                                 <button
                                   type="button"
                                   className="text-xs font-medium text-white/55 transition hover:text-white hover:underline"
-                                  onClick={() => router.push(buildLogUrl(log))}
+                                  onClick={() => {
+                                    setPendingLoadingTitle(movie?.title || log.content?.title);
+                                    router.push(buildLogUrl(log));
+                                  }}
                                 >
                                   View
                                 </button>
@@ -692,7 +702,10 @@ export default function MoviePage() {
                         key={log.id}
                         type="button"
                         className="flex cursor-pointer flex-col items-center p-1 text-center transition-colors hover:opacity-90"
-                        onClick={() => router.push(buildLogUrl(log))}
+                        onClick={() => {
+                          setPendingLoadingTitle(movie?.title || log.content?.title);
+                          router.push(buildLogUrl(log));
+                        }}
                         title={`View ${userLabel}'s log`}
                       >
                         <div className="relative flex flex-col items-center">

@@ -2,9 +2,8 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import HydrationFix from "@/components/HydrationFix";
-import AutoPushPrompt from "@/components/AutoPushPrompt";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
-import ForegroundPushListener from "@/components/ForegroundPushListener";
+import DeferredPushEnhancements from "@/components/DeferredPushEnhancements";
 import GlobalErrorListener from "@/components/GlobalErrorListener";
 import LocalhostServiceWorkerCleanup from "@/components/LocalhostServiceWorkerCleanup";
 import MobileInstallPrompt from "@/components/MobileInstallPrompt";
@@ -62,8 +61,7 @@ export default function RootLayout({
         <CurrentUserProvider>
           <HydrationFix>{children}</HydrationFix>
         </CurrentUserProvider>
-        <AutoPushPrompt />
-        <ForegroundPushListener />
+        <DeferredPushEnhancements />
         <GlobalErrorListener />
         <MobileInstallPrompt />
         <PwaBottomNav />

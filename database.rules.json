@@ -31,13 +31,14 @@
     },
     "movie_logs": {
       ".read": "auth != null",
-      ".indexOn": ["user_id"],
+      ".indexOn": ["user_id", "content_id"],
       "$logId": {
         ".write": "auth != null && ((!data.exists() && newData.child('user_id').val() == auth.uid) || (data.exists() && data.child('user_id').val() == auth.uid))"
       }
     },
     "watched_movies": {
       ".read": "auth != null",
+      ".indexOn": ["user_id"],
       "$watchedId": {
         ".write": "auth != null && ((!data.exists() && newData.child('user_id').val() == auth.uid) || (data.exists() && data.child('user_id').val() == auth.uid))"
       }
@@ -70,6 +71,7 @@
     },
     "shares": {
       ".read": "auth != null",
+      ".indexOn": ["sender_id", "receiver_id"],
       "$shareId": {
         ".write": "auth != null && ((!data.exists() && newData.child('sender_id').val() == auth.uid) || (data.exists() && (data.child('sender_id').val() == auth.uid || data.child('receiver_id').val() == auth.uid)))"
       }

@@ -10,18 +10,19 @@ import TopActionBanner from "@/components/TopActionBanner";
 import CinematicLoading from "@/components/CinematicLoading";
 import { User, ShareWithDetails, Content, MovieLogWithContent } from "@/types";
 import { db } from "@/lib/firebase";
-import { onValue, ref } from "firebase/database";
+import { equalTo, onValue, orderByChild, query, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import { searchMovies } from "@/lib/tmdb";
 import { searchShows } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getFriendLogs } from "@/lib/friend-logs";
 import { reportAppError } from "@/lib/report-error";
-import { getUsersByIds, searchUsersCached } from "@/lib/users";
+import { getDisplayUserName, getUsersByIds, searchUsersCached } from "@/lib/users";
 import { getBlurDataUrl } from "@/lib/performance";
 import { getTmdbPosterUrl } from "@/lib/performance";
 import Link from "next/link";
-import { Clapperboard, Film, Loader2, MessageCircle, MessageSquareText, Plus, RotateCcw, Search, Share2, X } from "lucide-react";
+import { ArrowRight, Clapperboard, Film, Loader2, MessageCircle, MessageSquareText, Plus, RotateCcw, Search, Share2, X } from "lucide-react";
 
 const SEARCH_HISTORY_STORAGE_KEY = "cine_search_history";
 const MAX_SEARCH_HISTORY = 8;
@@ -161,7 +162,11 @@ export default function DashboardPage() {
 
       if (cancelled) return;
 
-      const sharesRef = ref(db, "shares");
+      const sharesRef = query(
+        ref(db, "shares"),
+        orderByChild("receiver_id"),
+        equalTo(currentUser.id)
+      );
       unsubscribeShares = onValue(sharesRef, async (snapshot) => {
         if (!snapshot.exists()) {
           if (!cancelled) setShares([]);
@@ -481,33 +486,48 @@ export default function DashboardPage() {
   const repeatWatchKeys = new Set<string>();
 
   const friendActivity = [
-    ...unwatchedShares.slice(0, 6).map((share) => ({
-      id: `share-${share.id}`,
-      kind: "shared" as const,
-      poster_url: (share.movie || share.content)?.poster_url || null,
-      title: (share.movie || share.content)?.title || "Unknown",
-      byline: `by ${share.sender?.name || "Unknown"}`,
-      note: share.note || null,
-      reaction: "",
-      createdAt: share.created_at,
-      onClick: () => setSelectedShare(share),
-    })),
-    ...friendLogs.slice(0, 8).map((log) => ({
-      id: `log-${log.id}`,
-      kind: "logged" as const,
-      poster_url: log.content?.poster_url || null,
-      title: log.content?.title || "Unknown",
-      byline: `by ${log.friend.name}`,
-      repeatWatch: (() => {
-        const key = `${log.friend.id}:${log.content_type}:${log.content.id}`;
-        const shouldShow = (friendLogVisitCounts[key] || 0) > 1 && !repeatWatchKeys.has(key);
-        repeatWatchKeys.add(key);
-        return shouldShow;
-      })(),
-      reaction: log.reaction == null ? "Unrated" : log.reaction === 2 ? "Masterpiece" : log.reaction === 1.5 ? "Average" : log.reaction === 1 ? "Good" : "Bad",
-      createdAt: log.created_at,
-      onClick: () => router.push(buildLogUrl(log)),
-    })),
+    ...unwatchedShares.slice(0, 6).map((share) => {
+      const senderName = share.sender ? getDisplayUserName(share.sender, user) : "Unknown";
+
+      return {
+        id: `share-${share.id}`,
+        kind: "shared" as const,
+        poster_url: (share.movie || share.content)?.poster_url || null,
+        title: (share.movie || share.content)?.title || "Unknown",
+        byline: `by ${senderName}`,
+        avatarUrl: share.sender?.avatar_url || null,
+        avatarLabel: senderName,
+        note: share.note || null,
+        reaction: "",
+        createdAt: share.created_at,
+        onClick: () => setSelectedShare(share),
+      };
+    }),
+    ...friendLogs.slice(0, 8).map((log) => {
+      const friendName = getDisplayUserName(log.friend, user);
+
+      return {
+        id: `log-${log.id}`,
+        kind: "logged" as const,
+        poster_url: log.content?.poster_url || null,
+        title: log.content?.title || "Unknown",
+        byline: `by ${friendName}`,
+        avatarUrl: log.friend.avatar_url || null,
+        avatarLabel: friendName,
+        repeatWatch: (() => {
+          const key = `${log.friend.id}:${log.content_type}:${log.content.id}`;
+          const shouldShow = (friendLogVisitCounts[key] || 0) > 1 && !repeatWatchKeys.has(key);
+          repeatWatchKeys.add(key);
+          return shouldShow;
+        })(),
+        reaction: log.reaction == null ? "Unrated" : log.reaction === 2 ? "Masterpiece" : log.reaction === 1.5 ? "Average" : log.reaction === 1 ? "Good" : "Bad",
+        createdAt: log.created_at,
+        onClick: () => {
+          setPendingLoadingTitle(log.content?.title);
+          router.push(buildLogUrl(log));
+        },
+      };
+    }),
   ]
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
     .slice(0, 10);
@@ -519,11 +539,11 @@ export default function DashboardPage() {
   return (
     <PageLayout user={user} onSignOut={handleSignOut} theme="brutalist">
       <TopActionBanner message={bannerMessage} />
-      <div className="min-h-screen bg-[#0a0a0a] px-4 py-4 text-[#f5f0de] sm:px-8 sm:py-6">
+      <main className="mx-auto min-h-screen w-full max-w-[860px] bg-black px-1 pb-8 pt-2 text-[#f5f0de] sm:px-4 sm:pt-4">
         {/* Search Bar */}
-        <div className="mb-6 sm:mb-8">
-          <div className="relative max-w-2xl">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 transform text-white/40" />
+        <div className="mb-7 sm:mb-8">
+          <div className="relative w-full">
+            <Search className="absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transform text-white/50" strokeWidth={2} />
             <input
               ref={searchInputRef}
               type="text"
@@ -531,7 +551,7 @@ export default function DashboardPage() {
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               onFocus={() => setShowSearchModal(true)}
-              className="w-full border border-white/15 bg-[#111111] py-3 pl-10 pr-4 text-base text-[#f5f0de] outline-none focus:border-[#ff7a1a] focus:ring-2 focus:ring-[#ff7a1a]/20"
+              className="w-full rounded-2xl border border-white/20 bg-[#0d0d0d] py-3.5 pl-12 pr-4 text-sm text-[#f5f0de] outline-none placeholder:text-white/40 focus:border-[#ff7a1a] focus:ring-2 focus:ring-[#ff7a1a]/15 sm:text-base"
             />
 
             {/* Dropdown Results */}
@@ -542,7 +562,7 @@ export default function DashboardPage() {
                 searchHistory.length > 0 ||
                 searching ||
                 searchFilter === "accounts") && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(70dvh,600px)] overflow-y-auto overscroll-contain border border-white/10 bg-[#111111] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
+              <div className="absolute left-0 right-0 top-full z-50 mt-3 max-h-[min(70dvh,600px)] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#111318] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
                 {searchQuery.trim().length === 0 && searchHistory.length > 0 && (
                   <div className="border-b border-white/10 p-3">
                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -737,41 +757,42 @@ export default function DashboardPage() {
         {/* Recently Watched Section (Current User) removed as requested */}
 
         {/* Friends Activity / Get Started Section */}
-        <div className="mb-8">
+        <div className="mb-6">
           {user ? (
             <>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-base font-bold text-[#f5f0de] sm:text-2xl">
-                  Friends Activity
-                </h2>
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-black tracking-tight text-[#f5f0de] sm:text-2xl">Friends Activity</h2>
+                  <p className="mt-0.5 text-xs text-white/50 sm:text-sm">See what your friends are watching and saying</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowQuickActions(true)}
-                  className="inline-flex h-10 w-10 items-center justify-center bg-[#ff7a1a] text-[#0a0a0a] transition hover:bg-[#ff8d3b] sm:h-11 sm:w-11"
+                  className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a] text-[#08090b] shadow-[0_8px_24px_rgba(255,122,26,0.25)] transition hover:-translate-y-0.5 hover:bg-[#ff8d3b] sm:h-12 sm:w-12"
                   aria-label="Open quick actions"
                 >
-                  <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
+                  <Plus className="h-6 w-6" strokeWidth={2} />
                 </button>
               </div>
 
               {hasFriendActivity ? (
                 <>
-                  <div className="-mx-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 sm:pb-4">
-                    <div className="flex gap-2 sm:gap-3 md:gap-4">
+                  <div className="-mx-1 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div className="flex gap-3">
                       {friendActivity.map((item) => (
                         <button
                           key={item.id}
                           type="button"
                           onClick={item.onClick}
-                          className="w-[6rem] min-w-[6rem] max-w-[6rem] flex-shrink-0 cursor-pointer overflow-hidden border border-white/10 bg-[#111111] text-left transition hover:border-[#ff7a1a]/50 hover:shadow-[0_12px_30px_rgba(0,0,0,0.35)] sm:w-40 sm:min-w-0 sm:max-w-none md:w-44 lg:w-52"
+                          className="w-[calc(28.571%_-_0.857rem)] min-w-[calc(28.571%_-_0.857rem)] flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-white/15 bg-[#0b0d10] text-left transition hover:border-[#ff7a1a]/55 hover:shadow-[0_12px_28px_rgba(0,0,0,0.4)] sm:w-[calc(22.222%_-_0.666rem)] sm:min-w-[calc(22.222%_-_0.666rem)] sm:rounded-xl"
                         >
-                          <div className="relative aspect-[2/3] overflow-hidden bg-[#1a1a1a] sm:h-56 sm:aspect-auto md:h-60 lg:h-64">
+                          <div className="relative aspect-[2/3] overflow-hidden bg-[#1a1a1a]">
                             {item.poster_url ? (
                               <Image
                                 src={item.poster_url}
                                 alt={item.title}
                                 fill
-                                sizes="(max-width: 768px) 120px, 180px"
+                                sizes="(max-width: 640px) 140px, 170px"
                                 className="object-cover"
                                 placeholder="blur"
                                 blurDataURL={getBlurDataUrl()}
@@ -791,16 +812,19 @@ export default function DashboardPage() {
                               </div>
                             )}
                           </div>
-                          <div className="p-1.5 sm:p-3">
-                            <h3 className="mb-0.5 truncate text-[9px] font-semibold leading-tight text-[#f5f0de] sm:mb-1 sm:text-base">
+                          <div className="border-t border-white/10 p-1.5 sm:p-2.5">
+                            <h3 className="truncate text-[9px] font-bold leading-tight text-[#f5f0de] sm:text-sm">
                               {item.title}
                             </h3>
-                            <p className="mb-1 truncate text-[8px] leading-tight text-white/55 sm:mb-2 sm:text-sm">
+                            <p className="mt-0.5 truncate text-[8px] leading-tight text-white/55 sm:mt-1 sm:text-xs">
                               {item.byline}
                             </p>
-                            <div className="flex items-end justify-between gap-2">
-                              <span className="text-[8px] font-medium uppercase tracking-[0.16em] text-[#ff7a1a] sm:text-[10px]">
-                                {item.kind === "shared" ? "shared" : item.reaction}
+                            <div className="mt-1.5 flex items-center justify-between gap-1 sm:mt-2.5 sm:gap-2">
+                              <span className="flex min-w-0 items-center gap-1 text-[7px] font-bold uppercase text-[#ff7a1a] sm:gap-1.5 sm:text-[10px]">
+                                <span className="relative flex h-3 w-3 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-[#25282d] text-[6px] text-[#f5f0de] sm:h-4 sm:w-4 sm:text-[7px]">
+                                  {item.avatarUrl ? <img src={item.avatarUrl} alt="" className="h-full w-full object-cover" /> : item.avatarLabel.charAt(0).toUpperCase()}
+                                </span>
+                                <span className="truncate">{item.kind === "shared" ? "shared" : item.reaction}</span>
                               </span>
                               {item.kind === "shared" && item.note ? (
                                 <span
@@ -819,11 +843,12 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   </div>
+                  <div className="mb-4 ml-1 h-0.5 w-[36%] min-w-32 rounded-full bg-white/35" />
                   <Link
                     href="/all-movies"
-                    className="mt-1 inline-flex w-full justify-center border border-[#ff7a1a] px-3 py-1.5 text-xs font-medium text-[#ffb36b] transition-colors hover:bg-[#ff7a1a]/10 sm:w-auto sm:px-4 sm:py-2 sm:text-sm"
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#ff7a1a]/70 px-4 text-sm font-bold text-[#ff8d3b] transition-colors hover:bg-[#ff7a1a]/10"
                   >
-                    View All
+                    View All Activity <ArrowRight className="h-4 w-4" />
                   </Link>
                 </>
               ) : (
@@ -870,7 +895,7 @@ export default function DashboardPage() {
         <section className="relative mb-8 min-h-[100dvh] px-0 py-0">
           <div className="relative">
             <div className="mx-auto w-full max-w-none">
-              <CinePostsFeed currentUser={user} refreshKey={cinePostRefreshKey} theme="brutalist" />
+              <CinePostsFeed currentUser={user} refreshKey={cinePostRefreshKey} theme="brutalist" variant="home" />
             </div>
           </div>
         </section>
@@ -1111,7 +1136,7 @@ export default function DashboardPage() {
             onLogged={(message) => setBannerMessage(message)}
           />
         )}
-      </div>
+      </main>
     </PageLayout>
   );
 }

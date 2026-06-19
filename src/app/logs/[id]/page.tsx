@@ -37,6 +37,7 @@ import {
   unlikeLogComment,
 } from "@/lib/log-comments";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { shouldDeliverNotificationToUser } from "@/lib/settings";
 import { getUsersByIds } from "@/lib/users";
 
@@ -1370,7 +1371,10 @@ export default function LogDetailPage() {
                       <button
                         type="button"
                         className={`mt-1 text-sm font-bold sm:text-base ${reaction.textClass}`}
-                        onClick={() => router.push(buildLogUrl(l))}
+                        onClick={() => {
+                          setPendingLoadingTitle(l.content?.title || log?.content?.title);
+                          router.push(buildLogUrl(l));
+                        }}
                         title="Open this log"
                       >
                         {reaction.label}
@@ -1379,7 +1383,10 @@ export default function LogDetailPage() {
                         <button
                           type="button"
                           className="block text-left font-semibold text-slate-900 transition hover:text-slate-700 hover:underline"
-                          onClick={() => router.push(buildLogUrl(l))}
+                          onClick={() => {
+                            setPendingLoadingTitle(l.content?.title || log?.content?.title);
+                            router.push(buildLogUrl(l));
+                          }}
                         >
                           {formatDate(l.watched_date)}
                         </button>
@@ -1390,7 +1397,10 @@ export default function LogDetailPage() {
                       <button
                         type="button"
                         className="mt-1 text-xs font-medium text-slate-500 transition hover:text-slate-700 hover:underline"
-                        onClick={() => router.push(buildLogUrl(l))}
+                        onClick={() => {
+                          setPendingLoadingTitle(l.content?.title || log?.content?.title);
+                          router.push(buildLogUrl(l));
+                        }}
                       >
                         View log
                       </button>

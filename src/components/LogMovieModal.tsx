@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import Link from "next/link";
-import { Check, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Content, MovieLog, MovieLogWithContent, User } from "@/types";
 import { createLogCinePost } from "@/lib/cineposts";
 import { createMovieLog, getUserMovieLogs, updateMovieLog } from "@/lib/logs";
@@ -55,19 +54,37 @@ function getEpisodeOptionLabel(episode: TVMazeEpisode): string {
   return episode.name ? `${base} - ${episode.name}` : base;
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error("Could not read file"));
-    };
-    reader.onerror = () => reject(reader.error || new Error("Could not read file"));
-    reader.readAsDataURL(file);
-  });
+function formatRuntime(minutes: number | null | undefined): string | null {
+  if (!minutes || minutes <= 0) return null;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (!hours) return `${mins}m`;
+  return mins ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+function getReleaseYear(releaseDate: string | null | undefined): string | null {
+  if (!releaseDate) return null;
+  const year = releaseDate.slice(0, 4);
+  return /^\d{4}$/.test(year) ? year : null;
+}
+
+function getMetadataLine(content: Content): string {
+  return [
+    getReleaseYear(content.release_date),
+    formatRuntime(content.runtime),
+    content.director,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+}
+
+function getTitleClass(title: string): string {
+  const words = title.trim().split(/\s+/).filter(Boolean).length;
+  if (words <= 2) return "text-[34px] sm:text-[54px]";
+  if (words <= 4) return "text-[28px] sm:text-[44px]";
+  if (words <= 6) return "text-[22px] sm:text-[34px]";
+  if (words <= 9) return "text-[18px] sm:text-[28px]";
+  return "text-[15px] sm:text-[22px]";
 }
 
 export default function LogMovieModal({
@@ -79,44 +96,42 @@ export default function LogMovieModal({
   mode = "create",
   existingLog = null,
   onLogUpdated,
-  theme = "default",
   initialTvScope = null,
   initialTvEpisodeChoice = null,
 }: LogMovieModalProps) {
+  const router = useRouter();
   const ALL_EPISODES_VALUE = "__all__";
   const isEditMode = mode === "edit";
-  const isBrutalist = theme === "brutalist";
   const contentLabel = content.type === "tv" ? "TV show" : "Movie";
-  const logLabel = content.type === "tv" ? "TV show log" : "Movie log";
-  const actionLabel = isEditMode ? `Edit ${contentLabel} log` : `Log ${contentLabel}`;
   const [watchedDate, setWatchedDate] = useState(new Date().toISOString().split("T")[0]);
   const [reaction, setReaction] = useState<null | 0 | 1 | 1.5 | 2>(null); // 0=Bad, 1=Good, 1.5=Average, 2=Masterpiece
   const [notes, setNotes] = useState("");
+  const [reviewDraft, setReviewDraft] = useState("");
+  const [showReviewEditor, setShowReviewEditor] = useState(false);
+  const [containsSpoiler, setContainsSpoiler] = useState(false);
+  const [shareToFriends, setShareToFriends] = useState(false);
   const [shareAsPost, setShareAsPost] = useState(false);
-  const [postCaption, setPostCaption] = useState("");
   const [ticketImageUrl, setTicketImageUrl] = useState<string | null>(null);
-  const [ticketUploading, setTicketUploading] = useState(false);
   const [tvSeasons, setTvSeasons] = useState<TVMazeSeason[]>([]);
   const [tvEpisodes, setTvEpisodes] = useState<TVMazeEpisode[]>([]);
   const [selectedSeasonScope, setSelectedSeasonScope] = useState<string>("all");
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string>("");
   const [loadingSeasons, setLoadingSeasons] = useState(false);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
-  const [showReviewEditor, setShowReviewEditor] = useState(false);
-  const [reviewDraft, setReviewDraft] = useState("");
-  const ticketInputRef = useRef<HTMLInputElement | null>(null);
 
   // Context Log
   const [showContextLog, setShowContextLog] = useState(false);
   const [location, setLocation] = useState("");
   const [watchedWith, setWatchedWith] = useState("");
+  const [mood, setMood] = useState("");
+  const [contextTags, setContextTags] = useState("");
+  const [contextNotes, setContextNotes] = useState("");
   const [isRewatch, setIsRewatch] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [previousWatchDates, setPreviousWatchDates] = useState<string[]>([]);
-  const [checkingPreviousWatches, setCheckingPreviousWatches] = useState(false);
   const submitLockRef = useRef(false);
+  const watchedDateInputRef = useRef<HTMLInputElement | null>(null);
   const initialTvScopeRef = useRef(initialTvScope);
   const initialTvEpisodeChoiceRef = useRef(initialTvEpisodeChoice);
   const selectedSeasonScopeRef = useRef(selectedSeasonScope);
@@ -134,7 +149,6 @@ export default function LogMovieModal({
 
     const loadPreviousWatches = async () => {
       try {
-        setCheckingPreviousWatches(true);
         const logs = await getUserMovieLogs(user.id, 200);
         const priorLogs = logs
           .filter((log) => isSameContent(log, content))
@@ -142,7 +156,6 @@ export default function LogMovieModal({
           .map((log) => log.watched_date);
 
         if (!cancelled) {
-          setPreviousWatchDates(priorLogs);
           if (!isEditMode) {
             setIsRewatch(priorLogs.length > 0);
           }
@@ -153,13 +166,6 @@ export default function LogMovieModal({
           message: "We could not check your previous watches for this title.",
           details: err instanceof Error ? err.stack || err.message : String(err),
         });
-        if (!cancelled) {
-          setPreviousWatchDates([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setCheckingPreviousWatches(false);
-        }
       }
     };
 
@@ -304,7 +310,7 @@ export default function LogMovieModal({
     return () => {
       cancelled = true;
     };
-  }, [content.id, content.type, isOpen, selectedSeasonScope]);
+  }, [content.id, content.type, existingLog, isEditMode, isOpen, selectedSeasonScope]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -312,18 +318,21 @@ export default function LogMovieModal({
       setWatchedDate(existingLog.watched_date || new Date().toISOString().split("T")[0]);
       setReaction(typeof existingLog.reaction === "number" ? existingLog.reaction : null);
       setNotes(existingLog.notes || "");
-      setTicketImageUrl(existingLog.ticket_image_url || null);
-      setShowReviewEditor(false);
       setReviewDraft(existingLog.notes || "");
+      setContainsSpoiler(Boolean(existingLog.contains_spoiler));
+      setTicketImageUrl(existingLog.ticket_image_url || null);
 
       const existingContext = existingLog.context_log || {};
-      setShowContextLog(Boolean(existingContext.location || existingContext.watched_with || existingContext.mood));
+      setShowContextLog(false);
       setLocation(existingContext.location || "");
       setWatchedWith(existingContext.watched_with || "");
+      setMood(existingLog.mood || existingContext.mood || "");
+      setContextTags(existingContext.tags || "");
+      setContextNotes(existingContext.notes || "");
       const rewatchValue = (existingContext as Record<string, unknown>).rewatch;
       setIsRewatch(rewatchValue === "true" || rewatchValue === true);
+      setShareToFriends(false);
       setShareAsPost(false);
-      setPostCaption("");
       setError("");
       setSelectedSeasonScope(typeof existingLog.season === "number" ? String(existingLog.season) : "all");
       setSelectedEpisodeId(typeof existingLog.episode === "number" ? String(existingLog.episode) : "");
@@ -332,75 +341,30 @@ export default function LogMovieModal({
       setWatchedDate(new Date().toISOString().split("T")[0]);
       setReaction(null);
       setNotes("");
+      setReviewDraft("");
+      setContainsSpoiler(false);
+      setShowReviewEditor(false);
+      setShareToFriends(false);
       setShareAsPost(false);
-      setPostCaption("");
       setShowContextLog(false);
       setLocation("");
       setWatchedWith("");
+      setMood("");
+      setContextTags("");
+      setContextNotes("");
       setIsRewatch(false);
-      setShowReviewEditor(false);
-      setReviewDraft("");
       setError("");
       setSelectedSeasonScope("all");
       setSelectedEpisodeId("");
     }
-    setTicketUploading(false);
   }, [existingLog, isEditMode, isOpen, content.id]);
 
   if (!user) return null;
 
-  const openReviewEditor = () => {
-    setReviewDraft(notes);
-    setShowReviewEditor(true);
-  };
-
-  const saveReviewDraft = () => {
-    setNotes(reviewDraft);
-    setShowReviewEditor(false);
-  };
-
-  const handleTicketUploadClick = () => {
-    ticketInputRef.current?.click();
-  };
-
-  const handleTicketFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user) return;
-
-    if (!file.type.startsWith("image/")) {
-      setError("Please select an image file for your ticket or memory.");
-      event.target.value = "";
-      return;
-    }
-
-    if (file.size > 8 * 1024 * 1024) {
-      setError("Image size must be 8MB or smaller.");
-      event.target.value = "";
-      return;
-    }
-
-    try {
-      setTicketUploading(true);
-      setError("");
-      const dataUrl = await fileToDataUrl(file);
-      setTicketImageUrl(dataUrl);
-    } catch (err) {
-      reportAppError({
-        title: "Ticket upload failed",
-        message: "We could not save your ticket or memory image.",
-        details: err instanceof Error ? err.stack || err.message : String(err),
-      });
-      setError("Failed to save the image. Please try again.");
-    } finally {
-      setTicketUploading(false);
-      event.target.value = "";
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (submitLockRef.current || loading || ticketUploading) {
+    if (submitLockRef.current || loading) {
       return;
     }
 
@@ -436,6 +400,9 @@ export default function LogMovieModal({
             Object.entries({
               location,
               watched_with: watchedWith,
+              mood,
+              tags: contextTags,
+              notes: contextNotes,
               rewatch: isRewatch ? "true" : undefined,
             }).filter(([, value]) => value)
           )
@@ -456,6 +423,8 @@ export default function LogMovieModal({
           watched_date: watchedDate,
           reaction,
           notes,
+          contains_spoiler: containsSpoiler,
+          mood: mood || undefined,
           ticket_image_url: ticketImageUrl || null,
           context_log: Object.keys(contextLog || {}).length > 0 ? (contextLog as MovieLog["context_log"]) : {},
           season: contentType === "tv" ? selectedSeasonNumber : undefined,
@@ -482,6 +451,8 @@ export default function LogMovieModal({
           watched_date: watchedDate,
           reaction,
           notes,
+          contains_spoiler: containsSpoiler,
+          mood: mood || undefined,
           ticket_image_url: ticketImageUrl || null,
           context_log: updates.context_log || {},
         } as MovieLogWithContent);
@@ -493,7 +464,7 @@ export default function LogMovieModal({
           watchedDate,
           reaction,
           notes,
-          undefined,
+          mood || undefined,
           contextLog,
           ticketImageUrl,
           undefined,
@@ -507,11 +478,12 @@ export default function LogMovieModal({
             ? selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
               ? undefined
               : selectedEpisode?.name ?? undefined
-            : undefined
+            : undefined,
+          containsSpoiler
         );
 
         if (shareAsPost) {
-          await createLogCinePost(user, newLog, content, postCaption || notes);
+          await createLogCinePost(user, newLog, content, notes);
         }
       }
 
@@ -519,14 +491,18 @@ export default function LogMovieModal({
       setWatchedDate(new Date().toISOString().split("T")[0]);
       setReaction(null);
       setNotes("");
+      setReviewDraft("");
+      setContainsSpoiler(false);
+      setShowReviewEditor(false);
+      setShareToFriends(false);
       setShareAsPost(false);
-      setPostCaption("");
       setShowContextLog(false);
       setLocation("");
       setWatchedWith("");
+      setMood("");
+      setContextTags("");
+      setContextNotes("");
       setIsRewatch(false);
-      setShowReviewEditor(false);
-      setReviewDraft("");
 
       const contentLabel = contentType === "tv" ? "TV show" : "Movie";
       const successMessage = isEditMode
@@ -539,6 +515,13 @@ export default function LogMovieModal({
         onLogCreated?.(successMessage);
       }
       onClose();
+      if (!isEditMode && shareToFriends) {
+        const shareUrl =
+          contentType === "tv"
+            ? `/share?content_id=${content.id}&type=tv`
+            : `/share?movie_id=${content.id}`;
+        router.push(shareUrl);
+      }
     } catch (err) {
       reportAppError({
         title: "Log failed",
@@ -554,495 +537,417 @@ export default function LogMovieModal({
 
   if (!isOpen) return null;
 
-  const hasPreviousWatch = previousWatchDates.length > 0;
+  const metadataLine = getMetadataLine(content) || (content.type === "tv" ? "TV Show" : "Movie");
+  const titleClass = getTitleClass(content.title);
+  const logTypeLabel = content.type === "tv" ? "TV LOG" : "MOVIE LOG";
+  const ctaLabel = loading ? (isEditMode ? "SAVING" : "LOGGING") : isEditMode ? "SAVE CHANGES" : "LOG MOVIE";
+
   return (
-    <>
-      {showReviewEditor && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-2 sm:p-3 md:p-4"
-          onClick={() => setShowReviewEditor(false)}
-        >
-          <div
-            className={`log-modal-panel mobile-scroll-panel relative flex w-full max-w-xl max-h-[84dvh] flex-col overflow-hidden rounded-[1.25rem] sm:rounded-[1.5rem] ${
-              isBrutalist ? "border border-white/10 bg-[#111111] text-[#f5f0de]" : "border border-slate-200 bg-white text-slate-900"
-            }`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div
-              className={`sticky top-0 z-10 border-b p-3 sm:p-4 ${
-                isBrutalist ? "border-white/10 bg-[#111111]/92" : "border-slate-200 bg-white/90"
-              }`}
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffb36b]">
-                Review editor
-              </p>
-              <h3 className={`mt-1 text-base font-semibold sm:text-lg ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-                Expand your review
-              </h3>
-              <p className={`mt-1 text-xs sm:text-sm ${isBrutalist ? "text-white/60" : "text-slate-600"}`}>
-                Write freely here, then save to return to the log form.
-              </p>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-4">
-              <textarea
-                value={reviewDraft}
-                onChange={(e) => setReviewDraft(e.target.value)}
-                placeholder="Write your review"
-                className="field min-h-[44dvh] flex-1 resize-none rounded-[1.25rem] py-4"
-              />
-
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowReviewEditor(false)}
-                  className="action px-4 py-2 text-sm sm:px-5"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={saveReviewDraft}
-                  className="action-primary px-4 py-2 text-sm sm:px-5"
-                >
-                  Save review
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="log-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-2 sm:items-center sm:p-3 md:p-4">
-      <div
-        className={`log-modal-panel mobile-scroll-panel relative w-full max-w-xl max-h-[84dvh] overflow-x-hidden overflow-y-auto rounded-[1.25rem] sm:rounded-[1.5rem] ${
-          isBrutalist ? "border border-white/10 bg-[#111111] text-[#f5f0de]" : "border border-slate-200 bg-white text-slate-900"
-        }`}
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#050505] text-[#F5F2EA]">
+      <form
+        onSubmit={handleSubmit}
+        className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-5 pt-4 sm:px-7 sm:pb-7 sm:pt-5 lg:px-9"
       >
-        {/* Header */}
-        <div
-          className={`sticky top-0 z-10 flex items-start justify-between gap-2 border-b p-3 sm:p-4 ${
-            isBrutalist ? "border-white/10 bg-[#111111]/92" : "border-slate-200 bg-white/90"
-          }`}
-        >
-          <Link
-            href={content.type === "tv" ? `/tv/${content.id}` : `/movie/${content.id}`}
-            className={`group flex min-w-0 items-center gap-3 text-left transition-opacity hover:opacity-90`}
-            title={`Open ${content.title}`}
-          >
-            <div
-              className={`relative overflow-hidden rounded-2xl border ${
-                isBrutalist ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-100"
-              }`}
-            >
-              {content.poster_url ? (
-                <img
-                  src={content.poster_url}
-                  alt={content.title}
-                  className="h-16 w-12 object-cover transition duration-300 group-hover:scale-[1.03] sm:h-18 sm:w-13"
-                />
-              ) : (
-                <div className={isBrutalist ? "h-16 w-12 bg-white/5 sm:h-18 sm:w-13" : "h-16 w-12 bg-slate-100 sm:h-18 sm:w-13"} />
-              )}
-            </div>
-              <div className="min-w-0">
-                <div className="mb-1 inline-flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.24em] text-[#ffb36b]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#ff7a1a]" />
-                {isEditMode ? `Edit ${contentLabel} log` : logLabel}
-                </div>
-              <h2 className={`text-base font-semibold sm:text-lg ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-                {actionLabel}
-              </h2>
-              <p
-                className={`line-clamp-1 text-xs sm:text-sm ${
-                  isBrutalist ? "text-white/60 group-hover:text-[#f5f0de]" : "text-slate-600 group-hover:text-slate-900"
-                }`}
-              >
-                {content.title}
-              </p>
-            </div>
-          </Link>
+        <header className="flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
-            className="action px-3 py-2 text-sm sm:px-4 sm:py-2.5"
+            aria-label="Back"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/40 text-2xl leading-none text-[#F5F2EA] transition hover:border-white/35 sm:h-10 sm:w-10"
           >
-            Close
+            <span aria-hidden="true">‹</span>
           </button>
-        </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/40 text-2xl leading-none text-[#F5F2EA] transition hover:border-white/35 sm:h-10 sm:w-10"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </header>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 p-3 sm:space-y-5 sm:p-4">
-          {!isEditMode && checkingPreviousWatches && previousWatchDates.length === 0 && (
-            <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm ${
-              isBrutalist ? "border border-white/10 bg-white/5 text-white/65" : "border border-slate-200 bg-slate-50 text-slate-600"
-            }`}>
-              Checking previous watches...
-            </div>
-          )}
-
-          {!isEditMode && (
-            <button
-              type="button"
-              onClick={() => setIsRewatch((value) => !value)}
-              className={`flex w-full items-start gap-3 text-left transition-opacity hover:opacity-95`}
+        {showReviewEditor && (
+          <div
+            className="fixed inset-0 z-[60] flex items-end bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+            onClick={() => setShowReviewEditor(false)}
+          >
+            <div
+              className="flex max-h-[86dvh] w-full max-w-2xl flex-col border border-white/12 bg-[#050505] text-[#F5F2EA] shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+              onClick={(event) => event.stopPropagation()}
             >
-              <div
-                className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[0.65rem] border ${
-                  isRewatch
-                    ? isBrutalist
-                      ? "border-[#ff7a1a]/45 bg-[#ff7a1a]/14 text-[#ffb36b]"
-                      : "border-slate-900 bg-slate-900 text-white"
-                    : isBrutalist
-                      ? "border-white/15 bg-white/5 text-white/35"
-                      : "border-slate-300 bg-white text-slate-300"
-                }`}
-              >
-                <Check className="h-3.5 w-3.5" />
+              <div className="flex items-center justify-between border-b border-white/12 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6A00]">Review</p>
+                <button
+                  type="button"
+                  onClick={() => setShowReviewEditor(false)}
+                  className="text-xl leading-none text-white/70 transition hover:text-white"
+                  aria-label="Close review editor"
+                >
+                  ×
+                </button>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className={`text-sm font-semibold ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Visited</p>
-                <p className={`mt-1 text-xs leading-5 ${isBrutalist ? "text-white/55" : "text-slate-500"}`}>
-                  Mark this if you&apos;ve visited this title before.
-                </p>
-                {hasPreviousWatch && (
-                  <p className={`mt-1 text-xs ${isBrutalist ? "text-white/70" : "text-slate-600"}`}>
-                    Visited {previousWatchDates.length} time{previousWatchDates.length === 1 ? "" : "s"} before.
-                  </p>
-                )}
-              </div>
-            </button>
-          )}
 
+              <textarea
+                value={reviewDraft}
+                onChange={(event) => setReviewDraft(event.target.value)}
+                placeholder="What stayed with you?"
+                autoFocus
+                className="min-h-[42dvh] flex-1 resize-none bg-transparent px-4 py-4 text-base leading-7 text-[#F5F2EA] outline-none placeholder:text-white/35 sm:min-h-[50dvh]"
+              />
+
+              <div className="border-t border-white/12 p-3">
+                <button
+                  type="button"
+                  onClick={() => setContainsSpoiler((value) => !value)}
+                  className={`flex h-12 w-full items-center justify-between border px-4 text-left text-xs font-black uppercase tracking-[0.16em] transition ${
+                    containsSpoiler
+                      ? "border-[#FF6A00] bg-[#FF6A00]/10 text-[#FF6A00]"
+                      : "border-white/12 text-[#F5F2EA]"
+                  }`}
+                >
+                  <span>Contains spoiler</span>
+                  <span>{containsSpoiler ? "On" : "Off"}</span>
+                </button>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewEditor(false)}
+                    className="h-11 border border-white/12 text-xs font-black uppercase tracking-[0.16em] text-white/70"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotes(reviewDraft);
+                      setShowReviewEditor(false);
+                    }}
+                    className="h-11 bg-[#FF6A00] text-xs font-black uppercase tracking-[0.16em] text-black"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <main className="flex-1 space-y-5 pt-5 sm:space-y-6 sm:pt-6">
           {error && (
-            <div className={`rounded-2xl px-4 py-2 text-sm ${
-              isBrutalist ? "border border-orange-500/30 bg-orange-500/10 text-orange-200" : "border border-red-200 bg-red-50 text-red-700"
-            }`}>
+            <div className="rounded-2xl border border-[#FF6A00]/35 bg-[#FF6A00]/10 px-4 py-3 text-sm text-[#F5F2EA]">
               {error}
             </div>
           )}
 
-          {/* Date */}
-          <div>
-            <label className={`mb-1 block text-sm font-medium ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-              Date Watched *
-            </label>
-            <input
-              type="date"
-              value={watchedDate}
-              onChange={(e) => setWatchedDate(e.target.value)}
-              required
-              className="field py-2"
-            />
-            <p className={`mt-1 text-xs ${isBrutalist ? "text-white/55" : "text-slate-500"}`}>{formatWatchedDate(watchedDate)}</p>
-          </div>
-
-          {content.type === "tv" && (
-            <div>
-              <label className={`mb-1 block text-sm font-medium ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-                TV episode *
-              </label>
-              <div className={`grid gap-3 ${selectedSeasonScope === "all" ? "sm:grid-cols-1" : "sm:grid-cols-2"}`}>
-                <div>
-                  {loadingSeasons ? (
-                    <div className={`rounded-2xl border px-4 py-3 text-sm ${isBrutalist ? "border-white/10 bg-white/5 text-white/55" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                      Loading seasons...
-                    </div>
-                  ) : tvSeasons.length > 0 ? (
-                    <select
-                      value={selectedSeasonScope}
-                      onChange={(event) => setSelectedSeasonScope(event.target.value)}
-                      className={`field py-3 ${
-                        isBrutalist ? "border-white/10 bg-[#0d0d0d] text-[#f5f0de]" : "bg-white"
-                      }`}
-                    >
-                      <option value="all">Entire show</option>
-                      {tvSeasons.map((season) => (
-                        <option key={season.id} value={season.number}>
-                          {getSeasonOptionLabel(season)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className={`rounded-2xl border px-4 py-3 text-sm ${isBrutalist ? "border-white/10 bg-white/5 text-white/55" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                      No season data available.
-                    </div>
-                  )}
-                  <p className={`mt-1 text-xs ${isBrutalist ? "text-white/45" : "text-slate-500"}`}>
-                    Choose the season scope for this log.
-                  </p>
-                </div>
-
-                {selectedSeasonScope !== "all" && (
-                  <div>
-                    {loadingEpisodes ? (
-                      <div className={`rounded-2xl border px-4 py-3 text-sm ${isBrutalist ? "border-white/10 bg-white/5 text-white/55" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                        Loading episodes...
-                      </div>
-                    ) : tvEpisodes.length > 0 ? (
-                      <select
-                        value={selectedEpisodeId}
-                        onChange={(event) => setSelectedEpisodeId(event.target.value)}
-                        className={`field py-3 ${
-                          isBrutalist ? "border-white/10 bg-[#0d0d0d] text-[#f5f0de]" : "bg-white"
-                        }`}
-                      >
-                        <option value={ALL_EPISODES_VALUE}>All episodes</option>
-                        <option value="" disabled>
-                          Select an episode
-                        </option>
-                        {tvEpisodes.map((episode) => (
-                          <option key={episode.id} value={String(episode.id)}>
-                            {getEpisodeOptionLabel(episode)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className={`rounded-2xl border px-4 py-3 text-sm ${isBrutalist ? "border-white/10 bg-white/5 text-white/55" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                        No episode data available.
-                      </div>
-                    )}
-                    <p className={`mt-1 text-xs ${isBrutalist ? "text-white/45" : "text-slate-500"}`}>
-                      Pick a specific episode, or keep this as a season-wide log.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Reaction Selection */}
-          <div>
-              <label className={`mb-3 block text-sm font-medium ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-              What did you think?
-            </label>
-            <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
-              {/* Bad */}
-              <button
-                type="button"
-                onClick={() => setReaction((current) => (current === 0 ? null : 0))}
-                className={`flex h-9 w-full items-center justify-center rounded-[0.55rem] border px-1 py-0.5 text-center transition-all duration-200 sm:h-10 ${
-                  reaction === 0
-                    ? isBrutalist
-                      ? "border-white/18 bg-white/[0.03] shadow-[0_0_0_1px_rgba(255,255,255,0.02)]"
-                      : "border-slate-900 bg-slate-50/80 shadow-sm"
-                    : isBrutalist
-                      ? "border-white/10 hover:border-white/20"
-                      : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <span className={`text-[9px] font-bold uppercase tracking-[0.18em] sm:text-[10px] ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Bad</span>
-              </button>
-
-              {/* Average */}
-              <button
-                type="button"
-                onClick={() => setReaction((current) => (current === 1.5 ? null : 1.5))}
-                className={`flex h-9 w-full items-center justify-center rounded-[0.55rem] border px-1 py-0.5 text-center transition-all duration-200 sm:h-10 ${
-                  reaction === 1.5
-                    ? isBrutalist
-                      ? "border-[#ff7a1a]/55 bg-[#ff7a1a]/10 text-[#ffb36b] shadow-[0_0_0_1px_rgba(255,122,26,0.12)]"
-                      : "border-slate-900 bg-slate-50/80 shadow-sm"
-                    : isBrutalist
-                      ? "border-white/10 hover:border-white/20"
-                      : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <span className={`text-[9px] font-bold uppercase tracking-[0.18em] sm:text-[10px] ${reaction === 1.5 && isBrutalist ? "text-[#ffb36b]" : isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Average</span>
-              </button>
-
-              {/* Good */}
-              <button
-                type="button"
-                onClick={() => setReaction((current) => (current === 1 ? null : 1))}
-                className={`flex h-9 w-full items-center justify-center rounded-[0.55rem] border px-1 py-0.5 text-center transition-all duration-200 sm:h-10 ${
-                  reaction === 1
-                    ? isBrutalist
-                      ? "border-white/18 bg-white/[0.03] shadow-[0_0_0_1px_rgba(255,255,255,0.02)]"
-                      : "border-slate-900 bg-slate-50/80 shadow-sm"
-                    : isBrutalist
-                      ? "border-white/10 hover:border-white/20"
-                      : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <span className={`text-[9px] font-bold uppercase tracking-[0.18em] sm:text-[10px] ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Good</span>
-              </button>
-
-              {/* Masterpiece */}
-              <button
-                type="button"
-                onClick={() => setReaction((current) => (current === 2 ? null : 2))}
-                className={`flex h-9 w-full items-center justify-center rounded-[0.55rem] border px-1 py-0.5 text-center transition-all duration-200 sm:h-10 ${
-                  reaction === 2
-                    ? isBrutalist
-                      ? "border-[#ff7a1a]/55 bg-[#ff7a1a]/10 text-[#ffb36b] shadow-[0_0_0_1px_rgba(255,122,26,0.12),0_0_18px_rgba(255,122,26,0.18)]"
-                      : "border-slate-900 bg-slate-50/80 shadow-sm"
-                    : isBrutalist
-                      ? "border-white/10 hover:border-white/20"
-                      : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <span className={`text-[9px] font-black uppercase leading-tight tracking-[0.16em] sm:text-[10px] ${reaction === 2 && isBrutalist ? "text-[#ffb36b]" : isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Masterpiece</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className={`mb-1 block text-sm font-medium ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-              Review
-            </label>
-            <button
-              type="button"
-              onClick={openReviewEditor}
-              aria-label="Open review editor"
-              className={`mt-1 flex w-full flex-col gap-1 rounded-[1rem] border px-4 py-3 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
-                isBrutalist
-                  ? "border-white/10 bg-transparent hover:border-white/20"
-                  : "border-slate-200 bg-transparent hover:border-slate-300"
-              }`}
-            >
-              <span className={`block whitespace-pre-wrap text-sm leading-6 ${
-                notes.trim() ? (isBrutalist ? "text-[#f5f0de]" : "text-slate-900") : (isBrutalist ? "text-white/40" : "text-slate-400")
-              }`}>
-                {notes.trim() || "Tap to write your review"}
-              </span>
-              <span className={`text-[11px] font-medium ${
-                isBrutalist ? "text-[#ffb36b]/80" : "text-slate-500"
-              }`}>
-                Tap to open the full review box
-              </span>
-            </button>
-          </div>
-
-          {!isEditMode && (
-            <div className="pt-1">
-              <label className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={shareAsPost}
-                  onChange={(e) => setShareAsPost(e.target.checked)}
-                  className={`mt-1 h-4 w-4 rounded focus:ring-blue-500 ${isBrutalist ? "border-white/20 text-[#ff7a1a]" : "border-slate-300 text-[#f5f0de]"}`}
-                />
-                <div className="min-w-0">
-                  <p className={`text-sm font-bold ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Share as post</p>
-                </div>
-              </label>
-
-              {shareAsPost && (
-                <div className="mt-3">
-                  <label className={`mb-1 block text-xs font-semibold ${isBrutalist ? "text-white/55" : "text-slate-600"}`}>
-                    Optional post caption
-                  </label>
-                  <textarea
-                    value={postCaption}
-                    onChange={(e) => setPostCaption(e.target.value)}
-                    placeholder="Add a quick thought for the feed..."
-                    className="field min-h-20 resize-none py-3 text-sm"
-                    rows={2}
-                  />
-                  <p className={`mt-1 text-xs ${isBrutalist ? "text-white/45" : "text-slate-500"}`}>
-                    If empty, your review will be used as the caption.
-                  </p>
+          <section className="grid grid-cols-[38%_minmax(0,1fr)] items-start gap-4 sm:grid-cols-[34%_minmax(0,1fr)] sm:gap-7">
+            <div className="relative aspect-[2/3] w-full overflow-hidden border border-white/12 bg-black shadow-[0_20px_60px_rgba(0,0,0,0.38)]">
+              {content.poster_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={content.poster_url} alt={content.title} className="h-full w-full object-contain" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center px-8 text-center text-sm uppercase tracking-[0.22em] text-white/38">
+                  No poster
                 </div>
               )}
             </div>
-          )}
 
-          <div className="space-y-2 pt-2">
-            <button
-              type="button"
-              onClick={handleTicketUploadClick}
-              disabled={ticketUploading}
-              className="inline-flex w-fit items-center justify-center gap-2 rounded-full bg-[#ff7a1a] px-3.5 py-1.75 text-[10px] font-black uppercase tracking-[0.18em] text-black transition hover:bg-[#ff8d3b] disabled:opacity-60"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              {ticketImageUrl ? "Replace" : ticketUploading ? "Uploading" : "Upload"}
-            </button>
-            {ticketImageUrl ? (
-              <div className="flex items-center gap-3">
-                <img
-                  src={ticketImageUrl}
-                  alt="Uploaded ticket or memory"
-                  className="h-14 w-14 shrink-0 rounded-lg object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className={`text-sm font-semibold ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-                    Image uploaded with preview
-                  </p>
-                  <p className={`mt-1 text-xs ${isBrutalist ? "text-white/55" : "text-slate-500"}`}>
-                    Your attachment is ready for this log.
-                  </p>
+            <div className="flex min-h-full flex-col py-0">
+              <div>
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.26em] text-[#FF6A00] sm:gap-3 sm:text-xs sm:tracking-[0.34em]">
+                  <span className="h-2 w-2 rounded-full bg-[#FF6A00] sm:h-3 sm:w-3" />
+                  {logTypeLabel}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setTicketImageUrl(null)}
-                  className={`shrink-0 text-xs font-medium ${isBrutalist ? "text-white/60 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
-                >
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <p className={`min-w-0 text-sm ${isBrutalist ? "text-white/55" : "text-slate-500"}`}>
-                Add one image attachment if you want a ticket or memory preview.
-              </p>
-            )}
-            <input ref={ticketInputRef} type="file" accept="image/*" className="hidden" onChange={handleTicketFileChange} />
-          </div>
 
-          {/* Context Log Section */}
-          <div className="pt-3">
+                <div className="mt-3 sm:mt-4">
+                  <h1
+                    className={`max-w-[620px] break-words font-black uppercase leading-[0.9] tracking-normal text-[#F5F2EA] ${titleClass}`}
+                    style={{ fontFamily: "Impact, 'Arial Narrow', 'Helvetica Neue Condensed', sans-serif" }}
+                    title={content.title}
+                  >
+                    {content.title}
+                  </h1>
+                </div>
+
+                <p className="mt-3 text-[11px] leading-5 text-white/58 sm:mt-4 sm:text-sm sm:leading-6">{metadataLine}</p>
+              </div>
+
+              <div className="mt-4 border-t border-white/14 pt-4 sm:mt-5 sm:pt-5">
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-5">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/58 sm:text-xs sm:tracking-[0.28em]">Watched on</p>
+                    <label
+                      onClick={() => {
+                        watchedDateInputRef.current?.showPicker?.();
+                        watchedDateInputRef.current?.focus();
+                      }}
+                      className="relative mt-2 block w-fit cursor-pointer text-left sm:mt-3"
+                    >
+                      <span className="block text-base font-black uppercase leading-tight text-[#F5F2EA] sm:text-3xl sm:leading-none">
+                        {formatWatchedDate(watchedDate)}
+                      </span>
+                      <input
+                        ref={watchedDateInputRef}
+                        type="date"
+                        value={watchedDate}
+                        onChange={(event) => setWatchedDate(event.target.value)}
+                        required
+                        aria-label="Watched date"
+                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsRewatch((value) => !value)}
+                    className={`flex h-8 items-center gap-2 uppercase tracking-[0.16em] transition sm:h-10 sm:gap-3 sm:tracking-[0.22em] ${
+                      isRewatch ? "text-[#F5F2EA]" : "text-white/48"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border text-sm leading-none sm:h-8 sm:w-8 sm:text-base ${
+                        isRewatch ? "border-[#FF6A00] text-[#FF6A00]" : "border-white/25 text-transparent"
+                      }`}
+                    >
+                      ✓
+                    </span>
+                    <span className="text-[11px] font-bold sm:text-xs">Rewatch</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="border-t border-white/14 pt-4 sm:pt-5">
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#F5F2EA]">Your Verdict</h2>
+            <div className="mt-4 grid grid-cols-4 gap-1.5">
+              {[
+                { label: "Bad", value: 0, selectedClass: "border-red-500 bg-red-500 text-black" },
+                { label: "Average", value: 1.5, selectedClass: "border-yellow-400 bg-yellow-400 text-black" },
+                { label: "Good", value: 1, selectedClass: "border-green-500 bg-green-500 text-black" },
+                {
+                  label: "Masterpiece",
+                  value: 2,
+                  selectedClass: "border-[#FF6A00] bg-[#FF6A00] text-black",
+                },
+              ].map(({ label, value, selectedClass }) => {
+                const isSelected = reaction === value;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setReaction((current) => (current === value ? null : (value as 0 | 1 | 1.5 | 2)))}
+                    className={`h-10 border px-1 text-center text-[9px] font-bold uppercase tracking-[0.08em] transition sm:h-11 sm:text-[11px] sm:tracking-[0.12em] ${
+                      isSelected
+                        ? selectedClass
+                        : "border-white/16 bg-transparent text-[#F5F2EA] hover:border-white/35"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="border-t border-white/14 pt-4 sm:pt-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#F5F2EA]">
+              Review
+            </p>
+            <div
+              onClick={() => {
+                setReviewDraft(notes);
+                setShowReviewEditor(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setReviewDraft(notes);
+                  setShowReviewEditor(true);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              className="mt-3 min-h-20 w-full border border-[#9A3F00] px-3 py-3 text-left transition hover:border-[#C65300] sm:min-h-28 sm:px-4 sm:py-4"
+            >
+              <span className={`block whitespace-pre-wrap text-sm font-bold leading-snug sm:text-lg ${
+                notes.trim() ? "text-[#F5F2EA]" : "text-white/42"
+              }`}>
+                {notes.trim() || "What stayed with you?"}
+              </span>
+              <span className="mt-2 block text-[11px] text-white/48 sm:text-xs">Tap to write your review...</span>
+            </div>
+          </section>
+
+          <section className="border-t border-white/14">
             <button
               type="button"
-              onClick={() => setShowContextLog(!showContextLog)}
-              className={`mb-2 text-sm font-medium ${isBrutalist ? "text-white/65 hover:text-[#f5f0de]" : "text-slate-700 hover:text-slate-900"}`}
+              onClick={() => setShowContextLog((value) => !value)}
+              className="flex w-full items-center justify-between gap-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.16em] text-[#F5F2EA] sm:py-4 sm:text-xs sm:tracking-[0.18em]"
             >
-              {showContextLog ? "Hide context" : "Show context"}
+              <span className="min-w-0 leading-5">
+                Show Context <span className="text-white/42">(Mood, People, Tags, Notes)</span>
+              </span>
+              <span className="shrink-0 text-base font-normal leading-none text-white/75">{showContextLog ? "⌃" : "⌄"}</span>
             </button>
 
             {showContextLog && (
-              <div className="space-y-3">
-                {/* Location */}
+              <div className="grid gap-3 pb-5 sm:grid-cols-2">
+                {content.type === "tv" && (
+                  <>
+                    <div>
+                      <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
+                        Season
+                      </label>
+                      {loadingSeasons ? (
+                        <div className="border border-white/12 px-3 py-2 text-xs text-white/48">Loading seasons...</div>
+                      ) : (
+                        <select
+                          value={selectedSeasonScope}
+                          onChange={(event) => setSelectedSeasonScope(event.target.value)}
+                          className="w-full border border-white/12 bg-[#050505] px-3 py-2 text-xs text-[#F5F2EA] outline-none focus:border-[#FF6A00]"
+                        >
+                          <option value="all">Entire show</option>
+                          {tvSeasons.map((season) => (
+                            <option key={season.id} value={season.number}>
+                              {getSeasonOptionLabel(season)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {selectedSeasonScope !== "all" && (
+                      <div>
+                        <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
+                          Episode
+                        </label>
+                        {loadingEpisodes ? (
+                          <div className="border border-white/12 px-3 py-2 text-xs text-white/48">Loading episodes...</div>
+                        ) : (
+                          <select
+                            value={selectedEpisodeId}
+                            onChange={(event) => setSelectedEpisodeId(event.target.value)}
+                            className="w-full border border-white/12 bg-[#050505] px-3 py-2 text-xs text-[#F5F2EA] outline-none focus:border-[#FF6A00]"
+                          >
+                            <option value={ALL_EPISODES_VALUE}>All episodes</option>
+                            <option value="" disabled>
+                              Select an episode
+                            </option>
+                            {tvEpisodes.map((episode) => (
+                              <option key={episode.id} value={String(episode.id)}>
+                                {getEpisodeOptionLabel(episode)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div>
-                  <label className={`mb-1 block text-xs font-medium ${isBrutalist ? "text-white/55" : "text-slate-600"}`}>
-                    Where did you watch?
-                  </label>
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Mood</label>
                   <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g., Cinema, Home, Friend's place"
-                    className="field py-2 text-sm"
+                    value={mood}
+                    onChange={(event) => setMood(event.target.value)}
+                    className="w-full border border-white/12 bg-transparent px-3 py-2 text-xs text-[#F5F2EA] outline-none placeholder:text-white/28 focus:border-[#FF6A00]"
                   />
                 </div>
-
-                {/* Watched With */}
                 <div>
-                  <label className={`mb-1 block text-xs font-medium ${isBrutalist ? "text-white/55" : "text-slate-600"}`}>
-                    With whom?
-                  </label>
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">People</label>
                   <input
-                    type="text"
                     value={watchedWith}
-                    onChange={(e) => setWatchedWith(e.target.value)}
-                    placeholder="e.g., @john, @sarah, family, alone"
-                    className="field py-2 text-sm"
+                    onChange={(event) => setWatchedWith(event.target.value)}
+                    className="w-full border border-white/12 bg-transparent px-3 py-2 text-xs text-[#F5F2EA] outline-none placeholder:text-white/28 focus:border-[#FF6A00]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Tags</label>
+                  <input
+                    value={contextTags}
+                    onChange={(event) => setContextTags(event.target.value)}
+                    className="w-full border border-white/12 bg-transparent px-3 py-2 text-xs text-[#F5F2EA] outline-none placeholder:text-white/28 focus:border-[#FF6A00]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Notes</label>
+                  <input
+                    value={contextNotes}
+                    onChange={(event) => setContextNotes(event.target.value)}
+                    className="w-full border border-white/12 bg-transparent px-3 py-2 text-xs text-[#F5F2EA] outline-none placeholder:text-white/28 focus:border-[#FF6A00]"
                   />
                 </div>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Submit */}
-              <button
-                type="submit"
-                disabled={loading || ticketUploading || loadingSeasons || loadingEpisodes}
-                className="action-primary mt-6 w-full disabled:opacity-50"
+          <section className="border-t border-white/14">
+            <label className="flex items-center justify-between gap-3 border-b border-white/10 py-3 sm:py-4">
+              <span>
+                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F5F2EA] sm:text-xs sm:tracking-[0.18em]">Share to Friends</span>
+                <span className="mt-1 block text-[11px] text-white/58 sm:text-xs">Selected friends can see this log.</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={shareToFriends}
+                onChange={(event) => setShareToFriends(event.target.checked)}
+                className="sr-only"
+              />
+              <span
+                className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
+                  shareToFriends ? "border-[#FF6A00] bg-[#FF6A00]" : "border-white/35"
+                }`}
               >
-            {loading ? (isEditMode ? "Saving..." : "Logging...") : ticketUploading ? "Uploading image..." : isEditMode ? "Save Changes" : actionLabel}
-              </button>
-        </form>
-      </div>
+                <span
+                  className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-[#F5F2EA] transition ${
+                    shareToFriends ? "translate-x-5" : ""
+                  }`}
+                />
+              </span>
+            </label>
+
+            {!isEditMode && (
+              <label className="flex items-center justify-between gap-3 py-3 sm:py-4">
+                <span>
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F5F2EA] sm:text-xs sm:tracking-[0.18em]">Share as Post</span>
+                  <span className="mt-1 block text-[11px] text-white/58 sm:text-xs">Publish this log to your profile feed.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={shareAsPost}
+                  onChange={(event) => setShareAsPost(event.target.checked)}
+                  className="sr-only"
+                />
+                <span
+                  className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
+                    shareAsPost ? "border-[#FF6A00] bg-[#FF6A00]" : "border-white/35"
+                  }`}
+                >
+                  <span
+                    className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-[#F5F2EA] transition ${
+                      shareAsPost ? "translate-x-5" : ""
+                    }`}
+                  />
+                </span>
+              </label>
+            )}
+          </section>
+        </main>
+
+        <div className="sticky bottom-0 -mx-4 mt-5 bg-[#050505]/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-7 sm:mt-6 sm:px-7 lg:-mx-9 lg:px-9">
+          <button
+            type="submit"
+            disabled={loading || loadingSeasons || loadingEpisodes}
+            className="h-12 w-full rounded-2xl bg-[#FF6A00] px-6 text-center text-xs font-black uppercase tracking-[0.24em] text-black transition hover:bg-[#ff7c24] disabled:opacity-60 sm:h-[56px] sm:text-sm"
+          >
+            {ctaLabel}
+          </button>
+        </div>
+      </form>
     </div>
-    </>
   );
+
 }

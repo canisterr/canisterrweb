@@ -16,6 +16,32 @@ type CurrentUserContextValue = {
 };
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
+const USER_CACHE_PREFIX = "canisterr_current_user";
+
+type CachedCurrentUser = {
+  user: User;
+  settings: SettingsData;
+};
+
+function readCachedCurrentUser(userId: string): CachedCurrentUser | null {
+  try {
+    const raw = window.localStorage.getItem(`${USER_CACHE_PREFIX}:${userId}`);
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw) as CachedCurrentUser;
+    return cached?.user?.id === userId ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedCurrentUser(userId: string, value: CachedCurrentUser) {
+  try {
+    window.localStorage.setItem(`${USER_CACHE_PREFIX}:${userId}`, JSON.stringify(value));
+  } catch {
+    // A fresh network snapshot still works when storage is unavailable.
+  }
+}
 
 function buildFallbackUser(firebaseUser: {
   uid: string;
@@ -46,14 +72,24 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setLoading(true);
+      const fallbackUser = buildFallbackUser({
+        uid: firebaseUser.uid,
+        displayName: firebaseUser.displayName,
+        email: firebaseUser.email,
+        photoURL: firebaseUser.photoURL,
+      });
+      const cached = readCachedCurrentUser(firebaseUser.uid);
+
+      setUser(cached?.user || fallbackUser);
+      setSettings(cached?.settings || DEFAULT_SETTINGS);
+      setLoading(false);
 
       try {
         const userRef = ref(db, `users/${firebaseUser.uid}`);
         const userSnapshot = await get(userRef);
         const userData = userSnapshot.exists() ? userSnapshot.val() : null;
 
-        setSettings(mergeSettings(userData?.settings));
+        const nextSettings = mergeSettings(userData?.settings);
         const normalizedUser = normalizeUserRecord(firebaseUser.uid, {
           id: userData?.id || firebaseUser.uid,
           username: userData?.username || firebaseUser.email?.split("@")[0] || "user",
@@ -62,29 +98,26 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
           created_at: userData?.created_at || userData?.createdAt || new Date().toISOString(),
         });
 
-        setUser({
+        const nextUser: User = {
           ...normalizedUser,
           bio: userData?.bio || "",
           display_list_id: userData?.display_list_id || undefined,
           mood_tags: userData?.mood_tags || [],
           mood_tags_updated_at: userData?.mood_tags_updated_at,
-        });
+        };
+
+        setSettings(nextSettings);
+        setUser(nextUser);
+        writeCachedCurrentUser(firebaseUser.uid, { user: nextUser, settings: nextSettings });
 
         if (typeof userData?.username === "string" && userData.username.trim()) {
           void syncUsernameIndex(firebaseUser.uid, userData.username).catch(() => {});
         }
       } catch {
-        setSettings(DEFAULT_SETTINGS);
-        setUser(
-          buildFallbackUser({
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName,
-            email: firebaseUser.email,
-            photoURL: firebaseUser.photoURL,
-          })
-        );
-      } finally {
-        setLoading(false);
+        if (!cached) {
+          setSettings(DEFAULT_SETTINGS);
+          setUser(fallbackUser);
+        }
       }
     });
 

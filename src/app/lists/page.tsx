@@ -17,7 +17,7 @@ import {
   getListWithDetails,
   syncListCollaboratorIds,
 } from "@/lib/lists";
-import { Plus, Lock, Globe, Loader2, Search, Compass, MoreVertical } from "lucide-react";
+import { Film, Globe, ListFilter, Loader2, Lock, Plus, Search, Users } from "lucide-react";
 import Link from "next/link";
 
 type ViewMode = "grid" | "list";
@@ -28,9 +28,6 @@ type DiscoverList = ListWithItems & {
 
 const brutalText = "text-[#f5f0de]";
 const brutalMuted = "text-white/55";
-const brutalPanel = "border border-white/10 bg-[#111111]";
-const brutalPill = "border border-white/10 bg-[#0d0d0d] text-[#f5f0de]";
-
 function matchesQuery(list: List, query: string): boolean {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
@@ -73,6 +70,10 @@ function buildListAttribution(list: DiscoverList, currentUserId: string) {
   };
 }
 
+function getCollaboratorAvatarKey(listId: string, collaborator: ListWithItems["collaborators"][number], index: number) {
+  return `${listId}:${collaborator.id || collaborator.user_id || "collaborator"}:${index}`;
+}
+
 function ListCard({
   list,
   coverImages,
@@ -87,11 +88,18 @@ function ListCard({
   const attribution = buildListAttribution(list, currentUserId);
   const hasCustomCover = list.cover_type === "custom" && Boolean(list.cover_image_url);
   const coverClassName = compact
-    ? "relative w-[4.5rem] aspect-[2/3] flex-shrink-0 overflow-hidden bg-[#1a1a1a] sm:w-20"
-    : "relative w-full aspect-[2/3] overflow-hidden bg-[#1a1a1a] mb-2.5";
+    ? "relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl bg-[#1a1a1a] sm:h-32 sm:w-32"
+    : "relative aspect-square w-full overflow-hidden rounded-xl bg-[#1a1a1a]";
+  const visibleCollaborators = list.collaborators.slice(0, 4);
 
   const content = (
-    <div className={compact ? "flex items-center gap-3 border-b border-white/10 py-3 transition hover:border-[#ff7a1a]/40 sm:gap-4" : "group cursor-pointer"}>
+    <div
+      className={
+        compact
+          ? "group flex min-h-32 items-center gap-3 rounded-2xl border border-white/10 bg-[#0b0d10] p-3 transition hover:border-[#ff7a1a]/45 hover:bg-[#0e1014] sm:gap-5"
+          : "group cursor-pointer rounded-2xl border border-white/10 bg-[#0b0d10] p-3 transition hover:border-[#ff7a1a]/45"
+      }
+    >
       <div className={coverClassName}>
         {hasCustomCover && list.cover_image_url ? (
           <img
@@ -106,7 +114,7 @@ function ListCard({
             className="h-full w-full object-cover"
           />
         ) : coverImages.length > 1 ? (
-          <div className="grid h-full w-full grid-cols-2">
+          <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-px bg-black">
             {coverImages.slice(0, 4).map((url, idx) => (
               <div key={idx} className="h-full w-full overflow-hidden">
                 <img src={url} alt={`Cover ${idx + 1}`} className="h-full w-full object-cover" />
@@ -120,40 +128,52 @@ function ListCard({
           </div>
         )}
 
-        {!compact && (
-          <div className="absolute right-2 top-2 rounded-full bg-black/55 px-2 py-1">
-            {list.privacy === "private" ? (
-              <Lock className="w-4 h-4 text-[#f5f0de]" />
-            ) : (
-              <Globe className="w-4 h-4 text-[#f5f0de]" />
-            )}
-          </div>
-        )}
       </div>
 
-      <div className={compact ? "flex-1 min-w-0" : ""}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className={`truncate font-semibold ${brutalText} ${compact ? "text-sm sm:text-base" : "text-base"} group-hover:text-[#ffb36b]`}>
+      <div className={compact ? "flex min-w-0 flex-1 items-center self-stretch" : "mt-3"}>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-col justify-center">
+            <h3 className={`line-clamp-2 font-semibold ${brutalText} ${compact ? "text-sm sm:text-lg" : "text-base"} group-hover:text-[#ffb36b]`}>
               {list.name}
             </h3>
-            <div className={`mt-1 flex items-center gap-2 text-xs ${brutalMuted}`}>
+            <div className={`mt-1 flex items-center gap-2 text-xs sm:text-sm ${brutalMuted}`}>
               <span className="truncate">
-                By <span className={brutalText}>{attribution.creatorName}</span>
+                By {attribution.creatorName}
               </span>
               {attribution.collaboratorCountLabel > 0 && (
-                <span className="flex-shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-white/70">
+                <span className="flex-shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
                   +{attribution.collaboratorCountLabel}
                 </span>
               )}
             </div>
+
+            <div className="mt-4 flex items-center gap-3">
+              {visibleCollaborators.length > 0 && (
+                <div className="flex -space-x-2">
+                  {visibleCollaborators.map((collaborator, index) => (
+                    <span
+                      key={getCollaboratorAvatarKey(list.id, collaborator, index)}
+                      className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border-2 border-[#0b0d10] bg-[#26292e] text-[8px] font-bold text-[#f5f0de]"
+                    >
+                      {collaborator.user.avatar_url ? (
+                        <img src={collaborator.user.avatar_url} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        getDisplayName(collaborator.user, "U").charAt(0).toUpperCase()
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#ff8d3b]">
+                <Film className="h-3.5 w-3.5" />
+                {list.item_count} {list.item_count === 1 ? "title" : "titles"}
+              </span>
+            </div>
           </div>
 
-          {compact && (
-            <div className="flex-shrink-0 rounded-full border border-white/10 bg-white/5 p-2 text-white/70">
-              {list.privacy === "private" ? <Lock className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
-            </div>
-          )}
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-[#f5f0de] sm:h-12 sm:w-12">
+            {list.privacy === "private" ? <Lock className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
+          </div>
         </div>
       </div>
     </div>
@@ -266,7 +286,6 @@ export default function ListsPage() {
         setPublicLists(
           publicListsWithDetails
             .filter((list): list is DiscoverList => Boolean(list))
-            .sort((a, b) => b.engagementScore - a.engagementScore)
         );
 
         const publicCovers: Record<string, string[]> = {};
@@ -351,75 +370,73 @@ export default function ListsPage() {
     [ownedLists, globalSearch]
   );
 
-  const scrollToSection = (refEl: { current: HTMLDivElement | null }) => {
-    refEl.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   if (loading || !user) {
     return <CinematicLoading message="Your lists are loading" />;
   }
 
   return (
     <PageLayout user={user} onSignOut={handleSignOut} theme="brutalist">
-      <div className="space-y-8 p-4 sm:p-6 lg:p-8">
-        <div className="sticky top-2 z-20 bg-[#111111]/95 backdrop-blur">
-          <div className="flex flex-col gap-3 px-0 py-2 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex flex-wrap justify-center gap-2">
+      <div className="mx-auto min-h-screen w-full max-w-[860px] space-y-8 bg-black px-1 py-4 sm:px-4 sm:py-6">
+        <div className="sticky top-16 z-20 -mx-1 space-y-4 border-b border-white/5 bg-black/95 px-1 pb-4 pt-1 backdrop-blur-xl sm:-mx-4 sm:px-4">
+          <div className="grid grid-cols-3 rounded-full border border-white/15 bg-[#0a0b0e] p-1">
               <button
+                type="button"
                 onClick={() => setActiveSection("global")}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:text-sm ${
+                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-3 text-xs font-semibold transition sm:gap-2 sm:text-sm ${
                   activeSection === "global"
-                    ? "border-[#ff7a1a] bg-[#ff7a1a] text-[#0a0a0a]"
-                    : "border-white/10 bg-white/5 text-[#f5f0de] hover:bg-white/[0.08]"
-                }`}
-              >
-                <Compass className="h-4 w-4 flex-shrink-0" />
-                Global
-              </button>
-              <button
-                onClick={() => setActiveSection("friends")}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:text-sm ${
-                  activeSection === "friends"
-                    ? "border-[#ff7a1a] bg-[#ff7a1a] text-[#0a0a0a]"
-                    : "border-white/10 bg-white/5 text-[#f5f0de] hover:bg-white/[0.08]"
+                    ? "bg-gradient-to-r from-[#ff9d1a] to-[#ff7043] text-white shadow-[0_8px_24px_rgba(255,122,26,0.28)]"
+                    : "text-white/75 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <Globe className="h-4 w-4 flex-shrink-0" />
+                Global
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection("friends")}
+                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-3 text-xs font-semibold transition sm:gap-2 sm:text-sm ${
+                  activeSection === "friends"
+                    ? "bg-gradient-to-r from-[#ff9d1a] to-[#ff7043] text-white shadow-[0_8px_24px_rgba(255,122,26,0.28)]"
+                    : "text-white/75 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Users className="h-4 w-4 flex-shrink-0" />
                 Friends
               </button>
               <button
+                type="button"
                 onClick={() => setActiveSection("your")}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:text-sm ${
+                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-3 text-xs font-semibold transition sm:gap-2 sm:text-sm ${
                   activeSection === "your"
-                    ? "border-[#ff7a1a] bg-[#ff7a1a] text-[#0a0a0a]"
-                    : "border-white/10 bg-white/5 text-[#f5f0de] hover:bg-white/[0.08]"
+                    ? "bg-gradient-to-r from-[#ff9d1a] to-[#ff7043] text-white shadow-[0_8px_24px_rgba(255,122,26,0.28)]"
+                    : "text-white/75 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <Lock className="h-4 w-4 flex-shrink-0" />
-                Your
+                Your Lists
               </button>
-            </div>
+          </div>
 
-            <div className="flex w-full items-start gap-2 lg:max-w-md">
+            <div className="flex w-full items-center gap-3">
               <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/45" />
                 <input
                   type="text"
                   value={globalSearch}
                   onChange={(e) => setGlobalSearch(e.target.value)}
                   placeholder="Search all list sections..."
-                  className="field w-full rounded-2xl py-3 pl-10 pr-4 text-sm"
+                  className="w-full rounded-full border border-white/15 bg-[#0b0d10] py-3.5 pl-12 pr-4 text-sm text-[#f5f0de] outline-none placeholder:text-white/40 focus:border-[#ff7a1a]/70 focus:ring-2 focus:ring-[#ff7a1a]/10 sm:text-base"
                 />
               </div>
               <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() => setShowViewMenu((prev) => !prev)}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-3 text-[#f5f0de] transition hover:bg-white/[0.08]"
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-[#0b0d10] text-[#f5f0de] transition hover:border-[#ff7a1a]/45 hover:bg-white/[0.06]"
                   aria-label="Open view menu"
                   title="Open view menu"
                 >
-                  <MoreVertical className="h-4 w-4" />
+                  <ListFilter className="h-5 w-5" />
                 </button>
                 {showViewMenu && (
                   <div className="menu-panel absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden border border-white/10 bg-[#111111] py-2 text-[#f5f0de] shadow-2xl">
@@ -469,24 +486,16 @@ export default function ListsPage() {
                 )}
               </div>
             </div>
-          </div>
         </div>
 
         {activeSection === "global" && (
           <section className="scroll-mt-28">
-            <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-[#f5f0de]">Global Lists</h2>
-                <p className="text-sm text-white/55">Public lists ranked by engagement.</p>
-              </div>
-            </div>
-
             {filteredPublicLists.length > 0 ? (
               <div
                 className={
                   sectionViews.global === "grid"
                     ? "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 xl:grid-cols-5"
-                    : "space-y-2"
+                    : "space-y-3"
                 }
               >
                 {filteredPublicLists.map((list) => (
@@ -521,7 +530,7 @@ export default function ListsPage() {
                 className={
                   sectionViews.friends === "grid"
                     ? "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 xl:grid-cols-5"
-                    : "space-y-2"
+                    : "space-y-3"
                 }
               >
                 {filteredFriendLists.map((list) => (
@@ -565,7 +574,7 @@ export default function ListsPage() {
                 className={
                   sectionViews.your === "grid"
                     ? "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 xl:grid-cols-5"
-                    : "space-y-2"
+                    : "space-y-3"
                 }
               >
                 {filteredOwnedLists.map((list) => (

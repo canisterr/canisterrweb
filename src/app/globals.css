@@ -53,15 +53,6 @@
   }
 }
 
-@keyframes cinematic-loading-sweep {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(240%);
-  }
-}
-
 @keyframes report-float {
   0%,
   100% {
@@ -200,10 +191,6 @@
 
   .cinematic-poster-track {
     animation: cinematic-poster-slide 20s linear infinite;
-  }
-
-  .cinematic-loading-bar {
-    animation: cinematic-loading-sweep 1.35s ease-in-out infinite;
   }
 
   .report-orb {

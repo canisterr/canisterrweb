@@ -11,6 +11,7 @@ import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import PageLayout from "@/components/PageLayout";
 import CinePostArtwork from "@/components/CinePostArtwork";
 import CinePostListStrip from "@/components/CinePostListStrip";
+import SpoilerText from "@/components/SpoilerText";
 import { getDisplayUserName } from "@/lib/users";
 import {
   CinePostCommentWithUser,
@@ -615,9 +616,13 @@ export default function CinePostPage() {
                   </div>
                 </div>
 
-                <div className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82">
+                <SpoilerText
+                  spoiler={post.contains_spoiler}
+                  className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82"
+                  buttonClassName="mt-6 max-w-3xl"
+                >
                   {linkify(getCinePostDisplayBody(post))}
-                </div>
+                </SpoilerText>
 
                 <div className="mt-6">
                   <CinePostListStrip items={post.list_items || []} theme="brutalist" />
@@ -678,9 +683,13 @@ export default function CinePostPage() {
                     </div>
                   </div>
 
-                  <div className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82">
+                  <SpoilerText
+                    spoiler={post.contains_spoiler}
+                    className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82"
+                    buttonClassName="mt-6 max-w-3xl"
+                  >
                     {linkify(getCinePostDisplayBody(post))}
-                  </div>
+                  </SpoilerText>
                 </div>
               </>
             )}

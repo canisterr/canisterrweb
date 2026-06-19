@@ -1,4 +1,4 @@
-import { ref, get } from "firebase/database";
+import { equalTo, get, orderByChild, query, ref } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { MovieReviewWithUser, User } from "@/types";
 import { getUserProfile, getUsersByIds } from "@/lib/users";
@@ -30,7 +30,9 @@ export async function getMovieReviewFeed(
   const mergedReviews: MovieReviewWithUser[] = [];
 
   try {
-    const movieLogsSnapshot = await get(ref(db, "movie_logs"));
+    const movieLogsSnapshot = await get(
+      query(ref(db, "movie_logs"), orderByChild("content_id"), equalTo(contentId))
+    );
     if (movieLogsSnapshot.exists()) {
       const allLogs = movieLogsSnapshot.val() || {};
       const logReviews = Object.entries(allLogs)

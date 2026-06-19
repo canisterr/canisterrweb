@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle, Sparkles, X } from "lucide-react";
 import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import CinePostArtwork from "@/components/CinePostArtwork";
+import SpoilerText from "@/components/SpoilerText";
 import { CinePostEngagementType, CinePostWithDetails, Content, TMDBMovie, User } from "@/types";
 import {
   getCinePostEngagementUsers,
@@ -19,13 +20,14 @@ import { getPopularMovies } from "@/lib/tmdb";
 import { getTasteBasedPopularMovies } from "@/lib/movie-recommendations";
 import { getBlurDataUrl, getTmdbPosterUrl } from "@/lib/performance";
 import { lsGet, lsSet } from "@/lib/local-cache";
-import { getDisplayUserName } from "@/lib/users";
+import { getDisplayUserHandle, getDisplayUserName } from "@/lib/users";
 import CinePostListStrip from "@/components/CinePostListStrip";
 
 interface CinePostsFeedProps {
   currentUser: User | null;
   refreshKey?: number;
   theme?: "default" | "brutalist";
+  variant?: "default" | "home";
 }
 
 const PREVIEW_LIMIT = 150;
@@ -41,10 +43,6 @@ function relativeTime(dateString: string): string {
 
 function profileHref(user: User): string {
   return `/profile/${user.username || user.id}`;
-}
-
-function getAuthorDisplayName(post: CinePostWithDetails, currentUser: User | null): string {
-  return getDisplayUserName(post.user, currentUser);
 }
 
 function Avatar({
@@ -71,6 +69,38 @@ function Avatar({
       }`}
     >
       {user.name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+function AuthorLabel({
+  user,
+  currentUser,
+  theme,
+}: {
+  user: User;
+  currentUser: User | null;
+  theme: "default" | "brutalist";
+}) {
+  const isBrutalist = theme === "brutalist";
+  const displayName = getDisplayUserName(user, currentUser);
+  const handle = getDisplayUserHandle(user, currentUser);
+  const showHandle = handle !== displayName;
+
+  return (
+    <div className="min-w-0 flex-1">
+      <p
+        className={`truncate text-[13px] font-black leading-none sm:text-sm ${
+          isBrutalist ? "text-[#f5f0de]" : "text-slate-950"
+        }`}
+      >
+        {displayName}
+      </p>
+      {showHandle && (
+        <p className={`mt-0.5 truncate text-[10px] leading-none sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+          {handle}
+        </p>
+      )}
     </div>
   );
 }
@@ -441,8 +471,14 @@ function PeopleModal({
   );
 }
 
-export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "default" }: CinePostsFeedProps) {
+export default function CinePostsFeed({
+  currentUser,
+  refreshKey = 0,
+  theme = "default",
+  variant = "default",
+}: CinePostsFeedProps) {
   const isBrutalist = theme === "brutalist";
+  const isHome = variant === "home";
   const router = useRouter();
   const popularRailRef = useRef<HTMLDivElement | null>(null);
   const suggestedRailRef = useRef<HTMLDivElement | null>(null);
@@ -576,6 +612,8 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
   }, [currentUser?.id, refreshKey, seenHistoryReady]);
 
   useEffect(() => {
+    if (isHome) return;
+
     let cancelled = false;
 
     const loadDiscoveryRails = async () => {
@@ -640,7 +678,7 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, isHome]);
 
   useEffect(() => {
     if (!currentUser?.id || typeof window === "undefined" || posts.length === 0) return;
@@ -814,6 +852,122 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
   const mainFeedPosts = posts.filter((post) => post.feedTier !== 0 && (lockedFeedPostIds.has(post.id) || !post.liked_by_current_user));
   const likedPosts = posts.filter((post) => post.liked_by_current_user && !lockedFeedPostIds.has(post.id) && post.feedTier !== 0);
 
+  const renderHomePostCard = (post: CinePostWithDetails) => {
+    const contentHref = getContentHref(post);
+    const postHref = `/posts/${post.id}`;
+    const preview = getPreview(getCinePostDisplayBody(post));
+    const postAuthorUser = currentUser && currentUser.id === post.user_id ? currentUser : post.user;
+    const posterUrl =
+      post.poster_url ||
+      post.person_profile_url ||
+      post.list_cover_images?.[0] ||
+      post.list_items?.find((item) => Boolean(item.content.poster_url))?.content.poster_url ||
+      null;
+    const artwork = (
+      <CinePostArtwork
+        src={posterUrl}
+        collageImages={post.list_cover_images}
+        alt={post.content_title || post.anchor_label}
+        className="h-full w-full"
+        mediaClassName="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+        theme="brutalist"
+      />
+    );
+
+    return (
+      <article
+        key={post.id}
+        data-feed-post-id={post.id}
+        className="grid min-h-[12.5rem] grid-cols-[6.25rem_minmax(0,1fr)] overflow-hidden border border-white/10 bg-[#080a0d] text-[#f5f0de] shadow-[0_12px_32px_rgba(0,0,0,0.18)] sm:min-h-[13.5rem] sm:grid-cols-[8.25rem_minmax(0,1fr)]"
+      >
+        {contentHref ? (
+          <Link
+            href={contentHref}
+            className="group relative block h-full min-h-[12.5rem] overflow-hidden bg-black sm:min-h-[13.5rem]"
+            title={`Open ${post.content_title || post.anchor_label}`}
+          >
+            {artwork}
+          </Link>
+        ) : (
+          <div className="group relative h-full min-h-[12.5rem] overflow-hidden bg-black sm:min-h-[13.5rem]">
+            {artwork}
+          </div>
+        )}
+
+        <div className="flex min-w-0 flex-col px-3 pt-3 sm:px-4 sm:pt-4">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <Link href={profileHref(postAuthorUser)} className="flex-shrink-0">
+              <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
+            </Link>
+            <Link href={profileHref(postAuthorUser)} className="min-w-0 flex-1 pt-0.5">
+              <p className="truncate text-sm font-black leading-tight text-[#f5f0de]">
+                {getDisplayUserName(postAuthorUser, currentUser)}
+              </p>
+              <p className="mt-0.5 truncate text-[10px] leading-tight text-white/55 sm:text-xs">
+                {getDisplayUserHandle(postAuthorUser, currentUser)}
+              </p>
+            </Link>
+            <div className="flex flex-shrink-0 items-center gap-2 text-[10px] text-white/50 sm:gap-3 sm:text-xs">
+              <span>{relativeTime(post.created_at)}</span>
+              <CinePostOwnerMenu
+                post={post}
+                currentUser={currentUser}
+                onDeleted={refreshPosts}
+                onUpdated={refreshPosts}
+                theme="brutalist"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 flex-1 sm:mt-4">
+            <SpoilerText
+              spoiler={post.contains_spoiler}
+              className="whitespace-pre-wrap text-xs leading-5 text-[#f5f0de]/92 sm:text-sm sm:leading-6"
+            >
+              <Link href={postHref}>{preview.text}</Link>
+              {preview.isTrimmed && <span className="mt-1 block text-xs font-bold text-[#ff9b4a]">Show more</span>}
+            </SpoilerText>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between border-t border-white/10 py-3 pl-1 sm:mt-4">
+            <div className="flex items-center gap-4 sm:gap-5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
+                  className={`transition ${post.liked_by_current_user ? "text-[#ff7a1a]" : "text-white/75 hover:text-[#ff9b4a]"}`}
+                  aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                >
+                  <Heart className={`h-5 w-5 ${post.liked_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openPeopleModal(post, "like", "Liked by")}
+                  disabled={post.likes_count === 0}
+                  className="min-w-3 text-left text-xs font-bold text-[#ff7a1a] disabled:opacity-100"
+                >
+                  {post.likes_count}
+                </button>
+              </div>
+              <Link href={postHref} className="flex items-center gap-2 text-white/75 transition hover:text-[#ff9b4a]">
+                <MessageCircle className="h-5 w-5" />
+                <span className="text-xs text-white/55">{post.comments_count}</span>
+              </Link>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
+              className={`transition ${post.saved_by_current_user ? "text-[#ff7a1a]" : "text-white/75 hover:text-[#ff9b4a]"}`}
+              aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
+            >
+              <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+            </button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
   const renderPostCard = (post: CinePostWithDetails, index: number, withDiscoveryRails = true) => {
     const contentHref = getContentHref(post);
     const postHref = `/posts/${post.id}`;
@@ -851,15 +1005,13 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
                     <Avatar user={postAuthorUser} size="h-7 w-7 sm:h-8 sm:w-8" dark={isBrutalist} />
                   </Link>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                      <Link
-                        href={profileHref(postAuthorUser)}
-                        onClick={(event) => event.stopPropagation()}
-                        className={`text-[13px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
-                      >
-                        {getAuthorDisplayName(post, currentUser)}
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <Link href={profileHref(postAuthorUser)} onClick={(event) => event.stopPropagation()} className="min-w-0">
+                        <AuthorLabel user={postAuthorUser} currentUser={currentUser} theme={theme} />
                       </Link>
-                      <span className={`text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
+                      <span className={`flex-shrink-0 text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+                        {relativeTime(post.created_at)}
+                      </span>
                     </div>
                   </div>
                   <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
@@ -873,13 +1025,16 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
                   </div>
                 </div>
 
-                <Link href={postHref} className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
-                  <p className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
-                    isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
-                  }`}>
-                    {preview.text}
-                  </p>
-                </Link>
+                <div className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
+                  <SpoilerText
+                    spoiler={post.contains_spoiler}
+                    className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
+                      isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
+                    }`}
+                  >
+                    <Link href={postHref}>{preview.text}</Link>
+                  </SpoilerText>
+                </div>
 
                 {preview.isTrimmed && (
                   <Link
@@ -941,15 +1096,13 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
                       <Avatar user={postAuthorUser} size="h-7 w-7 sm:h-8 sm:w-8" dark={isBrutalist} />
                     </Link>
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                        <Link
-                          href={profileHref(postAuthorUser)}
-                          onClick={(event) => event.stopPropagation()}
-                          className={`text-[13px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
-                        >
-                          {getAuthorDisplayName(post, currentUser)}
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <Link href={profileHref(postAuthorUser)} onClick={(event) => event.stopPropagation()} className="min-w-0">
+                          <AuthorLabel user={postAuthorUser} currentUser={currentUser} theme={theme} />
                         </Link>
-                        <span className={`text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
+                        <span className={`flex-shrink-0 text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+                          {relativeTime(post.created_at)}
+                        </span>
                       </div>
                     </div>
                     <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
@@ -963,13 +1116,16 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
                     </div>
                   </div>
 
-                  <Link href={postHref} className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
-                    <p className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
-                      isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
-                    }`}>
-                      {preview.text}
-                    </p>
-                  </Link>
+                  <div className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
+                    <SpoilerText
+                      spoiler={post.contains_spoiler}
+                      className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
+                        isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
+                      }`}
+                    >
+                      <Link href={postHref}>{preview.text}</Link>
+                    </SpoilerText>
+                  </div>
 
                   {preview.isTrimmed && (
                     <Link
@@ -1055,6 +1211,41 @@ export default function CinePostsFeed({ currentUser, refreshKey = 0, theme = "de
       </div>
     );
   };
+
+  if (isHome) {
+    return (
+      <>
+        {loading ? (
+          <div className="space-y-5">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-64 animate-pulse rounded-[1.2rem] border border-white/10 bg-white/[0.04]" />
+            ))}
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="rounded-[1.2rem] border border-dashed border-white/15 bg-white/[0.03] p-8 text-center">
+            <Sparkles className="mx-auto mb-3 h-8 w-8 text-[#ff7a1a]" />
+            <p className="font-bold text-[#f5f0de]">No CinePosts yet</p>
+            <p className="mt-1 text-sm text-white/50">Create the first post and it will appear here.</p>
+          </div>
+        ) : (
+          <div className="space-y-5">{posts.map(renderHomePostCard)}</div>
+        )}
+
+        {peopleModalTitle && (
+          <PeopleModal
+            title={peopleModalTitle}
+            users={peopleModalUsers}
+            loading={peopleModalLoading}
+            theme={theme}
+            onClose={() => {
+              setPeopleModalTitle("");
+              setPeopleModalUsers([]);
+            }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <>

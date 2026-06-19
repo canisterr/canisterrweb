@@ -31,13 +31,13 @@ function isPlaceholderLabel(value: string): boolean {
     normalized === "unknown user" ||
     normalized === "anonymous" ||
     normalized === "guest" ||
-    normalized === "user"
+    normalized === "user" ||
+    /^user\s+[a-z0-9]+$/.test(normalized)
   );
 }
 
-export function formatFallbackUserName(userId: string) {
-  const shortId = userId.trim().slice(0, 6);
-  return shortId ? `User ${shortId}` : "User";
+export function formatFallbackUserName() {
+  return "User";
 }
 
 export function getDisplayUserName(user: Pick<User, "id" | "username" | "name">, currentUser?: User | null): string {
@@ -48,7 +48,7 @@ export function getDisplayUserName(user: Pick<User, "id" | "username" | "name">,
     }
 
     const currentUsername = currentUser.username?.trim();
-    if (currentUsername && !isPlaceholderLabel(currentUsername)) {
+    if (currentUsername && !isPlaceholderLabel(currentUsername) && currentUsername !== currentUser.id.trim()) {
       return currentUsername.startsWith("@") ? currentUsername : `@${currentUsername}`;
     }
   }
@@ -63,13 +63,13 @@ export function getDisplayUserName(user: Pick<User, "id" | "username" | "name">,
     return username.startsWith("@") ? username : `@${username}`;
   }
 
-  return formatFallbackUserName(user.id);
+  return formatFallbackUserName();
 }
 
 export function getDisplayUserHandle(user: Pick<User, "id" | "username">, currentUser?: User | null): string {
   if (currentUser && currentUser.id === user.id) {
     const currentUsername = currentUser.username?.trim();
-    if (currentUsername && !isPlaceholderLabel(currentUsername)) {
+    if (currentUsername && !isPlaceholderLabel(currentUsername) && currentUsername !== currentUser.id.trim()) {
       return currentUsername.startsWith("@") ? currentUsername : `@${currentUsername}`;
     }
   }
@@ -79,7 +79,7 @@ export function getDisplayUserHandle(user: Pick<User, "id" | "username">, curren
     return username.startsWith("@") ? username : `@${username}`;
   }
 
-  return `@${user.id.trim().slice(0, 6) || "user"}`;
+  return "@user";
 }
 
 export function normalizeUserRecord(id: string, raw: NormalizableUserRecord): User {
@@ -89,7 +89,7 @@ export function normalizeUserRecord(id: string, raw: NormalizableUserRecord): Us
   const displayName =
     (name && !isPlaceholderLabel(name) && name !== id.trim() ? name : null) ||
     (username && !isPlaceholderLabel(username) && username !== id.trim() ? username : null) ||
-    formatFallbackUserName(id);
+    formatFallbackUserName();
 
   return {
     // The RTDB key is the canonical user id; never trust a stored `raw.id` to override it.
@@ -105,7 +105,7 @@ export function createFallbackUser(userId: string): User {
   return {
     id: userId,
     username: userId,
-    name: formatFallbackUserName(userId),
+    name: formatFallbackUserName(),
     avatar_url: null,
     created_at: new Date().toISOString(),
   };

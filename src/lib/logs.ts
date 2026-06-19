@@ -159,12 +159,16 @@ export async function createMovieLog(
     location?: string;
     watched_with?: string;
     mood?: string;
+    tags?: string;
+    notes?: string;
+    rewatch?: string;
   },
   ticketImageUrl?: string | null,
   importedFromCsv?: boolean,
   season?: number,
   episode?: number,
-  episodeTitle?: string
+  episodeTitle?: string,
+  containsSpoiler?: boolean
 ): Promise<MovieLog> {
   const logRef = push(ref(db, "movie_logs"));
   const logId = logRef.key;
@@ -193,6 +197,10 @@ export async function createMovieLog(
   // Firebase rejects undefined values, so only persist optional fields when present.
   if (mood !== undefined) {
     newLog.mood = mood;
+  }
+
+  if (containsSpoiler) {
+    newLog.contains_spoiler = true;
   }
 
   // Only add context_log if it has values

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
-import { get, ref } from "firebase/database";
+import { equalTo, get, orderByChild, query, ref } from "firebase/database";
 import { ArrowLeft, Bookmark, LogsIcon, MessageCircle, Share2 } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import TopActionBanner from "@/components/TopActionBanner";
@@ -16,6 +16,7 @@ import { auth, db } from "@/lib/firebase";
 import { getShowDetails, type ShowDetails } from "@/lib/tvmaze";
 import { getMovieReviewFeed } from "@/lib/movie-reviews";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getLogsForContent, getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
 import { signOut as authSignOut } from "@/lib/auth";
 import { User, Content, MovieReviewWithUser, MovieLog, MovieLogWithContent } from "@/types";
@@ -108,7 +109,9 @@ export default function TVShowPage() {
       return;
     }
 
-    const logsSnapshot = await get(ref(db, "movie_logs"));
+    const logsSnapshot = await get(
+      query(ref(db, "movie_logs"), orderByChild("content_id"), equalTo(numericShowId))
+    );
     if (!logsSnapshot.exists()) {
       setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
       setUserLogHistory([]);
@@ -176,19 +179,19 @@ export default function TVShowPage() {
 
         setUser(currentUser);
 
-        if (showId && !isNaN(Number(showId))) {
-          const showDetails = await getShowDetails(Number(showId));
-          if (showDetails) {
-            setShow(showDetails);
-          }
+        const numericShowId = Number(showId);
+        const [showDetails, mergedReviews, , fetchedLogs] = await Promise.all([
+          numericShowId ? getShowDetails(numericShowId) : Promise.resolve(null),
+          getMovieReviewFeed(numericShowId, "tv"),
+          loadShowLogData(currentUser.id),
+          getLogsForContent(numericShowId, "tv", 100),
+        ]);
+
+        if (showDetails) {
+          setShow(showDetails);
         }
-
-        const mergedReviews = await getMovieReviewFeed(Number(showId), "tv");
         setReviews(mergedReviews);
-
-        await loadShowLogData(currentUser.id);
-
-        let logs = await getLogsForContent(Number(showId), "tv", 100);
+        let logs = fetchedLogs;
         logs = logs.filter(
           (log) =>
             Number(log.content_id) === Number(showId) &&
@@ -490,7 +493,10 @@ export default function TVShowPage() {
                   {myReviewLog && (
                     <button
                       type="button"
-                      onClick={() => router.push(buildLogUrl(myReviewLog))}
+                      onClick={() => {
+                        setPendingLoadingTitle(show?.title || show?.name || myReviewLog.content?.title);
+                        router.push(buildLogUrl(myReviewLog));
+                      }}
                       className="mt-4 block w-full rounded-2xl border border-white/10 bg-white/5 p-3.5 text-left transition-colors hover:border-white/20 hover:bg-white/10"
                     >
                       <div className="mb-2.5 flex items-center justify-between gap-3">
@@ -568,7 +574,10 @@ export default function TVShowPage() {
                         <div
                           key={log.id}
                           className="group flex cursor-pointer flex-col items-center"
-                          onClick={() => router.push(buildLogUrl(log))}
+                          onClick={() => {
+                            setPendingLoadingTitle(show?.title || show?.name || log.content?.title);
+                            router.push(buildLogUrl(log));
+                          }}
                           title={`View ${log.user.name}'s log`}
                         >
                           <div className="relative flex flex-col items-center">
@@ -616,7 +625,10 @@ export default function TVShowPage() {
                           <div key={log.id} className="flex items-center gap-4 py-4">
                             <div
                               className="flex cursor-pointer flex-col items-center"
-                              onClick={() => router.push(buildLogUrl(log))}
+                              onClick={() => {
+                                setPendingLoadingTitle(show?.title || show?.name || log.content?.title);
+                                router.push(buildLogUrl(log));
+                              }}
                               title={`View ${log.user.name}'s log`}
                             >
                               {log.user.avatar_url ? (
@@ -642,7 +654,10 @@ export default function TVShowPage() {
                             <div className="min-w-0 flex-1">
                               <span
                                 className="cursor-pointer font-semibold text-white/90 hover:underline"
-                                onClick={() => router.push(buildLogUrl(log))}
+                                onClick={() => {
+                                  setPendingLoadingTitle(show?.title || show?.name || log.content?.title);
+                                  router.push(buildLogUrl(log));
+                                }}
                               >
                                 {log.user.name}
                               </span>
@@ -650,7 +665,10 @@ export default function TVShowPage() {
                             </div>
                             <button
                               className="ml-2 text-xs font-medium text-white/55 transition hover:text-white hover:underline"
-                              onClick={() => router.push(buildLogUrl(log))}
+                              onClick={() => {
+                                setPendingLoadingTitle(show?.title || show?.name || log.content?.title);
+                                router.push(buildLogUrl(log));
+                              }}
                             >
                               View Log
                             </button>

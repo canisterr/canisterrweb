@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreVertical, Pencil, Trash2, X } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
 import { CinePostWithDetails, User } from "@/types";
 import { deleteCinePost, updateCinePost } from "@/lib/cineposts";
 import ShareLinkButton from "@/components/ShareLinkButton";
@@ -84,7 +84,7 @@ export default function CinePostOwnerMenu({
           aria-label="Post options"
           aria-expanded={menuOpen}
         >
-          <MoreVertical className="h-6 w-6" />
+          <MoreHorizontal className="h-6 w-6" />
         </button>
 
         {menuOpen && (

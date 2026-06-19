@@ -1,6 +1,5 @@
 "use client";
 
-import EmailVerificationBadge from "./EmailVerificationBadge";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,13 +7,13 @@ import { usePathname } from "next/navigation";
 import { User } from "@/types";
 import { ReactNode, useEffect, useState } from "react";
 import { Menu, Settings } from "lucide-react";
-import { onValue, ref } from "firebase/database";
-import { db } from "@/lib/firebase";
-import { DEFAULT_SETTINGS, mergeSettings, resolveThemePreference } from "@/lib/settings";
+import { DEFAULT_SETTINGS, resolveThemePreference } from "@/lib/settings";
 import { useIsPwa } from "@/lib/pwa";
+import { useCurrentUser } from "./CurrentUserProvider";
 
 const SidebarShell = dynamic(() => import("./Sidebar"), { ssr: false });
 const NotificationBellShell = dynamic(() => import("./NotificationBell"), { ssr: false });
+const EmailVerificationBadgeShell = dynamic(() => import("./EmailVerificationBadge"), { ssr: false });
 
 interface PageLayoutProps {
   user: User | null;
@@ -34,6 +33,7 @@ export default function PageLayout({
   headerAction = "notifications",
 }: PageLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { settings } = useCurrentUser();
   const isBrutalist = theme === "brutalist";
   const pathname = usePathname();
   const isPwa = useIsPwa();
@@ -53,17 +53,11 @@ export default function PageLayout({
       return;
     }
 
-    const userRef = ref(db, `users/${user.id}`);
-    const unsubscribe = onValue(userRef, (snapshot) => {
-      const settings = mergeSettings(snapshot.exists() ? snapshot.val()?.settings : null);
-      root.dataset.cineTheme = settings.appearance.theme;
-      root.dataset.cineTextSize = settings.appearance.textSize;
-      root.dataset.cineReduceMotion = settings.appearance.reduceMotion ? "true" : "false";
-      root.style.colorScheme = resolveThemePreference(settings.appearance.theme);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+    root.dataset.cineTheme = settings.appearance.theme;
+    root.dataset.cineTextSize = settings.appearance.textSize;
+    root.dataset.cineReduceMotion = settings.appearance.reduceMotion ? "true" : "false";
+    root.style.colorScheme = resolveThemePreference(settings.appearance.theme);
+  }, [settings, user]);
 
   return (
     <div className={`${isBrutalist ? "brutalist bg-[#0a0a0a]" : "app-shell"} flex min-h-dvh overflow-x-hidden`}>
@@ -210,7 +204,9 @@ export default function PageLayout({
           reserveBottomNavSpace ? "pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0" : ""
         }`}
       >
-        <EmailVerificationBadge className="mx-auto mt-3 w-full max-w-[1600px] px-1 sm:px-2" />
+        {user ? (
+          <EmailVerificationBadgeShell className="mx-auto mt-3 w-full max-w-[1600px] px-1 sm:px-2" />
+        ) : null}
         <div className={fullWidth ? "w-full" : "mx-auto w-full max-w-[1600px] px-3 py-2 sm:px-4 md:px-6 lg:px-8"}>
           {children}
         </div>

@@ -251,6 +251,7 @@ export interface MovieLog {
   watched_date: string; // Date when the movie was watched (YYYY-MM-DD)
   reaction: MovieReactionValue | null; // 0=Bad, 1=Good, 1.5=Average, 2=Masterpiece, null=unrated
   notes: string; // Review/thoughts
+  contains_spoiler?: boolean; // Hide review text until the reader reveals it
   mood?: string; // How they felt (e.g., "happy", "sad", "excited")
   watch_later?: boolean; // For watchlist - movie to watch later (not watched yet)
 
@@ -264,6 +265,9 @@ export interface MovieLog {
     location?: string; // Where they watched (e.g., "Cinema", "Home")
     watched_with?: string; // Who they watched with (free text, can include @mentions)
     mood?: string; // Mood during watching
+    tags?: string; // Freeform tags for the log context
+    notes?: string; // Private context notes
+    rewatch?: string; // "true" when the log is a rewatch
   };
 
   ticket_image_url?: string | null; // Custom image/ticket uploaded for the log
@@ -332,6 +336,7 @@ export interface CinePost {
   person_profile_url?: string | null;
   person_department?: string | null;
   body: string;
+  contains_spoiler?: boolean;
   tags: string[];
   log_id?: string;
   created_at: string;

@@ -19,8 +19,9 @@ export default function CinePostArtwork({
 }: CinePostArtworkProps) {
   const isBrutalist = theme === "brutalist";
   const images = collageImages.filter((image): image is string => Boolean(image));
+  const fallbackSrc = src || images[0] || null;
   const showCollage = images.length > 1 && !src;
-  const hasMedia = Boolean(src) || showCollage;
+  const hasMedia = Boolean(fallbackSrc) || showCollage;
 
   return (
     <div className={`relative overflow-hidden ${hasMedia ? "bg-transparent" : isBrutalist ? "bg-[#1a1a1a]" : "bg-slate-100"} ${className}`}>
@@ -42,8 +43,8 @@ export default function CinePostArtwork({
               />
             ))}
         </div>
-      ) : src ? (
-        <img src={src} alt={alt} className={`absolute inset-0 h-full w-full object-cover ${mediaClassName}`} />
+      ) : fallbackSrc ? (
+        <img src={fallbackSrc} alt={alt} className={`absolute inset-0 h-full w-full object-cover ${mediaClassName}`} />
       ) : (
         <div className={isBrutalist ? "h-full w-full bg-[#1a1a1a]" : "h-full w-full bg-slate-100"} />
       )}

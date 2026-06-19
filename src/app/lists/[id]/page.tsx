@@ -1053,6 +1053,7 @@ export default function ListDetailPage() {
                 const watchedRecord = watchedMovies[watchedKey] || null;
                 const userWatched = Boolean(watchedRecord);
                 const canReorder = reorderMode && canEdit && viewType === "list";
+                const canRemoveItem = editMode && canEdit;
                 const isFirst = idx === 0;
                 const isLast = idx === sortedItems.length - 1;
                 return (
@@ -1060,8 +1061,8 @@ export default function ListDetailPage() {
                     key={item.id}
                     className={
                       viewType === "list"
-                        ? `group relative flex items-start gap-3 py-1 ${canReorder ? "cursor-grab active:cursor-grabbing" : ""}`
-                        : `relative flex flex-col ${editMode && isOwner ? "cursor-move" : ""}`
+                        ? `group relative flex items-start gap-3 py-1 ${canRemoveItem ? "pr-20 sm:pr-28" : ""} ${canReorder ? "cursor-grab active:cursor-grabbing" : ""}`
+                        : "relative flex flex-col"
                     }
                       draggable={canReorder}
                     onDragStart={canReorder ? e => {
@@ -1184,13 +1185,19 @@ export default function ListDetailPage() {
                           </div>
                         )}
                       </div>
-                    {editMode && isOwner && (
+                    {canRemoveItem && (
                       <button
+                        type="button"
                         aria-label="Delete movie"
-                        className="absolute right-0 top-0 rounded-full bg-white/90 p-1 text-red-600 shadow-sm ring-1 ring-gray-100"
+                        className={
+                          viewType === "list"
+                            ? "absolute right-0 top-1 inline-flex items-center gap-1 rounded-full border border-red-400/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-200 transition hover:border-red-300/60 hover:bg-red-500/20"
+                            : "absolute right-1 top-1 rounded-full bg-[#111111]/90 p-1.5 text-red-200 shadow-sm ring-1 ring-white/10 transition hover:bg-red-500/20 hover:text-red-100"
+                        }
                         onClick={() => handleRemoveItem(item.id, item.content.title)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
+                        {viewType === "list" && <span>Remove</span>}
                       </button>
                     )}
                   </div>

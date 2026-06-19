@@ -124,11 +124,11 @@ function getFollowListDisplayName(user: Pick<User, "id" | "username" | "name">):
   }
 
   const username = user.username?.trim();
-  if (username) {
+  if (username && username !== user.id.trim()) {
     return username.startsWith("@") ? username : `@${username}`;
   }
 
-  return user.id ? `User ${user.id.trim().slice(0, 6)}` : "User";
+  return "User";
 }
 
 function shouldShowFollowListHandle(user: Pick<User, "id" | "username" | "name">): boolean {

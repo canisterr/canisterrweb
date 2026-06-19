@@ -14,6 +14,7 @@ import { signOut as authSignOut } from "@/lib/auth";
 import { auth, db } from "@/lib/firebase";
 import { getFriendLogs } from "@/lib/friend-logs";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { MovieLogWithContent, ShareWithDetails, User } from "@/types";
 import { getBlurDataUrl } from "@/lib/performance";
 import { getUsersByIds } from "@/lib/users";
@@ -203,6 +204,7 @@ export default function AllMoviesPage() {
     if (item.kind === "shared") {
       setSelectedShare(item.share);
     } else {
+      setPendingLoadingTitle(item.log.content?.title);
       router.push(buildLogUrl(item.log));
     }
   };

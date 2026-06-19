@@ -6,7 +6,8 @@ import { Bell, X } from "lucide-react";
 import { onValue, ref } from "firebase/database";
 import { db } from "@/lib/firebase";
 import type { User } from "@/types";
-import { mergeSettings, shouldShowNotificationForSettings } from "@/lib/settings";
+import { shouldShowNotificationForSettings } from "@/lib/settings";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
   clearAllNotifications,
   formatNotificationDate,
@@ -22,13 +23,15 @@ import {
 export default function NotificationBell({
   user,
   theme = "default",
+  placement = "header",
 }: {
   user: User | null;
   theme?: "default" | "brutalist";
+  placement?: "header" | "inline";
 }) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [settings, setSettings] = useState(mergeSettings(null));
+  const { settings } = useCurrentUser();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const isBrutalist = theme === "brutalist";
 
@@ -47,15 +50,7 @@ export default function NotificationBell({
       setNotifications(sortNotificationItems(parseNotificationItems(snapshot.val())));
     });
 
-    const userRef = ref(db, `users/${user.id}`);
-    const unsubscribeSettings = onValue(userRef, (snapshot) => {
-      setSettings(mergeSettings(snapshot.exists() ? snapshot.val()?.settings : null));
-    });
-
-    return () => {
-      unsubscribe();
-      unsubscribeSettings();
-    };
+    return unsubscribe;
   }, [user]);
 
   useEffect(() => {
@@ -106,7 +101,14 @@ export default function NotificationBell({
   if (!user) return null;
 
   return (
-    <div ref={wrapperRef} className="absolute right-4 top-1/2 z-40 -translate-y-1/2 sm:right-6">
+    <div
+      ref={wrapperRef}
+      className={
+        placement === "inline"
+          ? "relative z-40"
+          : "absolute right-4 top-1/2 z-40 -translate-y-1/2 sm:right-6"
+      }
+    >
       <button
         type="button"
         onClick={openNotifications}

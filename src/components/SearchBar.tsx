@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { getBlurDataUrl } from "@/lib/performance";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 
 interface SearchData {
   id: string | number;
@@ -118,6 +119,7 @@ export default function SearchBar({
   }, []);
 
   const handleSelect = (item: SearchData) => {
+    setPendingLoadingTitle(item.title);
     onSelect(item);
     setQuery("");
     setResults([]);

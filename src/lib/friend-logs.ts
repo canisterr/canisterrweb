@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import { ref, get } from "firebase/database";
+import { equalTo, get, orderByChild, query, ref } from "firebase/database";
 import { Content, MovieLog, MovieLogWithContent, User } from "@/types";
 import { getMovieDetails } from "./tmdb";
 import { getShowDetails } from "./tvmaze";
@@ -51,7 +51,9 @@ function createFallbackContentForLog(log: MovieLog): Content {
 export async function getFriendLogs(userId: string, daysBack: number = 14, limit: number = 50): Promise<(MovieLogWithContent & { friend: User })[]> {
   try {
     // 1. Get list of users that current user is following
-    const followSnapshot = await get(ref(db, "follows"));
+    const followSnapshot = await get(
+      query(ref(db, "follows"), orderByChild("follower_id"), equalTo(userId))
+    );
 
     if (!followSnapshot.exists()) {
       return [];
@@ -69,16 +71,22 @@ export async function getFriendLogs(userId: string, daysBack: number = 14, limit
     // Watch-only markers should never surface in activity feeds.
     // We still show real logs here, but suppress any item that was only
     // marked watched from a list and not logged as a full movie log.
-    const watchedRef = ref(db, "watched_movies");
-    const watchedSnapshot = await get(watchedRef);
     const watchOnlyKeys = new Set<string>();
 
+    const [watchedSnapshot, logSnapshots] = await Promise.all([
+      get(ref(db, "watched_movies")),
+      Promise.all(
+        followingIds.map((followingId) =>
+          get(query(ref(db, "movie_logs"), orderByChild("user_id"), equalTo(followingId)))
+        )
+      ),
+    ]);
+
     if (watchedSnapshot.exists()) {
-      const allWatched = watchedSnapshot.val() as Record<string, any>;
-      Object.values(allWatched).forEach((item) => {
+      const watchedItems = watchedSnapshot.val() as Record<string, any>;
+      Object.values(watchedItems).forEach((item) => {
         if (
           item &&
-          followingIds.includes(item.user_id) &&
           item.list_marked &&
           !item.logged
         ) {
@@ -87,19 +95,14 @@ export async function getFriendLogs(userId: string, daysBack: number = 14, limit
       });
     }
 
-    // 2. Get all movie logs
-    const logsSnapshot = await get(ref(db, "movie_logs"));
-
-    if (!logsSnapshot.exists()) {
-      return [];
-    }
-
     // 3. Filter logs from following users created in last X days
     const dateThreshold = new Date();
     dateThreshold.setDate(dateThreshold.getDate() - daysBack);
 
-    const allLogs = logsSnapshot.val();
-    const friendLogs = Object.values(allLogs)
+    const allLogs = logSnapshots.flatMap((snapshot) =>
+      snapshot.exists() ? Object.values(snapshot.val()) : []
+    );
+    const friendLogs = allLogs
       .filter((log: any) => {
         const logDate = new Date(log.created_at);
         const watchKey = `${log.user_id}__${log.content_type}__${log.content_id}`;

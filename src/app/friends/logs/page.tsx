@@ -9,6 +9,7 @@ import { User, MovieLogWithContent } from "@/types";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getFriendLogs } from "@/lib/friend-logs";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getTvEpisodeLabel } from "@/lib/logs";
 
 export default function FriendLogsPage() {
@@ -163,7 +164,10 @@ export default function FriendLogsPage() {
             {sortedLogs.map((log) => (
               <div
                 key={log.id}
-                    onClick={() => router.push(buildLogUrl(log))}
+                    onClick={() => {
+                      setPendingLoadingTitle(log.content?.title);
+                      router.push(buildLogUrl(log));
+                    }}
                 className="cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
               >
                 {/* Poster */}

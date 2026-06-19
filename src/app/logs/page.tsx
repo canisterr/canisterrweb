@@ -14,6 +14,7 @@ import { deleteMovieLog, getUserMovieLogs } from "@/lib/logs";
 import { searchMovies } from "@/lib/tmdb";
 import { searchShows } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getBlurDataUrl, getTmdbPosterUrl } from "@/lib/performance";
 import {
   Calendar,
@@ -541,6 +542,7 @@ export default function LogsPage() {
   }, [searchFilter, searchResults]);
 
   const handleOpenLogDetails = (log: MovieLogWithContent) => {
+    setPendingLoadingTitle(log.content?.title);
     router.push(buildLogUrl(log));
   };
 
@@ -1049,7 +1051,10 @@ export default function LogsPage() {
 
             <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-white/10 bg-[#111111] p-5">
               <button
-                onClick={() => router.push(buildLogUrl(activeLog))}
+                onClick={() => {
+                  setPendingLoadingTitle(activeLog.content?.title);
+                  router.push(buildLogUrl(activeLog));
+                }}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-[#f5f0de] hover:bg-white/[0.04]"
               >
                 <Pencil className="w-4 h-4" />

@@ -23,12 +23,28 @@ type AdminUserRecord = {
   createdAt?: string;
 };
 
+function normalizeLabel(value?: string | null): string {
+  return value?.trim().replace(/^@/, "") || "";
+}
+
+function isPlaceholderLabel(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === "unknown" ||
+    normalized === "unknown user" ||
+    normalized === "anonymous" ||
+    normalized === "guest" ||
+    normalized === "user" ||
+    /^user\s+[a-z0-9]+$/.test(normalized)
+  );
+}
+
 function createFallbackUser(userId: string): User {
-  const shortId = userId.trim().slice(0, 6);
   return {
     id: userId,
     username: userId,
-    name: shortId ? `User ${shortId}` : "User",
+    name: "User",
     avatar_url: null,
     created_at: new Date().toISOString(),
   };
@@ -39,14 +55,18 @@ function normalizeAdminUser(userId: string, raw: AdminUserRecord | null | undefi
     return createFallbackUser(userId);
   }
 
-  const username = typeof raw.username === "string" && raw.username.trim() ? raw.username.trim() : userId;
-  const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : null;
+  const username = normalizeLabel(raw.username);
+  const name = normalizeLabel(raw.name);
   const createdAt = raw.created_at || raw.createdAt || new Date().toISOString();
+  const displayName =
+    (name && !isPlaceholderLabel(name) && name !== userId.trim() ? name : null) ||
+    (username && !isPlaceholderLabel(username) && username !== userId.trim() ? username : null) ||
+    "User";
 
   return {
     id: userId,
-    username,
-    name: name || (username ? (username.startsWith("@") ? username.slice(1) : username) : createFallbackUser(userId).name),
+    username: username || userId,
+    name: displayName,
     avatar_url: raw.avatar_url || null,
     created_at: createdAt,
   };

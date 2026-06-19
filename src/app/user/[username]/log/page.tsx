@@ -12,6 +12,7 @@ import { ref, get } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getTvEpisodeLabel, getUserMovieLogs, deleteMovieLog } from "@/lib/logs";
 import { buildLogUrl } from "@/lib/log-url";
+import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { searchMovies } from "@/lib/tmdb";
 import { searchShows } from "@/lib/tvmaze";
 import { getUserByUsername } from "@/lib/profile";
@@ -504,6 +505,7 @@ export default function UserLogPage() {
   const handleOpenLogDetails = (log: MovieLogWithContent) => {
     // Only allow editing if owner
     if (isOwner) {
+      setPendingLoadingTitle(log.content?.title);
       router.push(buildLogUrl(log));
     }
   };
@@ -895,7 +897,10 @@ export default function UserLogPage() {
 
             <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-white/10 bg-[#111111] p-5">
               <button
-                onClick={() => router.push(buildLogUrl(activeLog))}
+                onClick={() => {
+                  setPendingLoadingTitle(activeLog.content?.title);
+                  router.push(buildLogUrl(activeLog));
+                }}
                 className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-[#f5f0de] hover:bg-white/5"
               >
                 <Pencil className="w-4 h-4" />
