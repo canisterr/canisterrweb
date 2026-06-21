@@ -13,7 +13,8 @@ import LogMovieModal from "@/components/LogMovieModal";
 import CinematicLoading from "@/components/CinematicLoading";
 import ContentCinePosts from "@/components/ContentCinePosts";
 import { auth, db } from "@/lib/firebase";
-import type { ShowDetails } from "@/lib/tvmaze";
+import { getShowDetails, type ShowDetails } from "@/lib/tvmaze";
+import { getMovieReviewFeed } from "@/lib/movie-reviews";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
@@ -347,7 +348,11 @@ export default function TVShowPage() {
     : "/dashboard";
 
   const renderCastRow = (person: TVCreditPerson) => (
-    <div key={person.id} className="flex items-center gap-4 py-4 text-left">
+    <Link
+      key={person.id}
+      href={buildCrewPath({ id: person.id, name: person.name })}
+      className="flex items-center gap-4 py-4 text-left transition-colors hover:bg-white/[0.02]"
+    >
       <div className="h-20 w-14 flex-shrink-0 overflow-hidden rounded-none border border-white/10 bg-white/10 sm:h-24 sm:w-16">
         {person.profile_url ? (
           <img src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
@@ -363,11 +368,15 @@ export default function TVShowPage() {
           {person.character || "Character unavailable"}
         </p>
       </div>
-    </div>
+    </Link>
   );
 
   const renderCrewRow = (person: TVCreditPerson) => (
-    <div key={`${person.id}-${person.job || person.department || "crew"}`} className="flex items-center gap-4 py-4 text-left">
+    <Link
+      key={`${person.id}-${person.job || person.department || "crew"}`}
+      href={buildCrewPath({ id: person.id, name: person.name })}
+      className="flex items-center gap-4 py-4 text-left transition-colors hover:bg-white/[0.02]"
+    >
       <div className="h-20 w-14 flex-shrink-0 overflow-hidden rounded-none border border-white/10 bg-white/10 sm:h-24 sm:w-16">
         {person.profile_url ? (
           <img src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
@@ -383,7 +392,7 @@ export default function TVShowPage() {
           {getCrewBucketLabel(person.job || person.department)}
         </p>
       </div>
-    </div>
+    </Link>
   );
 
   if (loading) {
@@ -414,6 +423,7 @@ export default function TVShowPage() {
                 src={show.poster_url}
                 alt={`${show.title} poster`}
                 className="absolute inset-0 h-full w-full object-cover object-center"
+                style={{ objectPosition: "center center" }}
               />
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.18)_34%,rgba(0,0,0,0.48)_68%,rgba(0,0,0,0.92)_100%)]" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,122,26,0.18),transparent_28%)]" />

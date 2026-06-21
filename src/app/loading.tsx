@@ -1,11 +1,5 @@
-import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
+import CinematicLoading from "@/components/CinematicLoading";
 
 export default function Loading() {
-  return (
-    <RouteLoadingSkeleton
-      title="Opening Canisterr"
-      description="Loading your session and preparing a lightweight shell."
-    />
-  );
+  return <CinematicLoading message="Opening Canisterr" />;
 }
-

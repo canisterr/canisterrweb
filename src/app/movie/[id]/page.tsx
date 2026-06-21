@@ -13,6 +13,9 @@ import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
+import { getMovieDetails } from "@/lib/tmdb";
+import { getMovieReviewFeed } from "@/lib/movie-reviews";
+import { getLogsForContent } from "@/lib/logs";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
@@ -431,9 +434,10 @@ export default function MoviePage() {
   };
 
   const renderCastRow = (person: MovieCreditPerson) => (
-    <div
+    <Link
       key={person.id}
-      className="flex items-center gap-4 py-4 text-left"
+      href={buildCrewPath({ id: person.id, name: person.name })}
+      className="flex items-center gap-4 py-4 text-left transition-colors hover:bg-white/[0.02]"
     >
       <div className="h-20 w-14 flex-shrink-0 overflow-hidden rounded-none border border-white/10 bg-white/10 sm:h-24 sm:w-16">
         {person.profile_url ? (
@@ -450,13 +454,14 @@ export default function MoviePage() {
           {person.character || "Character unavailable"}
         </p>
       </div>
-    </div>
+    </Link>
   );
 
   const renderCrewRow = (person: MovieCreditPerson, group: string) => (
-    <div
+    <Link
       key={`${group}-${person.id}-${person.name}`}
-      className="flex items-center gap-4 py-4 text-left"
+      href={buildCrewPath({ id: person.id, name: person.name })}
+      className="flex items-center gap-4 py-4 text-left transition-colors hover:bg-white/[0.02]"
     >
       <div className="h-20 w-14 flex-shrink-0 overflow-hidden rounded-none border border-white/10 bg-white/10 sm:h-24 sm:w-16">
         {person.profile_url ? (
@@ -473,7 +478,7 @@ export default function MoviePage() {
           {person.job || person.department || group}
         </p>
       </div>
-    </div>
+    </Link>
   );
 
   if (loading) {
@@ -504,6 +509,7 @@ export default function MoviePage() {
                 src={heroImageUrl}
                 alt={`${movie.title} backdrop`}
                 className="absolute inset-0 h-full w-full object-cover object-center"
+                style={{ objectPosition: "center center" }}
               />
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.18)_34%,rgba(0,0,0,0.48)_68%,rgba(0,0,0,0.92)_100%)]" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,122,26,0.18),transparent_28%)]" />

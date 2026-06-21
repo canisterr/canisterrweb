@@ -1,4 +1,4 @@
-import { TMDBMovie, TMDBSearchResponse } from "@/types";
+import { TMDBMovie, TMDBPersonSearchResult, TMDBSearchResponse } from "@/types";
 import { ParsedIntent } from "./nlp-parser";
 import { fetchTmdb } from "./tmdb-transport";
 import { getTmdbBackdropUrl, getTmdbImageUrl, getTmdbPosterUrl } from "./performance";
@@ -105,17 +105,56 @@ interface TMDBDetailedMovie {
   };
 }
 
-interface TMDBPersonSearchResult {
-  id: number;
-  name: string;
-  profile_path: string | null;
-  popularity?: number;
-  known_for_department?: string;
-  known_for?: Array<TMDBMovie & { media_type?: string }>;
-}
-
 interface TMDBPersonSearchResponse {
   results: TMDBPersonSearchResult[];
+}
+
+export interface TMDBPersonDetails {
+  id: number;
+  name: string;
+  biography: string | null;
+  birthday?: string | null;
+  deathday?: string | null;
+  place_of_birth?: string | null;
+  known_for_department?: string | null;
+  popularity?: number | null;
+  profile_path?: string | null;
+  homepage?: string | null;
+  also_known_as?: string[];
+}
+
+export interface TMDBPersonCredit {
+  id: number;
+  media_type?: "movie" | "tv";
+  title?: string;
+  name?: string;
+  poster_path?: string | null;
+  backdrop_path?: string | null;
+  overview?: string | null;
+  release_date?: string | null;
+  first_air_date?: string | null;
+  vote_average?: number | null;
+  vote_count?: number | null;
+  popularity?: number | null;
+  original_language?: string | null;
+  character?: string | null;
+  job?: string | null;
+  department?: string | null;
+}
+
+export interface TMDBPersonCombinedCreditsResponse {
+  cast?: TMDBPersonCredit[];
+  crew?: TMDBPersonCredit[];
+}
+
+export interface TMDBPersonExternalIds {
+  imdb_id?: string | null;
+  facebook_id?: string | null;
+  instagram_id?: string | null;
+  twitter_id?: string | null;
+  tiktok_id?: string | null;
+  youtube_id?: string | null;
+  wikidata_id?: string | null;
 }
 
 interface TMDBPersonMovieCredit {
@@ -592,6 +631,62 @@ export async function searchPeople(query: string): Promise<TMDBPersonSearchResul
   } catch (error) {
     console.error("TMDB people search error:", error);
     return [];
+  }
+}
+
+export async function getPersonDetails(personId: number): Promise<TMDBPersonDetails | null> {
+  try {
+    if (!Number.isFinite(personId) || personId <= 0) {
+      return null;
+    }
+
+    const response = await fetchTmdb(`person/${personId}`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch person details");
+    }
+
+    return (await response.json()) as TMDBPersonDetails;
+  } catch (error) {
+    console.error("TMDB person details error:", error);
+    return null;
+  }
+}
+
+export async function getPersonCombinedCredits(
+  personId: number
+): Promise<TMDBPersonCombinedCreditsResponse | null> {
+  try {
+    if (!Number.isFinite(personId) || personId <= 0) {
+      return null;
+    }
+
+    const response = await fetchTmdb(`person/${personId}/combined_credits`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch person credits");
+    }
+
+    return (await response.json()) as TMDBPersonCombinedCreditsResponse;
+  } catch (error) {
+    console.error("TMDB person credits error:", error);
+    return null;
+  }
+}
+
+export async function getPersonExternalIds(personId: number): Promise<TMDBPersonExternalIds | null> {
+  try {
+    if (!Number.isFinite(personId) || personId <= 0) {
+      return null;
+    }
+
+    const response = await fetchTmdb(`person/${personId}/external_ids`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch person external ids");
+    }
+
+    return (await response.json()) as TMDBPersonExternalIds;
+  } catch (error) {
+    console.error("TMDB person external ids error:", error);
+    return null;
   }
 }
 

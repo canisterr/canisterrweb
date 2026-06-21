@@ -5,14 +5,15 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
+import CrewSearchCard from "@/components/CrewSearchCard";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TopActionBanner from "@/components/TopActionBanner";
 import CinematicLoading from "@/components/CinematicLoading";
-import { User, ShareWithDetails, Content, MovieLogWithContent } from "@/types";
+import { User, ShareWithDetails, Content, MovieLogWithContent, TMDBPersonSearchResult } from "@/types";
 import { db } from "@/lib/firebase";
 import { equalTo, onValue, orderByChild, query, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
-import { searchMovies } from "@/lib/tmdb";
+import { searchMovies, searchPeople } from "@/lib/tmdb";
 import { searchShows } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
@@ -43,6 +44,16 @@ type SearchAccount = {
   name: string;
   avatar_url: string | null;
 };
+
+type SearchCrewResult = TMDBPersonSearchResult & {
+  resultType: "crew";
+};
+
+type GlobalSearchResult = Content | SearchCrewResult;
+
+function isCrewSearchResult(result: GlobalSearchResult): result is SearchCrewResult {
+  return "resultType" in result && result.resultType === "crew";
+}
 
 function normalizeSearchText(value: string): string {
   return value
@@ -109,11 +120,11 @@ export default function DashboardPage() {
   const [friendLogs, setFriendLogs] = useState<(MovieLogWithContent & { friend: User })[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Content[]>([]);
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
   const [accountResults, setAccountResults] = useState<SearchAccount[]>([]);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [searchFilter, setSearchFilter] = useState<"all" | "movie" | "tv" | "accounts">("all");
+  const [searchFilter, setSearchFilter] = useState<"all" | "movie" | "tv" | "crew" | "accounts">("all");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
   // CinePost modal state
@@ -284,10 +295,11 @@ export default function DashboardPage() {
     searchRequestRef.current = requestId;
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const [movies, shows, usersData] = await Promise.all([
+        const [movies, shows, usersData, people] = await Promise.all([
           searchMovies(query),
           searchShows(query),
           searchUsersCached(query),
+          searchPeople(query),
         ]);
 
         if (requestId !== searchRequestRef.current) return;
@@ -325,11 +337,16 @@ export default function DashboardPage() {
           created_at: new Date().toISOString(),
         }));
 
-        const combined = rankSearchResults(
+        const combinedContent = rankSearchResults(
           [...movieResults.slice(0, 12), ...showResults.slice(0, 12)],
           query
         ).slice(0, 20);
-        setSearchResults(combined);
+        const crewResults: SearchCrewResult[] = people.slice(0, 10).map((person) => ({
+          ...person,
+          resultType: "crew" as const,
+        }));
+
+        setSearchResults([...combinedContent, ...crewResults]);
 
         const normalizedQuery = normalizeAccountSearchText(query);
         const usersMatched = Object.values(usersData)
@@ -556,7 +573,7 @@ export default function DashboardPage() {
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search movies, shows, and usernames..."
+              placeholder="Search movies, shows, film people, and usernames..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               onFocus={() => setShowSearchModal(true)}
@@ -640,6 +657,16 @@ export default function DashboardPage() {
                     TV Shows
                   </button>
                   <button
+                    onClick={() => setSearchFilter("crew")}
+                    className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                      searchFilter === "crew"
+                        ? "bg-[#f5f0de] text-[#0a0a0a]"
+                        : "bg-white/5 text-[#f5f0de]/75 hover:bg-white/10"
+                    }`}
+                  >
+                    People
+                  </button>
+                  <button
                     onClick={() => setSearchFilter("accounts")}
                     className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
                       searchFilter === "accounts"
@@ -656,7 +683,7 @@ export default function DashboardPage() {
                   {searchResults
                     .filter((result) => {
                       if (searchFilter === "all") return true;
-                      // Fix: match 'movie' type for Movies filter
+                      if (isCrewSearchResult(result)) return searchFilter === "crew";
                       if (searchFilter === "movie") return result.type === "movie";
                       if (searchFilter === "tv") return result.type === "tv";
                       return false;
@@ -664,25 +691,7 @@ export default function DashboardPage() {
                     .map((result) => (
                       <Link
                         key={`${result.type}-${result.id}`}
-                        href={
-                          result.type === "tv"
-                          ? buildTvPath({
-                                id: result.id,
-                                title: result.title,
-                                name: result.title,
-                                premiered: (result as any).premiered || result.release_date || undefined,
-                                release_date: result.release_date || undefined,
-                                language: (result as any).language || undefined,
-                                network: (result as any).network || undefined,
-                              })
-                            : buildMoviePath({
-                                id: result.id,
-                                title: result.title,
-                                director: (result as any).director || null,
-                                release_date: result.release_date || null,
-                                language: (result as any).language || undefined,
-                              })
-                        }
+                        href={result.type === "tv" ? `/tv/${result.id}` : `/movie/${result.id}`}
                       >
                         <div className="flex items-center gap-3 border-b border-white/10 p-3 transition-colors last:border-b-0 hover:bg-white/5">
                           {/* Poster thumbnail */}
@@ -704,36 +713,31 @@ export default function DashboardPage() {
                             )}
                           </div>
 
-                          {/* Content info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="truncate text-sm font-semibold text-[#f5f0de]">
-                              {result.title}
-                            </p>
-                            <p className="text-xs text-white/50">
-                              {result.release_date
-                                ? result.release_date.split("-")[0]
-                                : "N/A"}
-                              {result.type === "tv" && (
-                                <span className="ml-2 inline-block bg-[#ff7a1a]/15 px-2 py-0.5 text-xs font-medium text-[#ffb36b]">
-                                  TV
-                                </span>
-                              )}
-                            </p>
-                          </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-[#f5f0de]">{result.title}</p>
+                              <p className="text-xs text-white/50">
+                                {result.release_date ? result.release_date.split("-")[0] : "N/A"}
+                                {result.type === "tv" && (
+                                  <span className="ml-2 inline-block bg-[#ff7a1a]/15 px-2 py-0.5 text-xs font-medium text-[#ffb36b]">
+                                    TV
+                                  </span>
+                                )}
+                              </p>
+                            </div>
 
-                          {/* Share Button */}
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleSearchShare(result.id);
-                            }}
-                            className="flex-shrink-0 bg-[#ff7a1a] px-3 py-1.5 text-xs font-medium text-[#0a0a0a] transition-colors hover:bg-[#ff8d3b]"
-                          >
-                            Share
-                          </button>
-                        </div>
-                      </Link>
-                    ))}
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleSearchShare(result.id);
+                              }}
+                              className="flex-shrink-0 bg-[#ff7a1a] px-3 py-1.5 text-xs font-medium text-[#0a0a0a] transition-colors hover:bg-[#ff8d3b]"
+                            >
+                              Share
+                            </button>
+                          </div>
+                        </Link>
+                      )
+                    )}
 
                   {(searchFilter === "all" || searchFilter === "accounts") && accountResults.map((account) => (
                     <Link key={`account-${account.username}`} href={`/profile/${account.username}`}>
@@ -762,6 +766,20 @@ export default function DashboardPage() {
                   {searchFilter === "accounts" && accountResults.length === 0 && (
                     <div className="p-4 text-sm text-white/55">No accounts found.</div>
                   )}
+
+                  {searchFilter === "crew" &&
+                    searchResults.filter((result) => isCrewSearchResult(result)).length === 0 &&
+                    !searching && (
+                      <div className="p-4 text-sm text-white/55">No film people found.</div>
+                    )}
+
+                  {(searchFilter === "movie" || searchFilter === "tv") &&
+                    searchResults.filter((result) => !isCrewSearchResult(result) && result.type === searchFilter).length === 0 &&
+                    !searching && (
+                      <div className="p-4 text-sm text-white/55">
+                        No {searchFilter === "movie" ? "movies" : "TV shows"} found.
+                      </div>
+                    )}
                 </div>
 
                 {searching && (

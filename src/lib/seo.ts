@@ -245,6 +245,41 @@ export function profileMetadata(username: string, displayName?: string | null, b
   });
 }
 
+export function crewMetadata(person: {
+  id: number;
+  name: string;
+  biography?: string | null;
+  knownDepartment?: string | null;
+  profileImageUrl?: string | null;
+}): Metadata {
+  const title = `${person.name} Filmography, Roles & Career Timeline | Canisterr`;
+  const description = `Explore ${person.name}'s movies, TV shows, acting roles, directing credits, writing credits, music work, and full career timeline on Canisterr.`;
+  const slug = slugify(person.name) || "person";
+  const path = `/crew/${person.id}-${slug}`;
+
+  return baseMetadata({
+    title,
+    description,
+    keywords: ["crew", "filmography", person.name, person.knownDepartment || "movies", "tv shows", "career timeline"],
+    alternates: { canonical: canonical(path) },
+    openGraph: {
+      type: "profile",
+      siteName: "Canisterr",
+      locale: "en_US",
+      url: canonical(path),
+      title,
+      description,
+      images: person.profileImageUrl ? [{ url: person.profileImageUrl, alt: person.name }] : undefined,
+    },
+    twitter: {
+      card: person.profileImageUrl ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: person.profileImageUrl ? [person.profileImageUrl] : undefined,
+    },
+  });
+}
+
 // JSON-LD schema builders
 
 export function movieSchema(movie: {
@@ -460,5 +495,31 @@ export function personSchema(user: {
     url: canonical(`/profile/${user.username}`),
     image: user.avatar_url ?? undefined,
     description: user.bio ?? undefined,
+  };
+}
+
+export function crewPersonSchema(person: {
+  id: number;
+  name: string;
+  biography?: string | null;
+  profileImageUrl?: string | null;
+  birthday?: string | null;
+  deathday?: string | null;
+  placeOfBirth?: string | null;
+  knownDepartment?: string | null;
+  externalLinks?: Array<{ url: string }>;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: person.name,
+    url: canonical(`/crew/${person.id}-${slugify(person.name) || "person"}`),
+    image: person.profileImageUrl ?? undefined,
+    description: person.biography ?? undefined,
+    birthDate: person.birthday ?? undefined,
+    deathDate: person.deathday ?? undefined,
+    birthPlace: person.placeOfBirth ?? undefined,
+    jobTitle: person.knownDepartment ?? undefined,
+    sameAs: (person.externalLinks || []).map((link) => link.url),
   };
 }

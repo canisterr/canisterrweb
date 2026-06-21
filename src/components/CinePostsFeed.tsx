@@ -52,6 +52,10 @@ function getAuthorDisplayName(post: CinePostWithDetails, currentUser: User | nul
   return getDisplayUserName(post.user, currentUser);
 }
 
+function getAuthorUsername(user: User): string | null {
+  return user.username ? `@${user.username}` : null;
+}
+
 function getAuthorUsername(user: User, currentUser: User | null): string | null {
   return getDisplayUserHandle(user, currentUser);
 }
@@ -1121,9 +1125,9 @@ export default function CinePostsFeed({
     };
 
     return (
-      <div key={post.id} className={isBrutalist ? "py-5 sm:py-6" : "space-y-4"}>
+      <div key={post.id} className={isBrutalist ? "py-3 sm:py-4" : "space-y-4"}>
         <article
-          className={`cursor-pointer ${isBrutalist ? "bg-black text-[#f5f0de]" : "overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]"}`}
+          className={`cursor-pointer ${isBrutalist ? "border border-white/10 bg-[#090c10] text-[#f5f0de]" : "overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]"}`}
           role="button"
           tabIndex={0}
           data-feed-post-id={post.id}
@@ -1139,48 +1143,53 @@ export default function CinePostsFeed({
           }}
         >
           {isListPost ? (
-            <div className={isBrutalist ? "px-0 py-0" : "p-3 sm:p-5"}>
+            <div className={isBrutalist ? "px-4 py-4 sm:px-5 sm:py-5" : "p-3 sm:p-5"}>
               <div className="min-w-0 py-1">
                 <div className="flex items-start gap-3">
                   <Link href={profileHref(postAuthorUser)} className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
-                    <Avatar user={postAuthorUser} size="h-7 w-7 sm:h-8 sm:w-8" dark={isBrutalist} />
+                    <Avatar user={postAuthorUser} size="h-11 w-11 sm:h-12 sm:w-12" dark={isBrutalist} />
                   </Link>
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-start justify-between gap-2">
-                      <Link href={profileHref(postAuthorUser)} onClick={(event) => event.stopPropagation()} className="min-w-0">
-                        <AuthorLabel user={postAuthorUser} currentUser={currentUser} theme={theme} />
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <Link
+                        href={profileHref(postAuthorUser)}
+                        onClick={(event) => event.stopPropagation()}
+                        className={`text-[13px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
+                      >
+                        {getAuthorDisplayName(post, currentUser)}
                       </Link>
-                      <span className={`flex-shrink-0 text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
-                        {relativeTime(post.created_at)}
-                      </span>
+                      <span className={`text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
                     </div>
+                    {getAuthorUsername(postAuthorUser) ? (
+                      <p className="mt-1 text-sm text-[#ffb36b] sm:text-[1.05rem]">{getAuthorUsername(postAuthorUser)}</p>
+                    ) : null}
                   </div>
-                  <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
-                    <CinePostOwnerMenu
-                      post={post}
-                      currentUser={currentUser}
-                      onDeleted={refreshPosts}
-                      onUpdated={refreshPosts}
-                      theme={theme}
-                    />
+                  <div className="flex items-center gap-4">
+                    <span className={`text-sm sm:text-base ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
+                    <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+                      <CinePostOwnerMenu
+                        post={post}
+                        currentUser={currentUser}
+                        onDeleted={refreshPosts}
+                        onUpdated={refreshPosts}
+                        theme={theme}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
-                  <SpoilerText
-                    spoiler={post.contains_spoiler}
-                    className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
-                      isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
-                    }`}
-                  >
-                    <Link href={postHref}>{preview.text}</Link>
-                  </SpoilerText>
-                </div>
+                <Link href={postHref} className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
+                  <p className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
+                    isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
+                  }`}>
+                    {preview.text}
+                  </p>
+                </Link>
 
                 {preview.isTrimmed && (
                   <Link
                     href={postHref}
-                    className={`mt-1 inline-flex text-[11px] font-black sm:mt-2 sm:text-sm ${
+                    className={`mt-2 inline-flex text-base font-black sm:mt-3 ${
                       isBrutalist ? "text-[#ffb36b]" : "text-[#f5f0de]"
                     }`}
                     onClick={(event) => event.stopPropagation()}
@@ -1194,16 +1203,12 @@ export default function CinePostsFeed({
                 </div>
               </div>
             </div>
-          ) : (
-            <div className={`grid grid-cols-[5.75rem_minmax(0,1fr)] gap-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-5 ${
-              isBrutalist ? "px-0 py-0" : "p-3 sm:p-5"
-            }`}>
+          ) : isBrutalist ? (
+            <div className="grid grid-cols-[7rem_minmax(0,1fr)] sm:grid-cols-[10rem_minmax(0,1fr)]">
               {contentHref ? (
                 <Link
                   href={contentHref}
-                  className={`group relative aspect-[2/3] overflow-hidden shadow-sm ${
-                    isBrutalist ? "bg-black" : "rounded-[1.4rem] bg-slate-950"
-                  }`}
+                  className="group relative h-full min-h-[10.5rem] overflow-hidden border-r border-white/10 bg-transparent sm:min-h-[15rem]"
                   title={`Open ${post.content_title || post.anchor_label}`}
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -1212,40 +1217,44 @@ export default function CinePostsFeed({
                     collageImages={post.list_cover_images}
                     alt={post.content_title || post.anchor_label}
                     className="h-full w-full"
-                    mediaClassName="transition duration-300 group-hover:scale-105"
+                    mediaClassName="transition duration-300 group-hover:scale-[1.02]"
+                    fit="contain"
                     theme={theme}
                   />
                 </Link>
               ) : (
-                <div className={`aspect-[2/3] overflow-hidden shadow-sm ${
-                  isBrutalist ? "bg-black" : "rounded-[1.4rem] bg-slate-950"
-                }`}>
+                <div className="h-full min-h-[10.5rem] overflow-hidden border-r border-white/10 bg-transparent sm:min-h-[15rem]">
                   <CinePostArtwork
                     src={post.poster_url}
                     collageImages={post.list_cover_images}
                     alt={post.content_title || post.anchor_label}
                     className="h-full w-full"
-                    mediaClassName="transition duration-300 group-hover:scale-105"
+                    mediaClassName="transition duration-300 group-hover:scale-[1.02]"
+                    fit="contain"
                     theme={theme}
                   />
                 </div>
               )}
 
-                <div className="min-w-0 py-1">
-                  <div className="flex items-start gap-3">
-                    <Link href={profileHref(postAuthorUser)} className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
-                      <Avatar user={postAuthorUser} size="h-7 w-7 sm:h-8 sm:w-8" dark={isBrutalist} />
+              <div className="flex min-h-[10.5rem] flex-col px-3 py-3 sm:min-h-[15rem] sm:px-4 sm:py-3.5">
+                <div className="flex items-start gap-2.5 sm:gap-3">
+                  <Link href={profileHref(postAuthorUser)} className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
+                    <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
+                  </Link>
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={profileHref(postAuthorUser)}
+                      onClick={(event) => event.stopPropagation()}
+                      className="block truncate text-[1rem] font-black leading-none text-[#f5f0de] hover:text-[#ffb36b] sm:text-[1.12rem]"
+                    >
+                      {getAuthorDisplayName(post, currentUser)}
                     </Link>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-start justify-between gap-2">
-                        <Link href={profileHref(postAuthorUser)} onClick={(event) => event.stopPropagation()} className="min-w-0">
-                          <AuthorLabel user={postAuthorUser} currentUser={currentUser} theme={theme} />
-                        </Link>
-                        <span className={`flex-shrink-0 text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
-                          {relativeTime(post.created_at)}
-                        </span>
-                      </div>
-                    </div>
+                    {getAuthorUsername(postAuthorUser) ? (
+                        <p className="mt-0.5 truncate text-[0.9rem] text-[#ffb36b] sm:text-[0.95rem]">{getAuthorUsername(postAuthorUser)}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[0.82rem] text-white/45 sm:text-[0.92rem]">{relativeTime(post.created_at)}</span>
                     <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
                       <CinePostOwnerMenu
                         post={post}
@@ -1256,84 +1265,213 @@ export default function CinePostsFeed({
                       />
                     </div>
                   </div>
+                </div>
 
-                  <div className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
-                    <SpoilerText
-                      spoiler={post.contains_spoiler}
-                      className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
-                        isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
+                <Link href={postHref} className="mt-3 block sm:mt-4" onClick={(event) => event.stopPropagation()}>
+                  <p className="whitespace-pre-wrap text-[0.92rem] leading-7 text-[#f5f0de]/90 sm:text-[1rem] sm:leading-8">
+                    {preview.text}
+                  </p>
+                </Link>
+
+                {preview.isTrimmed && (
+                  <Link
+                    href={postHref}
+                    className="mt-2 inline-flex text-[0.95rem] font-black text-[#ffb36b]"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    Show more
+                  </Link>
+                )}
+
+                <div className="mt-auto border-t border-white/10 pt-3 sm:pt-4">
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        className={`inline-flex min-h-[42px] items-center rounded-full border px-3.5 transition ${
+                          post.liked_by_current_user
+                            ? "border-[#ff7a1a]/25 text-[#ff7a1a]"
+                            : "border-white/10 text-white/65 hover:border-white/20 hover:text-[#ffb36b]"
+                        }`}
+                        aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                      >
+                        <Heart className={`h-4.5 w-4.5 ${post.liked_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                        <span className="mx-3 h-5 w-px bg-white/10" />
+                        <span className="text-[0.92rem] font-black text-[#ffb36b]">{post.likes_count}</span>
+                      </button>
+                      <Link
+                        href={postHref}
+                        onClick={(event) => event.stopPropagation()}
+                        className="inline-flex min-h-[42px] items-center rounded-full border border-white/10 px-3.5 text-white/65 transition hover:border-white/20 hover:text-[#ffb36b]"
+                      >
+                        <MessageCircle className="h-4.5 w-4.5" />
+                        <span className="mx-3 h-5 w-px bg-white/10" />
+                        <span className="text-[0.92rem] font-black text-white/78">{post.comments_count}</span>
+                      </Link>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      className={`inline-flex min-h-[42px] items-center justify-center rounded-full border px-4 transition ${
+                        post.saved_by_current_user
+                          ? "border-white/15 text-[#ff7a1a]"
+                          : "border-white/10 text-white/65 hover:border-white/20 hover:text-[#ffb36b]"
                       }`}
+                      aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
                     >
-                      <Link href={postHref}>{preview.text}</Link>
-                    </SpoilerText>
+                      <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                    </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-3 p-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-5 sm:p-5">
+                {contentHref ? (
+                  <Link
+                    href={contentHref}
+                    className="group relative aspect-[2/3] overflow-hidden rounded-[1.4rem] bg-slate-950 shadow-sm"
+                    title={`Open ${post.content_title || post.anchor_label}`}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <CinePostArtwork
+                      src={post.poster_url}
+                      collageImages={post.list_cover_images}
+                      alt={post.content_title || post.anchor_label}
+                      className="h-full w-full"
+                      mediaClassName="transition duration-300 group-hover:scale-105"
+                      theme={theme}
+                    />
+                  </Link>
+                ) : (
+                  <div className="aspect-[2/3] overflow-hidden rounded-[1.4rem] bg-slate-950 shadow-sm">
+                    <CinePostArtwork
+                      src={post.poster_url}
+                      collageImages={post.list_cover_images}
+                      alt={post.content_title || post.anchor_label}
+                      className="h-full w-full"
+                      mediaClassName="transition duration-300 group-hover:scale-105"
+                      theme={theme}
+                    />
+                  </div>
+                )}
+
+                <div className="min-w-0 py-1">
+                  <div className="flex items-start gap-3">
+                    <Link href={profileHref(postAuthorUser)} className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
+                      <Avatar user={postAuthorUser} size="h-7 w-7 sm:h-8 sm:w-8" dark={isBrutalist} />
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                        <Link
+                          href={profileHref(postAuthorUser)}
+                          onClick={(event) => event.stopPropagation()}
+                          className={`text-[13px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
+                        >
+                          {getAuthorDisplayName(post, currentUser)}
+                        </Link>
+                        <span className={`text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
+                      </div>
+                      {getAuthorUsername(postAuthorUser) ? (
+                        <p className="mt-1 text-xs text-slate-400">{getAuthorUsername(postAuthorUser)}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-[10px] text-slate-400 sm:text-xs">{relativeTime(post.created_at)}</span>
+                      <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+                        <CinePostOwnerMenu
+                          post={post}
+                          currentUser={currentUser}
+                          onDeleted={refreshPosts}
+                          onUpdated={refreshPosts}
+                          theme={theme}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Link href={postHref} className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
+                    <p className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
+                      isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
+                    }`}>
+                      {preview.text}
+                    </p>
+                  </Link>
 
                   {preview.isTrimmed && (
                     <Link
                       href={postHref}
-                      className={`mt-1 inline-flex text-[11px] font-black sm:mt-2 sm:text-sm ${
-                        isBrutalist ? "text-[#ffb36b]" : "text-[#f5f0de]"
-                      }`}
+                      className="mt-3 inline-flex text-[11px] font-black text-[#f5f0de] sm:mt-2 sm:text-sm"
                       onClick={(event) => event.stopPropagation()}
                     >
                       Show more
                     </Link>
                   )}
                 </div>
-            </div>
-          )}
+              </div>
 
           <div className={`py-3 sm:py-4 ${isBrutalist ? "border-t border-white/10" : "border-t border-slate-100 px-3 sm:px-5"}`}>
             <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <div className={getFeedSplitActionClass(theme, post.liked_by_current_user)}>
-                  <button
-                    type="button"
-                    onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    disabled={likePending}
-                    className="inline-flex h-full items-center justify-center px-3 disabled:cursor-not-allowed disabled:opacity-70"
-                    aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
-                  >
-                    <Heart
-                      className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
-                        post.liked_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-rose-500") : ""
-                      }`}
-                    />
-                  </button>
-                  <div className="h-4 w-px bg-current/15" />
-                  <button
-                    type="button"
-                    onClick={() => openPeopleModal(post, "like", "Liked by")}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    disabled={post.likes_count === 0}
-                    className={getFeedCountButtonClass(theme, post.liked_by_current_user)}
-                  >
-                    {post.likes_count}
-                  </button>
-                </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  className={`inline-flex items-center justify-center transition ${
+                    post.liked_by_current_user
+                      ? isBrutalist
+                        ? "text-[#ff7a1a]"
+                        : "bg-rose-50 text-rose-600"
+                      : isBrutalist
+                      ? "text-white/65 hover:text-[#ffb36b]"
+                      : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                  }`}
+                  aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                >
+                  <Heart className={`h-5 w-5 ${post.liked_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-rose-500") : ""}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openPeopleModal(post, "like", "Liked by")}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  disabled={post.likes_count === 0}
+                  className={`px-1 py-2 text-sm font-black disabled:opacity-40 ${
+                    isBrutalist ? "text-[#ffb36b]" : "text-rose-600 disabled:text-slate-400"
+                  }`}
+                >
+                  {post.likes_count}
+                </button>
                 <Link
                   href={postHref}
                   onClick={(event) => event.stopPropagation()}
-                  className={getFeedActionChipClass(theme)}
+                  className={`inline-flex items-center justify-center gap-1.5 transition ${
+                    isBrutalist ? "text-white/65 hover:text-[#ffb36b]" : "rounded-2xl bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 sm:px-3 sm:text-sm"
+                  }`}
                 >
-                  <MessageCircle className="h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110" />
-                  <span className="text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
+                  <MessageCircle className="h-5 w-5" />
+                  {post.comments_count}
                 </Link>
               </div>
               <button
                 type="button"
                 onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
                 onMouseDown={(event) => event.stopPropagation()}
-                disabled={savePending}
-                className={`${getFeedActionChipClass(theme, post.saved_by_current_user)} disabled:cursor-not-allowed disabled:opacity-70`}
+                className={`inline-flex items-center justify-center transition ${
+                  post.saved_by_current_user
+                    ? isBrutalist
+                      ? "text-[#ff7a1a]"
+                      : "bg-blue-50 text-[#f5f0de]"
+                    : isBrutalist
+                    ? "text-white/65 hover:text-[#ffb36b]"
+                    : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                }`}
                 aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
               >
-                <Bookmark
-                  className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110 ${
-                    post.saved_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-blue-500") : ""
-                  }`}
-                />
+                <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-blue-500") : ""}`} />
               </button>
             </div>
           </div>

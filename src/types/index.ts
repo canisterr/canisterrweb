@@ -152,6 +152,15 @@ export interface TMDBPersonSearchResult {
   profile_path: string | null;
   known_for_department?: string | null;
   popularity?: number;
+  known_for?: Array<{
+    id: number;
+    title?: string;
+    name?: string;
+    media_type?: string;
+    release_date?: string | null;
+    first_air_date?: string | null;
+    poster_path?: string | null;
+  }>;
 }
 
 export interface TMDBSearchResponse {

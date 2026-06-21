@@ -6,6 +6,7 @@ type CinePostArtworkProps = {
   alt: string;
   className?: string;
   mediaClassName?: string;
+  fit?: "cover" | "contain";
   theme?: "default" | "brutalist";
 };
 
@@ -15,6 +16,7 @@ export default function CinePostArtwork({
   alt,
   className = "",
   mediaClassName = "",
+  fit = "cover",
   theme = "default",
 }: CinePostArtworkProps) {
   const isBrutalist = theme === "brutalist";
@@ -43,8 +45,8 @@ export default function CinePostArtwork({
               />
             ))}
         </div>
-      ) : fallbackSrc ? (
-        <img src={fallbackSrc} alt={alt} className={`absolute inset-0 h-full w-full object-contain ${mediaClassName}`} />
+      ) : src ? (
+        <img src={src} alt={alt} className={`absolute inset-0 h-full w-full object-cover ${mediaClassName}`} />
       ) : (
         <div className={isBrutalist ? "h-full w-full bg-[#1a1a1a]" : "h-full w-full bg-slate-100"} />
       )}

@@ -250,8 +250,13 @@ function CommentThread({
   };
 
   return (
-    <div className="py-4">
-      <div className="flex gap-3">
+    <div className="py-3">
+      <div
+        className={`rounded-[28px] border px-4 py-4 sm:px-5 ${
+          isBrutalist ? "border-white/10 bg-[#0c0d0f]" : "border-slate-200 bg-white"
+        }`}
+      >
+        <div className="flex gap-3">
         <Link href={profileHref(comment.user)} className="flex-shrink-0">
           <Avatar user={comment.user} />
         </Link>
@@ -264,12 +269,12 @@ function CommentThread({
                 </Link>
                 <span className="text-xs text-slate-400">{relativeTime(comment.created_at)}</span>
                 {comment.insightScore > 8 && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                  <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">
                     top insight
                   </span>
                 )}
                 {comment.user_id === postOwnerId && (
-                  <span className="rounded-full bg-[#ffb36b]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff7a1a]">
+                  <span className="rounded-full border border-[#ffb36b]/15 bg-[#ffb36b]/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#ff9b4a]">
                     owner
                   </span>
                 )}
@@ -360,7 +365,9 @@ function CommentThread({
             </div>
           ) : (
             <>
-              <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+              <p className={`mt-3 whitespace-pre-wrap text-[15px] leading-7 ${
+                isBrutalist ? "text-[#f5f0de]/82" : "text-slate-700"
+              }`}>
                 {linkify(comment.content)}
               </p>
               {currentUser && (
@@ -370,7 +377,7 @@ function CommentThread({
                     setReplyingTo(replyingTo === comment.id ? null : comment.id);
                     setReplyText("");
                   }}
-                  className="mt-2 text-xs font-black text-[#ff7a1a]"
+                  className="mt-3 inline-flex items-center rounded-full border border-[#ff7a1a]/20 bg-[#ff7a1a]/10 px-3 py-1.5 text-xs font-black text-[#ff8d3b] transition hover:bg-[#ff7a1a]/15"
                 >
                   Reply
                   {comment.replies.length > 0 ? ` (${comment.replies.length})` : ""}
@@ -379,21 +386,22 @@ function CommentThread({
             </>
           )}
         </div>
+        </div>
       </div>
 
       {replyingTo === comment.id && (
-        <div className="mt-3 flex gap-2 pl-12">
+        <div className="mt-3 flex gap-2 pl-12 sm:pl-14">
           <input
             value={replyText}
             onChange={(event) => setReplyText(event.target.value)}
             placeholder={`Reply to ${comment.user.name}`}
-            className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#111111] px-3 py-2 text-sm text-[#f5f0de] outline-none focus:border-[#ff7a1a]"
+            className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#111111] px-4 py-3 text-sm text-[#f5f0de] outline-none transition focus:border-[#ff7a1a] focus:bg-[#141414]"
           />
           <button
             type="button"
             disabled={submitting || replyText.trim().length < 2}
             onClick={() => onReply(comment.id, comment.user_id)}
-            className="rounded-full bg-slate-950 px-3 py-2 text-white disabled:opacity-50"
+            className="rounded-full border border-[#ff7a1a]/15 bg-[#ff7a1a] px-4 py-3 text-black transition hover:bg-[#ff8d3b] disabled:opacity-50"
             aria-label="Send reply"
           >
             <Send className="h-4 w-4" />
@@ -402,27 +410,27 @@ function CommentThread({
       )}
 
       {comment.replies.length > 0 && (
-        <div className="ml-5 mt-3 space-y-1 border-l border-slate-200 pl-4 sm:ml-6 sm:pl-6">
+        <div className="ml-5 mt-4 space-y-2 border-l border-white/10 pl-4 sm:ml-6 sm:pl-6">
           {comment.replies.map((reply) => (
             <CommentThread
               key={reply.id}
-            comment={reply}
-            currentUser={currentUser}
-            postOwnerId={postOwnerId}
-            onReply={onReply}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            replyingTo={replyingTo}
-            replyText={replyText}
-            setReplyingTo={setReplyingTo}
-            setReplyText={setReplyText}
-            submitting={submitting}
-            theme={theme}
-          />
-        ))}
-      </div>
-    )}
-  </div>
+              comment={reply}
+              currentUser={currentUser}
+              postOwnerId={postOwnerId}
+              onReply={onReply}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              replyingTo={replyingTo}
+              replyText={replyText}
+              setReplyingTo={setReplyingTo}
+              setReplyText={setReplyText}
+              submitting={submitting}
+              theme={theme}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -796,13 +804,13 @@ export default function CinePostPage() {
           </div>
         </article>
 
-        <section id="post-comments" className="mt-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <section id="post-comments" className="mt-8 rounded-[32px] border border-white/10 bg-[#090a0c] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.24)] sm:p-6">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-black text-[#f5f0de]">Comments</h2>
-              <p className="text-sm text-white/55">Top insights rise first, with full threaded replies expanded.</p>
+              <h2 className="text-2xl font-black tracking-tight text-[#f5f0de]">Comments</h2>
+              <p className="mt-1 text-sm leading-6 text-white/50">Top insights rise first, with full threaded replies expanded.</p>
             </div>
-            <div className="rounded-full border border-white/10 bg-[#111111] p-1">
+            <div className="rounded-full border border-white/10 bg-[#111111] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               {(["top", "newest"] as const).map((sort) => (
                 <button
                   key={sort}
@@ -818,27 +826,27 @@ export default function CinePostPage() {
             </div>
           </div>
 
-          <div className="mb-5 flex gap-2">
+          <div className="mb-6 flex items-center gap-3">
             <input
               value={commentText}
               onChange={(event) => setCommentText(event.target.value)}
               placeholder="Add a comment..."
-              className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#111111] px-4 py-3 text-sm text-[#f5f0de] outline-none focus:border-[#ff7a1a]"
+              className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#111111] px-5 py-4 text-base text-[#f5f0de] outline-none transition focus:border-[#ff7a1a] focus:bg-[#141414]"
             />
             <button
               type="button"
               disabled={submittingComment || commentText.trim().length < 2}
               onClick={handleComment}
-              className="rounded-full bg-[#ff7a1a] px-4 py-3 text-black disabled:opacity-50"
+              className="inline-flex h-16 w-16 items-center justify-center rounded-full border border-[#ff7a1a]/15 bg-[#b16024] text-black transition hover:bg-[#c96d2d] disabled:opacity-50"
               aria-label="Send comment"
             >
-              <Send className="h-4 w-4" />
+              <Send className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="divide-y divide-white/10">
+          <div className="space-y-1">
             {post.comments.length === 0 ? (
-              <p className="border-b border-white/10 py-5 text-sm text-white/55">
+              <p className="rounded-3xl border border-dashed border-white/10 bg-white/[0.02] px-5 py-6 text-sm text-white/55">
                 No comments yet. Start the thread.
               </p>
             ) : (
