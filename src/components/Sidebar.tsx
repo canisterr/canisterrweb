@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
@@ -25,31 +25,10 @@ export default function Sidebar({
   const pathname = usePathname();
   const isBrutalist = theme === "brutalist";
   const [showInstallHelp, setShowInstallHelp] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   const isActive = (path: string) => pathname.startsWith(path);
 
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === "accepted") {
-        setShowInstallHelp(false);
-      }
-      setDeferredPrompt(null);
-      return;
-    }
-
+  const handleInstallClick = () => {
     setShowInstallHelp(true);
   };
 
@@ -228,10 +207,10 @@ export default function Sidebar({
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={handleInstallClick}
+                onClick={() => setShowInstallHelp(false)}
                 className="rounded-full bg-[#ff7a1a] px-4 py-2.5 text-sm font-black text-black transition hover:bg-[#ff8d3b]"
               >
-                {deferredPrompt ? "Install now" : "Try install"}
+                Got it
               </button>
               <button
                 type="button"
@@ -248,10 +227,4 @@ export default function Sidebar({
       )}
     </div>
   );
-}
-
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-  prompt(): Promise<void>;
 }

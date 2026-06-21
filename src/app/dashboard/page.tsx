@@ -21,6 +21,7 @@ import { reportAppError } from "@/lib/report-error";
 import { getDisplayUserName, getUsersByIds, searchUsersCached } from "@/lib/users";
 import { getBlurDataUrl } from "@/lib/performance";
 import { getTmdbPosterUrl } from "@/lib/performance";
+import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
 import Link from "next/link";
 import { ArrowRight, Clapperboard, Film, Loader2, MessageCircle, MessageSquareText, Plus, RotateCcw, Search, Share2, X } from "lucide-react";
 
@@ -298,7 +299,8 @@ export default function DashboardPage() {
           rating: typeof movie.vote_average === "number" ? movie.vote_average : 0,
           type: "movie" as const,
           platforms: [],
-          director: null,
+          director: movie.director || null,
+          language: movie.original_language || movie.language || null,
           created_at: new Date().toISOString(),
         }));
 
@@ -314,7 +316,8 @@ export default function DashboardPage() {
           rating: typeof show.rating === "number" ? show.rating : 0,
           type: "tv" as const,
           status: show.status,
-          network: undefined,
+          network: show.network || undefined,
+          language: show.language || show.original_language || null,
           created_at: new Date().toISOString(),
         }));
 
@@ -410,7 +413,8 @@ export default function DashboardPage() {
           rating: typeof movie.vote_average === "number" ? movie.vote_average : 0,
           type: "movie" as const,
           platforms: [],
-          director: null,
+          director: movie.director || null,
+          language: movie.original_language || movie.language || null,
           created_at: new Date().toISOString(),
         }));
 
@@ -426,7 +430,8 @@ export default function DashboardPage() {
           rating: typeof show.rating === "number" ? show.rating : 0,
           type: "tv" as const,
           status: show.status || null,
-          network: undefined,
+          network: show.network || undefined,
+          language: show.language || show.original_language || null,
           created_at: new Date().toISOString(),
         }));
 
@@ -655,7 +660,25 @@ export default function DashboardPage() {
                     .map((result) => (
                       <Link
                         key={`${result.type}-${result.id}`}
-                        href={result.type === "tv" ? `/tv/${result.id}` : `/movie/${result.id}`}
+                        href={
+                          result.type === "tv"
+                          ? buildTvPath({
+                                id: result.id,
+                                title: result.title,
+                                name: result.title,
+                                premiered: (result as any).premiered || result.release_date || undefined,
+                                release_date: result.release_date || undefined,
+                                language: (result as any).language || undefined,
+                                network: (result as any).network || undefined,
+                              })
+                            : buildMoviePath({
+                                id: result.id,
+                                title: result.title,
+                                director: (result as any).director || null,
+                                release_date: result.release_date || null,
+                                language: (result as any).language || undefined,
+                              })
+                        }
                       >
                         <div className="flex items-center gap-3 border-b border-white/10 p-3 transition-colors last:border-b-0 hover:bg-white/5">
                           {/* Poster thumbnail */}

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Heart, Flame } from "lucide-react";
 import { getBlurDataUrl } from "@/lib/performance";
+import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
 
 interface MovieCardProps {
   movie?: Movie | TVShow | Content;
@@ -40,7 +41,23 @@ export default function MovieCard({
   const title = (movie as any).title || (movie as any).name || "Untitled";
   const isTV = (movie as any).type === "tv";
   const movieId = movie.id;
-  const detailPageLink = isTV ? `/tv/${movieId}` : `/movie/${movieId}`;
+  const detailPageLink = isTV
+    ? buildTvPath({
+        id: movieId,
+        title,
+        name: title,
+        premiered: (movie as any).premiered || (movie as any).release_date || undefined,
+        release_date: (movie as any).release_date || undefined,
+        language: (movie as any).language || undefined,
+        network: (movie as any).network || undefined,
+      })
+    : buildMoviePath({
+        id: movieId,
+        title,
+        director: (movie as any).director || null,
+        release_date: (movie as any).release_date || null,
+        language: (movie as any).language || undefined,
+      });
 
   const cardContent = (
     <div className="group cursor-pointer w-full transition-transform duration-200 hover:scale-105 hover:shadow-[0_0_16px_4px_rgba(59,130,246,0.3)]">

@@ -5,6 +5,7 @@ import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import CinePostArtwork from "@/components/CinePostArtwork";
 import CinePostListStrip from "@/components/CinePostListStrip";
 import SpoilerText from "@/components/SpoilerText";
+import { getCinePostContentHref, getCinePostDisplayBody } from "@/lib/cineposts";
 import { CinePostWithDetails, User } from "@/types";
 import { getDisplayUserName } from "@/lib/users";
 
@@ -64,14 +65,7 @@ export default function CinePostPreviewList({
   return (
     <div className={`space-y-3 ${className}`}>
       {posts.map((post) => {
-        const contentHref =
-          post.list_id && post.content_type === "list"
-            ? `/lists/${post.list_id}`
-            : post.content_id && post.content_type
-            ? post.content_type === "tv"
-              ? `/tv/${post.content_id}`
-              : `/movie/${post.content_id}`
-            : null;
+        const contentHref = getCinePostContentHref(post);
         const hasArtwork = Boolean(post.poster_url || (post.list_cover_images && post.list_cover_images.length > 0));
         const isListPost = post.content_type === "list" && (post.list_items?.length || 0) > 0;
 
@@ -103,7 +97,7 @@ export default function CinePostPreviewList({
 
               <div className="mt-2 block">
                 <SpoilerText spoiler={post.contains_spoiler} className="whitespace-pre-wrap text-sm leading-6 text-[#f5f0de]/80">
-                  <Link href={`/posts/${post.id}`}>{preview(post.body)}</Link>
+                  <Link href={`/posts/${post.id}`}>{preview(getCinePostDisplayBody(post))}</Link>
                 </SpoilerText>
               </div>
 
@@ -169,7 +163,7 @@ export default function CinePostPreviewList({
               </div>
               <div className="mt-2 block">
                 <SpoilerText spoiler={post.contains_spoiler} className="whitespace-pre-wrap text-sm leading-6 text-[#f5f0de]/80">
-                  <Link href={`/posts/${post.id}`}>{preview(post.body)}</Link>
+                  <Link href={`/posts/${post.id}`}>{preview(getCinePostDisplayBody(post))}</Link>
                 </SpoilerText>
               </div>
               <div className="mt-2 flex gap-3 text-xs font-bold text-white/55">

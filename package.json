@@ -10,7 +10,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "deploy:database": "npx firebase-tools deploy --only database"
+    "firebase": "XDG_CONFIG_HOME=.firebase-config npx firebase-tools",
+    "firebase:login": "XDG_CONFIG_HOME=.firebase-config npx firebase-tools login",
+    "deploy:database": "XDG_CONFIG_HOME=.firebase-config npx firebase-tools deploy --only database"
   },
   "dependencies": {
     "@types/dompurify": "^3.0.5",

@@ -24,6 +24,7 @@ import { signOut as authSignOut } from "@/lib/auth";
 import {
   createCinePostComment,
   deleteCinePostComment,
+  getCinePostContentHref,
   getCinePostLogRatingLabel,
   getCinePost,
   getCinePostEngagementUsers,
@@ -46,10 +47,23 @@ function profileHref(user: User): string {
   return `/profile/${user.username || user.id}`;
 }
 
+function getEngagementPillClass(active = false, tone: "like" | "save" | "neutral" = "neutral"): string {
+  const activeStyles =
+    tone === "like"
+      ? "border-rose-500/25 bg-rose-500/10 text-rose-200 shadow-[0_12px_28px_rgba(244,63,94,0.14)]"
+      : tone === "save"
+      ? "border-[#ff7a1a]/30 bg-[#ff7a1a]/12 text-[#ffb36b] shadow-[0_12px_28px_rgba(255,122,26,0.14)]"
+      : "border-white/15 bg-white/10 text-[#f5f0de]";
+
+  return `group/action inline-flex h-10 items-center rounded-full border transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] ${
+    active
+      ? activeStyles
+      : "border-white/10 bg-white/[0.03] text-white/70 hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-[#f5f0de]"
+  }`;
+}
+
 function contentHref(post: CinePostWithDetails): string | null {
-  if (post.list_id && post.content_type === "list") return `/lists/${post.list_id}`;
-  if (!post.content_id || !post.content_type) return null;
-  return post.content_type === "tv" ? `/tv/${post.content_id}` : `/movie/${post.content_id}`;
+  return getCinePostContentHref(post);
 }
 
 function linkify(text: string) {
@@ -427,6 +441,10 @@ export default function CinePostPage() {
   const [peopleModalUsers, setPeopleModalUsers] = useState<User[]>([]);
   const [peopleModalLoading, setPeopleModalLoading] = useState(false);
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
+  const [engagementPending, setEngagementPending] = useState<Record<CinePostEngagementType, boolean>>({
+    like: false,
+    save: false,
+  });
 
   const loadPost = async (currentUserId?: string) => {
     const foundPost = await getCinePost(postId, currentUserId);
@@ -476,9 +494,35 @@ export default function CinePostPage() {
     type: CinePostEngagementType,
     enabled: boolean
   ) => {
-    if (!user || !post) return;
-    await setCinePostEngagement(post, user, type, enabled);
-    await refreshPost();
+    if (!user || !post || engagementPending[type]) return;
+
+    const previousPost = post;
+    const likeDelta = type === "like" ? (enabled ? 1 : -1) : 0;
+    const saveDelta = type === "save" ? (enabled ? 1 : -1) : 0;
+
+    setEngagementPending((current) => ({ ...current, [type]: true }));
+    setPost({
+      ...post,
+      liked_by_current_user: type === "like" ? enabled : post.liked_by_current_user,
+      saved_by_current_user: type === "save" ? enabled : post.saved_by_current_user,
+      likes_count: Math.max(0, post.likes_count + likeDelta),
+      saves_count: Math.max(0, post.saves_count + saveDelta),
+      score: Math.max(0, post.score + likeDelta + saveDelta * 3),
+    });
+
+    try {
+      await setCinePostEngagement(post, user, type, enabled);
+      await refreshPost();
+    } catch (error) {
+      setPost(previousPost);
+      reportAppError({
+        title: "Could not update post",
+        message: "We could not update that reaction.",
+        details: error instanceof Error ? error.message : null,
+      });
+    } finally {
+      setEngagementPending((current) => ({ ...current, [type]: false }));
+    }
   };
 
   const openPeopleModal = async (type: CinePostEngagementType, title: string) => {
@@ -697,50 +741,56 @@ export default function CinePostPage() {
 
           <div className="border-t border-white/10 py-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => handleEngagement("like", !post.liked_by_current_user)}
-                  className={`inline-flex items-center gap-2 text-sm font-black transition ${
-                    post.liked_by_current_user
-                      ? "text-rose-200 hover:text-rose-100"
-                      : "text-white/70 hover:text-[#ffb36b]"
-                  }`}
-                >
-                  <Heart className={`h-4 w-4 ${post.liked_by_current_user ? "fill-rose-500" : ""}`} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openPeopleModal("like", "Liked by")}
-                  disabled={post.likes_count === 0}
-                  className="inline-flex items-center gap-1.5 text-sm font-black text-white/70 transition hover:text-[#f5f0de] disabled:cursor-default disabled:opacity-40"
-                  aria-label={post.likes_count === 1 ? "1 like" : `${post.likes_count} likes`}
-                >
-                  <span className="tabular-nums">{post.likes_count}</span>
-                </button>
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className={getEngagementPillClass(post.liked_by_current_user, "like")}>
+                  <button
+                    type="button"
+                    onClick={() => handleEngagement("like", !post.liked_by_current_user)}
+                    disabled={engagementPending.like}
+                    className="inline-flex h-full items-center justify-center px-3 disabled:cursor-not-allowed"
+                    aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                  >
+                    <Heart
+                      className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
+                        post.liked_by_current_user ? "fill-rose-500" : ""
+                      }`}
+                    />
+                  </button>
+                  <div className="h-4 w-px bg-current/15" />
+                  <button
+                    type="button"
+                    onClick={() => openPeopleModal("like", "Liked by")}
+                    disabled={post.likes_count === 0}
+                    className="inline-flex h-full min-w-[2.5rem] items-center justify-center px-3 text-xs font-black tabular-nums text-current/90 transition-colors disabled:cursor-default disabled:opacity-40"
+                    aria-label={post.likes_count === 1 ? "1 like" : `${post.likes_count} likes`}
+                  >
+                    <span className="tabular-nums">{post.likes_count}</span>
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
                     document.getElementById("post-comments")?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                  className="inline-flex items-center gap-2 text-sm font-black text-white/70 transition hover:text-[#f5f0de]"
+                  className={getEngagementPillClass(false, "neutral")}
                   aria-label={post.comments_count === 1 ? "1 comment" : `${post.comments_count} comments`}
                 >
-                  <MessageCircle className="h-4 w-4" />
-                  <span className="tabular-nums">{post.comments_count}</span>
+                  <MessageCircle className="h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110" />
+                  <span className="pr-0.5 text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
                 </button>
               </div>
               <button
                 type="button"
                 onClick={() => handleEngagement("save", !post.saved_by_current_user)}
-                className={`inline-flex items-center justify-center transition ${
-                  post.saved_by_current_user
-                    ? "text-[#ff7a1a]"
-                    : "text-white/60 hover:text-[#ffb36b]"
-                }`}
+                disabled={engagementPending.save}
+                className={getEngagementPillClass(post.saved_by_current_user, "save")}
                 aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
               >
-                <Bookmark className={`h-4 w-4 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                <Bookmark
+                  className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
+                    post.saved_by_current_user ? "fill-[#ff7a1a]" : ""
+                  }`}
+                />
               </button>
             </div>
           </div>

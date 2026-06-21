@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import type { MatchAnalysis } from "@/lib/match-score";
+import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
 
 type MovieMatchAnalysisViewProps = {
   analysis: any;
@@ -102,7 +103,25 @@ function PosterRail({
               {items.map((movie) => (
               <Link
                 key={`${movie.type}-${movie.id}`}
-                href={movie.type === "tv" ? `/tv/${movie.id}` : `/movie/${movie.id}`}
+                href={
+                  movie.type === "tv"
+                    ? buildTvPath({
+                        id: movie.id,
+                        title: movie.title,
+                        name: movie.title,
+                        premiered: (movie as any).premiered || (movie as any).release_date || undefined,
+                        release_date: (movie as any).release_date || undefined,
+                        language: (movie as any).language || undefined,
+                        network: (movie as any).network || undefined,
+                      })
+                    : buildMoviePath({
+                        id: movie.id,
+                        title: movie.title,
+                        director: (movie as any).director || null,
+                        release_date: (movie as any).release_date || null,
+                        language: (movie as any).language || undefined,
+                      })
+                }
                 aria-label={movie.title}
                 className={`group relative h-[min(58vw,18rem)] w-[min(42vw,11rem)] shrink-0 snap-start overflow-hidden rounded-[1.35rem] border border-white/10 bg-white/[0.03] transition duration-300 hover:-translate-y-1 hover:rotate-[-0.4deg] hover:border-[#ff7a1a]/35 sm:h-[17rem] sm:w-[11rem] lg:h-[18rem] lg:w-[12rem] ${glowClass}`}
               >

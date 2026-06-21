@@ -39,6 +39,10 @@ export default function MobileInstallPrompt() {
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
+      if (typeof window !== "undefined" && safeReadStorage(window.sessionStorage, AUTO_PROMPT_KEY) === "1") {
+        return;
+      }
+
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
     };

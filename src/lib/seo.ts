@@ -3,6 +3,28 @@ import type { Metadata } from "next";
 export const BASE_URL = "https://canisterr.com";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
 const DEFAULT_OG_IMAGE = `${BASE_URL}/logo.png`;
+const DEFAULT_SITE_DESCRIPTION =
+  "Canisterr is a social movie platform where you discover films through friends, track your taste, share reviews, and find what to watch next.";
+
+function resolveImageUrl(
+  path: string | null | undefined,
+  size: "w300" | "w500" | "w780" | "original" = "w780"
+): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return tmdbImage(path, size);
+}
+
+function getGenreKeywords(
+  genres: Array<{ name: string }> | string[] | null | undefined
+): string[] {
+  if (!Array.isArray(genres)) return [];
+  return genres
+    .map((genre) =>
+      typeof genre === "string" ? genre.toLowerCase() : genre?.name?.toLowerCase() || ""
+    )
+    .filter(Boolean);
+}
 
 // Converts any string into a URL-safe slug.
 // "The Dark Knight" → "the-dark-knight"
@@ -31,32 +53,64 @@ export function tmdbImage(path: string | null | undefined, size = "w780"): strin
 
 // Base Open Graph + Twitter metadata shared by all pages.
 export function baseMetadata(overrides: Partial<Metadata> = {}): Metadata {
+  const googleSiteVerification =
+    process.env.GOOGLE_SITE_VERIFICATION ||
+    process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
+    "";
+
   return {
     metadataBase: new URL(BASE_URL),
     title: {
       default: "Canisterr",
       template: "%s | Canisterr",
     },
-    description: "Log, rate, and share movies with people who matter.",
-    keywords: ["movies", "film", "reviews", "letterboxd alternative", "movie tracker", "canisterr"],
+    description: DEFAULT_SITE_DESCRIPTION,
+    keywords: [
+      "movies",
+      "film",
+      "movie reviews",
+      "movie recommendations",
+      "discover movies through friends",
+      "social movie platform",
+      "movie tracker",
+      "tv shows",
+      "film diary",
+      "canisterr",
+    ],
     authors: [{ name: "Canisterr" }],
     creator: "Canisterr",
     openGraph: {
       siteName: "Canisterr",
       locale: "en_US",
       type: "website",
+      title: "Canisterr",
+      description: DEFAULT_SITE_DESCRIPTION,
+      url: BASE_URL,
       images: [{ url: DEFAULT_OG_IMAGE, width: 512, height: 512, alt: "Canisterr" }],
     },
     twitter: {
       card: "summary_large_image",
       site: "@canisterr",
+      title: "Canisterr",
+      description: DEFAULT_SITE_DESCRIPTION,
       images: [DEFAULT_OG_IMAGE],
     },
     robots: {
       index: true,
       follow: true,
-      googleBot: { index: true, follow: true },
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
     },
+    verification: googleSiteVerification
+      ? {
+          google: googleSiteVerification,
+        }
+      : undefined,
     ...overrides,
   };
 }
@@ -68,31 +122,31 @@ export function movieMetadata(movie: {
   overview: string | null;
   release_date?: string | null;
   poster_path?: string | null;
+  poster_url?: string | null;
   backdrop_path?: string | null;
-  genres?: { name: string }[];
-}): Metadata {
+  backdrop_url?: string | null;
+  genres?: Array<{ name: string }> | string[];
+}, canonicalPath: string = `/movie/${movie.id}`): Metadata {
   const year = movie.release_date ? new Date(movie.release_date).getFullYear() : null;
   const title = year ? `${movie.title} (${year})` : movie.title;
   const description = movie.overview
     ? movie.overview.slice(0, 155)
     : `See reviews, ratings, and logs for ${movie.title} on Canisterr.`;
 
-  const ogImage = tmdbImage(movie.backdrop_path ?? movie.poster_path, "w780");
-  const posterImage = tmdbImage(movie.poster_path, "w500");
-  const path = `/movie/${movie.id}`;
-
-  const genreKeywords = (movie.genres ?? []).map((g) => g.name.toLowerCase());
+  const ogImage = resolveImageUrl(movie.backdrop_path ?? movie.backdrop_url ?? movie.poster_path ?? movie.poster_url, "w780");
+  const posterImage = resolveImageUrl(movie.poster_path ?? movie.poster_url, "w500");
+  const genreKeywords = getGenreKeywords(movie.genres);
 
   return baseMetadata({
     title,
     description,
     keywords: ["movie", movie.title, ...(year ? [String(year)] : []), ...genreKeywords],
-    alternates: { canonical: canonical(path) },
+    alternates: { canonical: canonical(canonicalPath) },
     openGraph: {
       type: "website",
       siteName: "Canisterr",
       locale: "en_US",
-      url: canonical(path),
+      url: canonical(canonicalPath),
       title,
       description,
       images: ogImage
@@ -116,28 +170,39 @@ export function tvMetadata(show: {
   name: string;
   summary?: string | null;
   image?: { medium?: string; original?: string } | null;
+  poster_url?: string | null;
   premiered?: string | null;
+  release_date?: string | null;
+  overview?: string | null;
   genres?: string[];
-}): Metadata {
-  const year = show.premiered ? new Date(show.premiered).getFullYear() : null;
+  language?: string | null;
+}, canonicalPath: string = `/tv/${show.id}`): Metadata {
+  const releaseDate = show.premiered || show.release_date || null;
+  const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
   const title = year ? `${show.name} (${year})` : show.name;
   // TVMaze summary includes HTML tags — strip them.
-  const description = show.summary
-    ? show.summary.replace(/<[^>]+>/g, "").slice(0, 155)
+  const summary = show.summary || show.overview || "";
+  const description = summary
+    ? summary.replace(/<[^>]+>/g, "").slice(0, 155)
     : `See reviews and logs for ${show.name} on Canisterr.`;
-  const image = show.image?.original ?? show.image?.medium ?? null;
-  const path = `/tv/${show.id}`;
+  const image = show.image?.original ?? show.image?.medium ?? show.poster_url ?? null;
 
   return baseMetadata({
     title,
     description,
-    keywords: ["tv show", show.name, ...(year ? [String(year)] : []), ...(show.genres ?? [])],
-    alternates: { canonical: canonical(path) },
+    keywords: [
+      "tv show",
+      show.name,
+      ...(year ? [String(year)] : []),
+      ...(show.genres ?? []),
+      ...(show.language ? [show.language] : []),
+    ],
+    alternates: { canonical: canonical(canonicalPath) },
     openGraph: {
       type: "website",
       siteName: "Canisterr",
       locale: "en_US",
-      url: canonical(path),
+      url: canonical(canonicalPath),
       title,
       description,
       images: image ? [{ url: image, alt: title }] : undefined,
@@ -188,19 +253,22 @@ export function movieSchema(movie: {
   overview?: string | null;
   release_date?: string | null;
   poster_path?: string | null;
+  poster_url?: string | null;
   runtime?: number | null;
-  genres?: { name: string }[];
-}) {
+  genres?: Array<{ name: string }> | string[];
+}, canonicalPath: string = `/movie/${movie.id}`) {
   return {
     "@context": "https://schema.org",
     "@type": "Movie",
     name: movie.title,
     description: movie.overview ?? undefined,
     datePublished: movie.release_date ?? undefined,
-    image: tmdbImage(movie.poster_path, "w500") ?? undefined,
+    image: resolveImageUrl(movie.poster_path ?? movie.poster_url, "w500") ?? undefined,
     duration: movie.runtime ? `PT${movie.runtime}M` : undefined,
-    genre: (movie.genres ?? []).map((g) => g.name),
-    url: canonical(`/movie/${movie.id}`),
+    genre: Array.isArray(movie.genres)
+      ? movie.genres.map((genre) => (typeof genre === "string" ? genre : genre.name))
+      : [],
+    url: canonical(canonicalPath),
   };
 }
 
@@ -208,19 +276,22 @@ export function tvSchema(show: {
   id: number;
   name: string;
   summary?: string | null;
+  overview?: string | null;
   premiered?: string | null;
+  release_date?: string | null;
   image?: { original?: string; medium?: string } | null;
+  poster_url?: string | null;
   genres?: string[];
-}) {
+}, canonicalPath: string = `/tv/${show.id}`) {
   return {
     "@context": "https://schema.org",
     "@type": "TVSeries",
     name: show.name,
-    description: show.summary?.replace(/<[^>]+>/g, "") ?? undefined,
-    startDate: show.premiered ?? undefined,
-    image: show.image?.original ?? show.image?.medium ?? undefined,
+    description: (show.summary || show.overview)?.replace(/<[^>]+>/g, "") ?? undefined,
+    startDate: show.premiered || show.release_date || undefined,
+    image: show.image?.original ?? show.image?.medium ?? show.poster_url ?? undefined,
     genre: show.genres ?? [],
-    url: canonical(`/tv/${show.id}`),
+    url: canonical(canonicalPath),
   };
 }
 
@@ -243,23 +314,40 @@ export function websiteSchema() {
     "@type": "WebSite",
     name: "Canisterr",
     url: BASE_URL,
-    description: "Log, rate, and share movies with people who matter.",
-    potentialAction: {
-      "@type": "SearchAction",
-      target: `${BASE_URL}/all-movies?q={search_term_string}`,
-      "query-input": "required name=search_term_string",
+    description: DEFAULT_SITE_DESCRIPTION,
+    publisher: {
+      "@type": "Organization",
+      name: "Canisterr",
+      url: BASE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: DEFAULT_OG_IMAGE,
+      },
     },
+  };
+}
+
+export function organizationSchema() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Canisterr",
+    url: BASE_URL,
+    logo: DEFAULT_OG_IMAGE,
+    description: DEFAULT_SITE_DESCRIPTION,
   };
 }
 
 // ─── Log / review helpers ────────────────────────────────────────────────────
 
-// Parses a movie slug like "inception-2010" → { titleHint: "inception", year: 2010 }
+// Parses a movie slug like "inception-2010--christopher-nolan--en" → { titleHint: "inception", year: 2010 }
 export function parseMovieSlug(slug: string): { titleHint: string; year: number | null } {
-  const yearMatch = slug.match(/-(\d{4})$/);
-  const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
-  const titlePart = year ? slug.slice(0, slug.lastIndexOf(`-${year}`)) : slug;
-  return { titleHint: titlePart.replace(/-/g, " "), year };
+  const [titleSegment] = decodeURIComponent(slug).split("--");
+  const parts = titleSegment.split("-").filter(Boolean);
+  const yearIndex = parts.findIndex((part) => /^\d{4}$/.test(part));
+  const year = yearIndex >= 0 ? parseInt(parts[yearIndex], 10) : null;
+  const titleHint = (yearIndex >= 0 ? parts.slice(0, yearIndex) : parts).join(" ").trim();
+  return { titleHint, year };
 }
 
 // reaction value → human label → schema.org ratingValue (1–5)

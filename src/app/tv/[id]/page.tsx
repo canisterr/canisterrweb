@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
-import { equalTo, get, orderByChild, query, ref } from "firebase/database";
+import { get, ref } from "firebase/database";
 import { ArrowLeft, Bookmark, LogsIcon, MessageCircle, Share2 } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import TopActionBanner from "@/components/TopActionBanner";
@@ -13,12 +13,13 @@ import LogMovieModal from "@/components/LogMovieModal";
 import CinematicLoading from "@/components/CinematicLoading";
 import ContentCinePosts from "@/components/ContentCinePosts";
 import { auth, db } from "@/lib/firebase";
-import { getShowDetails, type ShowDetails } from "@/lib/tvmaze";
-import { getMovieReviewFeed } from "@/lib/movie-reviews";
+import type { ShowDetails } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
-import { getLogsForContent, getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
+import { getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
 import { signOut as authSignOut } from "@/lib/auth";
+import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
+import { resolveTvRouteParam } from "@/lib/content-slugs";
 import { User, Content, MovieReviewWithUser, MovieLog, MovieLogWithContent } from "@/types";
 
 function formatReleaseYear(releaseDate: string | null | undefined): string {
@@ -83,7 +84,11 @@ function getSeasonLabel(log: Pick<MovieLog, "content_type" | "season" | "episode
 export default function TVShowPage() {
   const router = useRouter();
   const params = useParams();
-  const showId = params.id as string;
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const showRouteParam = Array.isArray(params.id) ? params.id[0] : String(params.id || "");
+  const searchParamsString = searchParams.toString();
+  const currentUrl = searchParamsString ? `${pathname}?${searchParamsString}` : pathname;
 
   const [user, setUser] = useState<User | null>(null);
   const [show, setShow] = useState<ShowDetails | null>(null);
@@ -98,54 +103,97 @@ export default function TVShowPage() {
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<"cast" | "crew" | "reviews" | "posts">("cast");
+  const [resolvedShowPath, setResolvedShowPath] = useState<string | null>(null);
 
-  const loadShowLogData = async (currentUserId: string) => {
-    const numericShowId = Number(showId);
-    if (!numericShowId || Number.isNaN(numericShowId)) {
-      setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
-      setUserLogHistory([]);
-      setFriendLogs([]);
-      setAllLogs([]);
-      return;
-    }
+  const applyActivityPayload = (
+    activity: {
+      logs: ContentActivityLog[];
+      reviews: MovieReviewWithUser[];
+      stats: {
+        bad: number;
+        average: number;
+        good: number;
+        masterpiece: number;
+        total: number;
+        totalLogs: number;
+        totalWatched: number;
+      };
+    },
+    currentUserId: string,
+    showContent?: ShowDetails | null
+  ) => {
+    setReactionBreakdown({
+      bad: activity.stats.bad,
+      average: activity.stats.average,
+      good: activity.stats.good,
+      masterpiece: activity.stats.masterpiece,
+      total: activity.stats.total,
+    });
+    setReviews(activity.reviews);
 
-    const logsSnapshot = await get(
-      query(ref(db, "movie_logs"), orderByChild("content_id"), equalTo(numericShowId))
-    );
-    if (!logsSnapshot.exists()) {
-      setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
-      setUserLogHistory([]);
-      setFriendLogs([]);
-      setAllLogs([]);
-      return;
-    }
+    const logsWithContent = activity.logs.map((log) => ({
+      ...log,
+      notes: getVisibleLogNotes(log),
+      content:
+        (showContent
+          ? ({ ...showContent, created_at: new Date().toISOString() } as Content)
+          : ({
+              id: log.content_id,
+              title: "Unknown Show",
+              name: "Unknown Show",
+              poster_url: null,
+              genres: [],
+              actors: [],
+              language: null,
+              status: null,
+              release_date: null,
+              overview: null,
+              runtime: null,
+              rating: null,
+              created_at: new Date().toISOString(),
+              type: "tv",
+            } as Content)),
+    })) as MovieLogWithContent[];
 
-    const allRawLogs = logsSnapshot.val();
-    const showLogs = Object.values(allRawLogs).filter(
-      (log: any) =>
-        Number(log.content_id) === numericShowId &&
-        log.content_type === "tv" &&
-        !log.watch_later &&
-        Boolean(log.watched_date)
-    ) as MovieLog[];
-
-    const bad = showLogs.filter((log) => log.reaction === 0).length;
-    const average = showLogs.filter((log) => log.reaction === 1.5).length;
-    const good = showLogs.filter((log) => log.reaction === 1).length;
-    const masterpiece = showLogs.filter((log) => log.reaction === 2).length;
-    const total = bad + average + good + masterpiece;
-
-    setReactionBreakdown({ bad, average, good, masterpiece, total });
-
-    const history = showLogs
+    const history = logsWithContent
       .filter((log) => log.user_id === currentUserId)
       .sort((a, b) => {
         const watchedDiff = new Date(b.watched_date).getTime() - new Date(a.watched_date).getTime();
         if (watchedDiff !== 0) return watchedDiff;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-
     setUserLogHistory(history.map((log) => ({ ...log, notes: getVisibleLogNotes(log) })));
+
+    const latestLogByUser = new Map<string, MovieLogWithContent>();
+    logsWithContent.forEach((log) => {
+      if (
+        !latestLogByUser.has(log.user_id) ||
+        new Date(log.created_at) > new Date(latestLogByUser.get(log.user_id)!.created_at)
+      ) {
+        latestLogByUser.set(log.user_id, log);
+      }
+    });
+
+    const dedupedLogs = Array.from(latestLogByUser.values());
+    setFriendLogs(dedupedLogs.filter((log) => log.user_id !== currentUserId));
+    setAllLogs(dedupedLogs);
+  };
+
+  const loadShowLogData = async (
+    showContentId: number,
+    currentUserId: string,
+    showContent?: ShowDetails | null
+  ) => {
+    if (!showContentId || Number.isNaN(showContentId)) {
+      setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
+      setUserLogHistory([]);
+      setReviews([]);
+      setFriendLogs([]);
+      setAllLogs([]);
+      return;
+    }
+    const activity = await fetchContentActivity(showContentId, "tv");
+    applyActivityPayload(activity, currentUserId, showContent);
   };
 
   useEffect(() => {
@@ -161,7 +209,7 @@ export default function TVShowPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        router.push("/auth/login");
+        setUser(null);
         return;
       }
 
@@ -178,50 +226,70 @@ export default function TVShowPage() {
         };
 
         setUser(currentUser);
-
-        const numericShowId = Number(showId);
-        const [showDetails, mergedReviews, , fetchedLogs] = await Promise.all([
-          numericShowId ? getShowDetails(numericShowId) : Promise.resolve(null),
-          getMovieReviewFeed(numericShowId, "tv"),
-          loadShowLogData(currentUser.id),
-          getLogsForContent(numericShowId, "tv", 100),
-        ]);
-
-        if (showDetails) {
-          setShow(showDetails);
-        }
-        setReviews(mergedReviews);
-        let logs = fetchedLogs;
-        logs = logs.filter(
-          (log) =>
-            Number(log.content_id) === Number(showId) &&
-            log.content_type === "tv" &&
-            !log.watch_later &&
-            Boolean(log.watched_date)
-        );
-
-        const latestLogByUser = new Map<string, MovieLogWithContent>();
-        logs.forEach((log) => {
-          if (
-            !latestLogByUser.has(log.user_id) ||
-            new Date(log.created_at) > new Date(latestLogByUser.get(log.user_id)!.created_at)
-          ) {
-            latestLogByUser.set(log.user_id, log);
-          }
-        });
-
-        logs = Array.from(latestLogByUser.values());
-        setFriendLogs(logs.filter((log) => log.user_id !== currentUser.id));
-        setAllLogs(logs);
-        setLoading(false);
       } catch (error) {
-        console.error("Error fetching TV show details:", error);
-        setLoading(false);
+        console.error("Error fetching TV auth state:", error);
       }
     });
 
     return () => unsubscribe();
-  }, [showId, router]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadShowPage = async () => {
+      try {
+        setLoading(true);
+        const resolved = await resolveTvRouteParam(showRouteParam);
+
+        if (cancelled) return;
+
+        if (!resolved) {
+          setShow(null);
+          setResolvedShowPath(null);
+          setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
+          setUserLogHistory([]);
+          setReviews([]);
+          setFriendLogs([]);
+          setAllLogs([]);
+          setLoading(false);
+          return;
+        }
+
+        setShow(resolved.show);
+        setResolvedShowPath(resolved.canonicalPath);
+
+        if (pathname !== resolved.canonicalPath) {
+          const nextUrl = searchParamsString
+            ? `${resolved.canonicalPath}?${searchParamsString}`
+            : resolved.canonicalPath;
+          router.replace(nextUrl);
+        }
+
+        await loadShowLogData(resolved.show.id, user?.id || "__guest__", resolved.show);
+
+        if (!cancelled) {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error fetching TV show details:", error);
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadShowPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router, searchParamsString, showRouteParam]);
+
+  useEffect(() => {
+    if (!show) return;
+    void loadShowLogData(show.id, user?.id || "__guest__", show);
+  }, [show, user?.id]);
 
   const handleSignOut = async () => {
     try {
@@ -230,6 +298,37 @@ export default function TVShowPage() {
     } catch (error) {
       console.error("Sign out error:", error);
     }
+  };
+
+  const requireLoginForAction = () => {
+    router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`);
+  };
+
+  const handleOpenLogModal = () => {
+    if (!user) {
+      requireLoginForAction();
+      return;
+    }
+
+    setShowLogMovieModal(true);
+  };
+
+  const handleOpenAddToListModal = () => {
+    if (!user) {
+      requireLoginForAction();
+      return;
+    }
+
+    setShowAddToListModal(true);
+  };
+
+  const handleShareShow = () => {
+    if (!user || !show) {
+      requireLoginForAction();
+      return;
+    }
+
+    router.push(`/share?show_id=${show.id}`);
   };
 
   const myReviewLog = allLogs.length > 0 && user
@@ -243,6 +342,9 @@ export default function TVShowPage() {
     : null;
   const castPeople = useMemo(() => show?.cast_details || [], [show]);
   const crewPeople = useMemo(() => show?.crew_details || [], [show]);
+  const showSeasonsHref = show
+    ? `${resolvedShowPath || `/tv/${show.id}`}/seasons`
+    : "/dashboard";
 
   const renderCastRow = (person: TVCreditPerson) => (
     <div key={person.id} className="flex items-center gap-4 py-4 text-left">
@@ -284,7 +386,7 @@ export default function TVShowPage() {
     </div>
   );
 
-  if (loading || !user) {
+  if (loading) {
     return <CinematicLoading message="Your show page is loading" />;
   }
 
@@ -373,25 +475,25 @@ export default function TVShowPage() {
 
                 <div className="mt-6 grid grid-cols-4 gap-2 sm:mt-7 sm:gap-3">
                   <button
-                    onClick={() => setShowLogMovieModal(true)}
+                    onClick={handleOpenLogModal}
                     className="inline-flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-white/20 hover:bg-white/10 sm:gap-2 sm:px-4 sm:py-4 sm:text-sm sm:tracking-[0.16em]"
                   >
                     Log
                   </button>
                   <button
-                    onClick={() => router.push(`/share?show_id=${show.id}`)}
+                    onClick={handleShareShow}
                     className="inline-flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white sm:gap-2 sm:px-4 sm:py-4 sm:text-sm sm:tracking-[0.16em]"
                   >
                     Share
                   </button>
                   <button
-                    onClick={() => setShowAddToListModal(true)}
+                    onClick={handleOpenAddToListModal}
                     className="inline-flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white sm:gap-2 sm:px-4 sm:py-4 sm:text-sm sm:tracking-[0.16em]"
                   >
                     Add to List
                   </button>
                   <Link
-                    href={`/tv/${show.id}/seasons`}
+                    href={showSeasonsHref}
                     className="inline-flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white sm:gap-2 sm:px-4 sm:py-4 sm:text-sm sm:tracking-[0.16em]"
                   >
                     Seasons
@@ -788,8 +890,8 @@ export default function TVShowPage() {
         user={user}
         onLogCreated={(message) => {
           setBannerMessage(message);
-          if (user) {
-            void loadShowLogData(user.id);
+          if (user && show) {
+            void loadShowLogData(show.id, user.id, show);
           }
         }}
       />

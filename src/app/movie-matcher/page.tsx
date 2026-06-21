@@ -90,12 +90,6 @@ type TasteItem = UserTasteWithContent & {
   isMasterpiece: boolean;
 };
 
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-  prompt(): Promise<void>;
-}
-
 function FriendMatchCard({
   friend,
   onFindScore,
@@ -173,7 +167,6 @@ export default function MovieMatcherPage() {
   const [loading, setLoading] = useState(true);
   const [tastes, setTastes] = useState<UserTasteWithContent[]>([]);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
-  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MatcherContent[]>([]);
@@ -199,16 +192,6 @@ export default function MovieMatcherPage() {
   const [includeMasterpieces, setIncludeMasterpieces] = useState(true);
   const [masterpieceMovies, setMasterpieceMovies] = useState<TasteItem[]>([]);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setDeferredInstallPrompt(event as BeforeInstallPromptEvent);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-  }, []);
 
   useEffect(() => {
     const fetchMasterpieces = async () => {
@@ -472,17 +455,7 @@ export default function MovieMatcherPage() {
     }
   };
 
-  const handleDownloadApp = async () => {
-    if (deferredInstallPrompt) {
-      deferredInstallPrompt.prompt();
-      const choice = await deferredInstallPrompt.userChoice;
-      if (choice.outcome === "accepted") {
-        setShowInstallHelp(false);
-      }
-      setDeferredInstallPrompt(null);
-      return;
-    }
-
+  const handleDownloadApp = () => {
     setShowInstallHelp(true);
   };
 
@@ -846,7 +819,7 @@ export default function MovieMatcherPage() {
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => void handleDownloadApp()}
+                  onClick={handleDownloadApp}
                   disabled={isPwa}
                   className={`rounded-full px-5 py-3 text-sm font-black transition ${
                     isPwa
@@ -854,7 +827,7 @@ export default function MovieMatcherPage() {
                       : "bg-[#ff7a1a] text-black hover:bg-[#ff8d3b]"
                   }`}
                 >
-                  {isPwa ? "App installed" : deferredInstallPrompt ? "Download app" : "Install app"}
+                  {isPwa ? "App installed" : "Install app"}
                 </button>
               </div>
             </div>
@@ -1163,10 +1136,10 @@ export default function MovieMatcherPage() {
               <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
-                  onClick={() => void handleDownloadApp()}
+                  onClick={() => setShowInstallHelp(false)}
                   className="rounded-full bg-[#ff7a1a] px-4 py-2.5 text-sm font-black text-black transition hover:bg-[#ff8d3b]"
                 >
-                  {deferredInstallPrompt ? "Install now" : "Try again"}
+                  Got it
                 </button>
                 <button
                   type="button"

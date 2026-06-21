@@ -10,6 +10,7 @@ import CinePostArtwork from "@/components/CinePostArtwork";
 import SpoilerText from "@/components/SpoilerText";
 import { CinePostEngagementType, CinePostWithDetails, Content, TMDBMovie, User } from "@/types";
 import {
+  getCinePostContentHref,
   getCinePostEngagementUsers,
   getCinePosts,
   getCinePostDisplayBody,
@@ -21,7 +22,9 @@ import { getTasteBasedPopularMovies } from "@/lib/movie-recommendations";
 import { getBlurDataUrl, getTmdbPosterUrl } from "@/lib/performance";
 import { lsGet, lsSet } from "@/lib/local-cache";
 import { getDisplayUserHandle, getDisplayUserName } from "@/lib/users";
+import { reportAppError } from "@/lib/report-error";
 import CinePostListStrip from "@/components/CinePostListStrip";
+import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
 
 interface CinePostsFeedProps {
   currentUser: User | null;
@@ -106,9 +109,7 @@ function AuthorLabel({
 }
 
 function getContentHref(post: CinePostWithDetails): string | null {
-  if (post.list_id && post.content_type === "list") return `/lists/${post.list_id}`;
-  if (!post.content_id || !post.content_type) return null;
-  return post.content_type === "tv" ? `/tv/${post.content_id}` : `/movie/${post.content_id}`;
+  return getCinePostContentHref(post);
 }
 
 function getPreview(body: string): { text: string; isTrimmed: boolean } {
@@ -117,6 +118,56 @@ function getPreview(body: string): { text: string; isTrimmed: boolean } {
     text: `${body.slice(0, PREVIEW_LIMIT).trimEnd()}...`,
     isTrimmed: true,
   };
+}
+
+function getFeedSplitActionClass(theme: "default" | "brutalist", active = false): string {
+  const base =
+    "group/action inline-flex h-10 items-center overflow-hidden rounded-full border transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]";
+
+  if (theme === "brutalist") {
+    return `${base} ${
+      active
+        ? "border-[#ff7a1a]/35 bg-[#ff7a1a]/12 text-[#ffb36b] shadow-[0_12px_28px_rgba(255,122,26,0.12)]"
+        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-[#f5f0de]"
+    }`;
+  }
+
+  return `${base} ${
+    active
+      ? "border-rose-200 bg-rose-50 text-rose-600 shadow-[0_12px_24px_rgba(244,63,94,0.12)]"
+      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+  }`;
+}
+
+function getFeedActionChipClass(theme: "default" | "brutalist", active = false): string {
+  const base =
+    "group/chip inline-flex h-10 items-center gap-2 rounded-full border px-3 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]";
+
+  if (theme === "brutalist") {
+    return `${base} ${
+      active
+        ? "border-[#ff7a1a]/35 bg-[#ff7a1a]/12 text-[#ffb36b] shadow-[0_12px_28px_rgba(255,122,26,0.12)]"
+        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-[#f5f0de]"
+    }`;
+  }
+
+  return `${base} ${
+    active
+      ? "border-sky-200 bg-sky-50 text-sky-600 shadow-[0_12px_24px_rgba(14,165,233,0.12)]"
+      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+  }`;
+}
+
+function getFeedCountButtonClass(theme: "default" | "brutalist", active = false): string {
+  if (theme === "brutalist") {
+    return `inline-flex h-full min-w-[2.5rem] items-center justify-center px-3 text-xs font-black tabular-nums transition-colors disabled:cursor-default ${
+      active ? "text-[#ffd8ae]" : "text-[#ffb36b] disabled:opacity-45"
+    }`;
+  }
+
+  return `inline-flex h-full min-w-[2.5rem] items-center justify-center px-3 text-xs font-black tabular-nums transition-colors disabled:cursor-default ${
+    active ? "text-rose-600" : "text-slate-500 disabled:opacity-45"
+  }`;
 }
 
 type RailItem = {
@@ -143,7 +194,13 @@ function buildPopularRailItems(items: TMDBMovie[]): RailItem[] {
   return items.map((item) => ({
     id: String(item.id),
     label: item.title,
-    href: `/movie/${item.id}`,
+    href: buildMoviePath({
+      id: item.id,
+      title: item.title,
+      director: item.director || null,
+      release_date: item.release_date || null,
+      language: item.original_language || undefined,
+    }),
     posterUrl: tmdbPosterUrl(item.poster_path),
     meta: "Popular",
   }));
@@ -153,7 +210,24 @@ function buildSuggestedRailItems(items: Content[]): RailItem[] {
   return items.map((item) => ({
     id: String(item.id),
     label: item.title || (item as any).name || "Untitled",
-    href: item.type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`,
+    href:
+      item.type === "tv"
+            ? buildTvPath({
+            id: item.id,
+            title: item.title || (item as any).name || "Untitled",
+            name: item.title || (item as any).name || "Untitled",
+            premiered: (item as any).premiered || item.release_date || undefined,
+            release_date: item.release_date || undefined,
+            language: item.language || (item as any).original_language || undefined,
+            network: (item as any).network || undefined,
+          })
+        : buildMoviePath({
+            id: item.id,
+            title: item.title || "Untitled",
+            director: item.director || null,
+            release_date: item.release_date || null,
+            language: item.language || undefined,
+          }),
     posterUrl: item.poster_url || null,
     meta: item.type === "tv" ? "Suggested show" : "Suggested movie",
   }));
@@ -497,6 +571,7 @@ export default function CinePostsFeed({
   const [peopleModalUsers, setPeopleModalUsers] = useState<User[]>([]);
   const [peopleModalLoading, setPeopleModalLoading] = useState(false);
   const [seenHistoryReady, setSeenHistoryReady] = useState(false);
+  const [engagementPendingKeys, setEngagementPendingKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -725,14 +800,18 @@ export default function CinePostsFeed({
     enabled: boolean
   ) => {
     if (!currentUser) return;
-    await setCinePostEngagement(post, currentUser, type, enabled);
+    const pendingKey = `${post.id}:${type}`;
+    if (engagementPendingKeys.has(pendingKey)) return;
+
+    const previousPosts = posts;
+    const likeDelta = type === "like" ? (enabled ? 1 : -1) : 0;
+    const saveDelta = type === "save" ? (enabled ? 1 : -1) : 0;
+
+    setEngagementPendingKeys((current) => new Set(current).add(pendingKey));
     setLockedFeedPostIds((current) => new Set(current).add(post.id));
     setPosts((currentPosts) =>
       currentPosts.map((currentPost) => {
         if (currentPost.id !== post.id) return currentPost;
-
-        const likeDelta = type === "like" ? (enabled ? 1 : -1) : 0;
-        const saveDelta = type === "save" ? (enabled ? 1 : -1) : 0;
 
         return {
           ...currentPost,
@@ -744,6 +823,23 @@ export default function CinePostsFeed({
         };
       })
     );
+
+    try {
+      await setCinePostEngagement(post, currentUser, type, enabled);
+    } catch (error) {
+      setPosts(previousPosts);
+      reportAppError({
+        title: "Could not update post",
+        message: "We could not update that reaction.",
+        details: error instanceof Error ? error.message : null,
+      });
+    } finally {
+      setEngagementPendingKeys((current) => {
+        const next = new Set(current);
+        next.delete(pendingKey);
+        return next;
+      });
+    }
   };
 
   const openPeopleModal = async (
@@ -857,6 +953,8 @@ export default function CinePostsFeed({
     const postHref = `/posts/${post.id}`;
     const preview = getPreview(getCinePostDisplayBody(post));
     const postAuthorUser = currentUser && currentUser.id === post.user_id ? currentUser : post.user;
+    const likePending = engagementPendingKeys.has(`${post.id}:like`);
+    const savePending = engagementPendingKeys.has(`${post.id}:save`);
     const posterUrl =
       post.poster_url ||
       post.person_profile_url ||
@@ -930,37 +1028,51 @@ export default function CinePostsFeed({
           </div>
 
           <div className="mt-3 flex items-center justify-between border-t border-white/10 py-3 pl-1 sm:mt-4">
-            <div className="flex items-center gap-4 sm:gap-5">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={getFeedSplitActionClass(theme, post.liked_by_current_user)}>
                 <button
                   type="button"
                   onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
-                  className={`transition ${post.liked_by_current_user ? "text-[#ff7a1a]" : "text-white/75 hover:text-[#ff9b4a]"}`}
+                  disabled={likePending}
+                  className="inline-flex h-full items-center justify-center px-3 disabled:cursor-not-allowed disabled:opacity-70"
                   aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
                 >
-                  <Heart className={`h-5 w-5 ${post.liked_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                  <Heart
+                    className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
+                      post.liked_by_current_user ? "fill-[#ff7a1a]" : ""
+                    }`}
+                  />
                 </button>
+                <div className="h-4 w-px bg-current/15" />
                 <button
                   type="button"
                   onClick={() => openPeopleModal(post, "like", "Liked by")}
                   disabled={post.likes_count === 0}
-                  className="min-w-3 text-left text-xs font-bold text-[#ff7a1a] disabled:opacity-100"
+                  className={getFeedCountButtonClass(theme, post.liked_by_current_user)}
                 >
                   {post.likes_count}
                 </button>
               </div>
-              <Link href={postHref} className="flex items-center gap-2 text-white/75 transition hover:text-[#ff9b4a]">
-                <MessageCircle className="h-5 w-5" />
-                <span className="text-xs text-white/55">{post.comments_count}</span>
+              <Link
+                href={postHref}
+                className={getFeedActionChipClass(theme)}
+              >
+                <MessageCircle className="h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110" />
+                <span className="text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
               </Link>
             </div>
             <button
               type="button"
               onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
-              className={`transition ${post.saved_by_current_user ? "text-[#ff7a1a]" : "text-white/75 hover:text-[#ff9b4a]"}`}
+              disabled={savePending}
+              className={`${getFeedActionChipClass(theme, post.saved_by_current_user)} disabled:cursor-not-allowed disabled:opacity-70`}
               aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
             >
-              <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+              <Bookmark
+                className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110 ${
+                  post.saved_by_current_user ? "fill-[#ff7a1a]" : ""
+                }`}
+              />
             </button>
           </div>
         </div>
@@ -974,6 +1086,8 @@ export default function CinePostsFeed({
     const preview = getPreview(getCinePostDisplayBody(post));
     const postAuthorUser = currentUser && currentUser.id === post.user_id ? currentUser : post.user;
     const isListPost = post.content_type === "list" && (post.list_items?.length || 0) > 0;
+    const likePending = engagementPendingKeys.has(`${post.id}:like`);
+    const savePending = engagementPendingKeys.has(`${post.id}:save`);
     const shouldIgnorePostClick = (target: EventTarget | null) => {
       if (!(target instanceof Element)) return false;
       return Boolean(target.closest("a,button,[role='button'],input,textarea,select,label"));
@@ -1144,62 +1258,55 @@ export default function CinePostsFeed({
 
           <div className={`py-3 sm:py-4 ${isBrutalist ? "border-t border-white/10" : "border-t border-slate-100 px-3 sm:px-5"}`}>
             <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  className={`inline-flex items-center justify-center transition ${
-                    post.liked_by_current_user
-                      ? isBrutalist
-                        ? "text-[#ff7a1a]"
-                        : "bg-rose-50 text-rose-600"
-                      : isBrutalist
-                      ? "text-white/65 hover:text-[#ffb36b]"
-                      : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                  }`}
-                  aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
-                >
-                  <Heart className={`h-5 w-5 ${post.liked_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-rose-500") : ""}`} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openPeopleModal(post, "like", "Liked by")}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  disabled={post.likes_count === 0}
-                  className={`px-1 py-2 text-sm font-black disabled:opacity-40 ${
-                    isBrutalist ? "text-[#ffb36b]" : "text-rose-600 disabled:text-slate-400"
-                  }`}
-                >
-                  {post.likes_count}
-                </button>
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className={getFeedSplitActionClass(theme, post.liked_by_current_user)}>
+                  <button
+                    type="button"
+                    onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    disabled={likePending}
+                    className="inline-flex h-full items-center justify-center px-3 disabled:cursor-not-allowed disabled:opacity-70"
+                    aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                  >
+                    <Heart
+                      className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
+                        post.liked_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-rose-500") : ""
+                      }`}
+                    />
+                  </button>
+                  <div className="h-4 w-px bg-current/15" />
+                  <button
+                    type="button"
+                    onClick={() => openPeopleModal(post, "like", "Liked by")}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    disabled={post.likes_count === 0}
+                    className={getFeedCountButtonClass(theme, post.liked_by_current_user)}
+                  >
+                    {post.likes_count}
+                  </button>
+                </div>
                 <Link
                   href={postHref}
                   onClick={(event) => event.stopPropagation()}
-                  className={`inline-flex items-center justify-center gap-1.5 transition ${
-                    isBrutalist ? "text-white/65 hover:text-[#ffb36b]" : "rounded-2xl bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 sm:px-3 sm:text-sm"
-                  }`}
+                  className={getFeedActionChipClass(theme)}
                 >
-                  <MessageCircle className="h-5 w-5" />
-                  {post.comments_count}
+                  <MessageCircle className="h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110" />
+                  <span className="text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
                 </Link>
               </div>
               <button
                 type="button"
                 onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
                 onMouseDown={(event) => event.stopPropagation()}
-                className={`inline-flex items-center justify-center transition ${
-                  post.saved_by_current_user
-                    ? isBrutalist
-                      ? "text-[#ff7a1a]"
-                      : "bg-blue-50 text-[#f5f0de]"
-                    : isBrutalist
-                    ? "text-white/65 hover:text-[#ffb36b]"
-                    : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                }`}
+                disabled={savePending}
+                className={`${getFeedActionChipClass(theme, post.saved_by_current_user)} disabled:cursor-not-allowed disabled:opacity-70`}
                 aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
               >
-                <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-blue-500") : ""}`} />
+                <Bookmark
+                  className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110 ${
+                    post.saved_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-blue-500") : ""
+                  }`}
+                />
               </button>
             </div>
           </div>

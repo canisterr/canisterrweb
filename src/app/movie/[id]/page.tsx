@@ -11,13 +11,12 @@ import ContentCinePosts from "@/components/ContentCinePosts";
 import { User, Movie, MovieReviewWithUser, Content, MovieLog, MovieLogWithContent } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { equalTo, get, orderByChild, query, ref } from "firebase/database";
+import { get, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getMovieDetails } from "@/lib/tmdb";
-import { getMovieReviewFeed } from "@/lib/movie-reviews";
-import { getLogsForContent } from "@/lib/logs";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
+import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
+import { resolveMovieRouteParam } from "@/lib/content-slugs";
 import {
   ArrowLeft,
   Share2,
@@ -118,7 +117,7 @@ export default function MoviePage() {
   const params = useParams();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const movieId = params.id;
+  const movieRouteParam = Array.isArray(params.id) ? params.id[0] : String(params.id || "");
   const searchParamsString = searchParams.toString();
   const currentUrl = searchParamsString ? `${pathname}?${searchParamsString}` : pathname;
   const isScanLogFlow = searchParams.get("log") === "1" && searchParams.get("from") === "scan";
@@ -140,48 +139,89 @@ export default function MoviePage() {
   const [activeDetailTab, setActiveDetailTab] = useState<MovieDetailTab>("cast");
   const [showAllCast, setShowAllCast] = useState(false);
   const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(new Set());
+  const [resolvedMoviePath, setResolvedMoviePath] = useState<string | null>(null);
 
-  const loadMovieLogData = async () => {
-    const numericMovieId = Number(movieId);
-    if (!numericMovieId || Number.isNaN(numericMovieId)) {
+  const applyActivityPayload = (
+    activity: {
+      logs: ContentActivityLog[];
+      reviews: MovieReviewWithUser[];
+      stats: {
+        bad: number;
+        average: number;
+        good: number;
+        masterpiece: number;
+        total: number;
+        totalLogs: number;
+        totalWatched: number;
+      };
+    },
+    currentUserId: string,
+    movieContent?: MovieDetails | null
+  ) => {
+    setReactionBreakdown({
+      bad: activity.stats.bad,
+      average: activity.stats.average,
+      good: activity.stats.good,
+      masterpiece: activity.stats.masterpiece,
+      total: activity.stats.total,
+    });
+    setMovieStats({
+      totalLogs: activity.stats.totalLogs,
+      totalWatched: activity.stats.totalWatched,
+    });
+    setReviews(activity.reviews);
+
+    const logsWithContent = activity.logs.map((log) => ({
+      ...log,
+      notes: log.notes || "",
+      content:
+        (movieContent
+          ? ({ ...movieContent, created_at: movieContent.created_at || new Date().toISOString() } as Content)
+          : ({
+              id: log.content_id,
+              title: "Unknown Movie",
+              poster_url: null,
+              genres: [],
+              platforms: [],
+              director: null,
+              actors: [],
+              language: null,
+              release_date: null,
+              overview: null,
+              runtime: null,
+              rating: null,
+              created_at: new Date().toISOString(),
+              type: "movie",
+            } as Content)),
+    })) as MovieLogWithContent[];
+
+    const latestLogByUser = new Map<string, MovieLogWithContent>();
+    logsWithContent.forEach((log) => {
+      if (!latestLogByUser.has(log.user_id) || new Date(log.created_at) > new Date(latestLogByUser.get(log.user_id)!.created_at)) {
+        latestLogByUser.set(log.user_id, log);
+      }
+    });
+
+    const dedupedLogs = Array.from(latestLogByUser.values());
+    setFriendLogs(dedupedLogs.filter((log) => log.user_id !== currentUserId));
+    setAllLogs(dedupedLogs.filter((log) => log.user_id === currentUserId));
+  };
+
+  const loadMovieLogData = async (
+    movieContentId: number,
+    currentUserId: string,
+    movieContent?: MovieDetails | null
+  ) => {
+    if (!movieContentId || Number.isNaN(movieContentId)) {
       setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
       setMovieStats({ totalLogs: 0, totalWatched: 0 });
+      setReviews([]);
       setFriendLogs([]);
       setAllLogs([]);
       return;
     }
-
-    const logsSnapshot = await get(
-      query(ref(db, "movie_logs"), orderByChild("content_id"), equalTo(numericMovieId))
-    );
-
-    if (!logsSnapshot.exists()) {
-      setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
-      setMovieStats({ totalLogs: 0, totalWatched: 0 });
-      setFriendLogs([]);
-      setAllLogs([]);
-      return;
-    }
-
-    const allLogs = logsSnapshot.val();
-    const movieLogs = Object.values(allLogs).filter(
-      (log: any) =>
-        Number(log.content_id) === numericMovieId &&
-        log.content_type === "movie" &&
-        !log.watch_later &&
-        Boolean(log.watched_date)
-    ) as MovieLog[];
-
-    const bad = movieLogs.filter((log) => log.reaction === 0).length;
-    const average = movieLogs.filter((log) => log.reaction === 1.5).length;
-    const good = movieLogs.filter((log) => log.reaction === 1).length;
-    const masterpiece = movieLogs.filter((log) => log.reaction === 2).length;
-    const total = bad + average + good + masterpiece;
-    const totalLogs = movieLogs.length;
-    const totalWatched = new Set(movieLogs.map((log) => log.user_id)).size;
-
-    setReactionBreakdown({ bad, average, good, masterpiece, total });
-    setMovieStats({ totalLogs, totalWatched });
+    const activity = await fetchContentActivity(movieContentId, "movie");
+    applyActivityPayload(activity, currentUserId, movieContent);
   };
 
   useEffect(() => {
@@ -197,7 +237,7 @@ export default function MoviePage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`);
+        setUser(null);
         return;
       }
 
@@ -216,50 +256,75 @@ export default function MoviePage() {
         };
 
         setUser(currentUser);
-
-        const numericMovieId = Number(movieId);
-        const [movieDetails, mergedReviews, , fetchedLogs] = await Promise.all([
-          numericMovieId ? getMovieDetails(numericMovieId) : Promise.resolve(null),
-          getMovieReviewFeed(numericMovieId, "movie"),
-          loadMovieLogData(),
-          getLogsForContent(numericMovieId, "movie", 100),
-        ]);
-
-        if (movieDetails) {
-          setMovie({ ...movieDetails, created_at: new Date().toISOString() } as MovieDetails);
-        }
-        setReviews(mergedReviews);
-        let logs = fetchedLogs;
-        logs = logs.filter(
-          (log) =>
-            Number(log.content_id) === Number(movieId) &&
-            log.content_type === "movie" &&
-            !log.watch_later &&
-            Boolean(log.watched_date)
-        );
-        // Only keep the latest log per user
-        const latestLogByUser = new Map();
-        logs.forEach((log) => {
-          if (!latestLogByUser.has(log.user_id) || new Date(log.created_at) > new Date(latestLogByUser.get(log.user_id).created_at)) {
-            latestLogByUser.set(log.user_id, log);
-          }
-        });
-        logs = Array.from(latestLogByUser.values());
-        // Keep friend logs for the top row, but show only the current user's own logs in history.
-        const myLogs = logs.filter((log) => log.user_id === currentUser.id);
-        const friendLogsFiltered = logs.filter(l => l.user_id !== currentUser.id);
-        setFriendLogs(friendLogsFiltered);
-        setAllLogs(myLogs);
-
-        setLoading(false);
       } catch (error) {
-        console.error("Error fetching movie details:", error);
-        setLoading(false);
+        console.error("Error fetching movie auth state:", error);
       }
     });
 
     return () => unsubscribe();
-  }, [currentUrl, movieId, router]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMoviePage = async () => {
+      try {
+        setLoading(true);
+        const resolved = await resolveMovieRouteParam(movieRouteParam);
+
+        if (cancelled) return;
+
+        if (!resolved) {
+          setMovie(null);
+          setResolvedMoviePath(null);
+          setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
+          setMovieStats({ totalLogs: 0, totalWatched: 0 });
+          setReviews([]);
+          setFriendLogs([]);
+          setAllLogs([]);
+          setLoading(false);
+          return;
+        }
+
+        const nextMovie = {
+          ...resolved.movie,
+          created_at: new Date().toISOString(),
+        } as MovieDetails;
+
+        setMovie(nextMovie);
+        setResolvedMoviePath(resolved.canonicalPath);
+
+        if (pathname !== resolved.canonicalPath) {
+          const nextUrl = searchParamsString
+            ? `${resolved.canonicalPath}?${searchParamsString}`
+            : resolved.canonicalPath;
+          router.replace(nextUrl);
+        }
+
+        await loadMovieLogData(resolved.movie.id, user?.id || "__guest__", nextMovie);
+
+        if (!cancelled) {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error fetching movie details:", error);
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadMoviePage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [movieRouteParam, pathname, router, searchParamsString]);
+
+  useEffect(() => {
+    if (!movie) return;
+    void loadMovieLogData(movie.id, user?.id || "__guest__", movie);
+  }, [movie, user?.id]);
 
   useEffect(() => {
     if (!isScanLogFlow) {
@@ -267,11 +332,17 @@ export default function MoviePage() {
       return;
     }
 
-    if (loading || !movie || !user || autoOpenScanLogRef.current) {
+    if (loading || !movie || autoOpenScanLogRef.current) {
       return;
     }
 
     autoOpenScanLogRef.current = true;
+
+    if (!user) {
+      router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`);
+      return;
+    }
+
     const timer = window.setTimeout(() => {
       setShowLogMovieModal(true);
     }, 0);
@@ -288,12 +359,46 @@ export default function MoviePage() {
     }
   };
 
+  const requireLoginForAction = () => {
+    router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`);
+  };
+
+  const handleOpenLogModal = () => {
+    if (!user) {
+      requireLoginForAction();
+      return;
+    }
+
+    setShowLogMovieModal(true);
+  };
+
+  const handleOpenAddToListModal = () => {
+    if (!user) {
+      requireLoginForAction();
+      return;
+    }
+
+    setShowAddToListModal(true);
+  };
+
+  const handleShareMovie = () => {
+    if (!user || !movie) {
+      requireLoginForAction();
+      return;
+    }
+
+    router.push(`/share?movie_id=${movie.id}`);
+  };
+
   const movieMetaParts = useMemo(() => getMovieMetaParts(movie), [movie]);
   const heroImageUrl = movie?.backdrop_url || movie?.poster_url || null;
   const movieGenres = movie?.genres || [];
   const castPeople = useMemo(() => movie?.cast_details || [], [movie]);
   const visibleCastPeople = showAllCast ? castPeople : castPeople.slice(0, 10);
   const crewBuckets = useMemo(() => getCrewBuckets(movie?.crew_details || []), [movie]);
+  const movieReviewsHref = movie
+    ? `${resolvedMoviePath || `/movie/${movie.id}`}/reviews`
+    : "/all-movies";
   const myReviewLog = useMemo(() => {
     if (allLogs.length === 0) return null;
 
@@ -371,7 +476,7 @@ export default function MoviePage() {
     </div>
   );
 
-  if (loading || !user) {
+  if (loading) {
     return <CinematicLoading message="Your movie page is loading" />;
   }
 
@@ -460,19 +565,19 @@ export default function MoviePage() {
 
                 <div className="mt-6 grid grid-cols-3 gap-2 sm:mt-7 sm:gap-3">
                   <button
-                    onClick={() => setShowLogMovieModal(true)}
+                    onClick={handleOpenLogModal}
                     className="inline-flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-white/20 hover:bg-white/10 sm:gap-2 sm:px-4 sm:py-4 sm:text-sm sm:tracking-[0.16em]"
                   >
                     Log
                   </button>
                   <button
-                    onClick={() => router.push(`/share?movie_id=${movie.id}`)}
+                    onClick={handleShareMovie}
                     className="inline-flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white sm:gap-2 sm:px-4 sm:py-4 sm:text-sm sm:tracking-[0.16em]"
                   >
                     Share
                   </button>
                   <button
-                    onClick={() => setShowAddToListModal(true)}
+                    onClick={handleOpenAddToListModal}
                     className="inline-flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white sm:gap-2 sm:px-4 sm:py-4 sm:text-sm sm:tracking-[0.16em]"
                   >
                     Add to List
@@ -653,7 +758,7 @@ export default function MoviePage() {
                   <div className="mt-5">
                     <div className="grid grid-cols-3 gap-2">
                       <Link
-                        href={`/movie/${movie.id}/reviews`}
+                        href={movieReviewsHref}
                         className="flex min-w-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-black/20 px-2 py-3 text-center transition-colors hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10"
                       >
                         <span className="text-[9px] uppercase tracking-[0.18em] text-white/45">Total Reviews</span>
@@ -804,7 +909,7 @@ export default function MoviePage() {
                     <div className="flex items-center justify-between gap-3">
                       <h2 className="text-2xl font-bold">Reviews</h2>
                       <Link
-                        href={`/movie/${movie.id}/reviews`}
+                        href={movieReviewsHref}
                         className="text-sm font-semibold text-[#ffb36b] transition hover:text-[#ffcf9b]"
                       >
                         Open all reviews
@@ -881,8 +986,8 @@ export default function MoviePage() {
           } else {
             setBannerMessage(message);
           }
-          if (!user) return;
-          void loadMovieLogData();
+          if (!user || !movie) return;
+          void loadMovieLogData(movie.id, user.id, movie);
         }}
       />
 

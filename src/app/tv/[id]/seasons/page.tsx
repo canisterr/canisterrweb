@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { ArrowLeft, CalendarDays, Film, PlayCircle } from "lucide-react";
@@ -10,9 +10,10 @@ import CinematicLoading from "@/components/CinematicLoading";
 import PageLayout from "@/components/PageLayout";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getShowDetails, type ShowDetails } from "@/lib/tvmaze";
+import { type ShowDetails } from "@/lib/tvmaze";
 import { getSeasonEpisodes, getShowSeasons, type TVMazeEpisode, type TVMazeSeason } from "@/lib/tvmaze-seasons";
 import { User } from "@/types";
+import { resolveTvRouteParam } from "@/lib/content-slugs";
 
 function formatYear(dateStr?: string): string {
   if (!dateStr) return "";
@@ -23,10 +24,14 @@ function formatYear(dateStr?: string): string {
 export default function TvSeasonsPage() {
   const router = useRouter();
   const params = useParams();
-  const showId = params.id as string;
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const showRouteParam = Array.isArray(params.id) ? params.id[0] : String(params.id || "");
+  const searchParamsString = searchParams.toString();
 
   const [user, setUser] = useState<User | null>(null);
   const [show, setShow] = useState<ShowDetails | null>(null);
+  const [showPath, setShowPath] = useState<string | null>(null);
   const [seasons, setSeasons] = useState<TVMazeSeason[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<TVMazeSeason | null>(null);
   const [episodes, setEpisodes] = useState<TVMazeEpisode[]>([]);
@@ -36,7 +41,7 @@ export default function TvSeasonsPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        router.push("/auth/login");
+        setUser(null);
         return;
       }
 
@@ -52,30 +57,63 @@ export default function TvSeasonsPage() {
         };
 
         setUser(currentUser);
-
-        const numericShowId = Number(showId);
-        if (!numericShowId || Number.isNaN(numericShowId)) {
-          setLoading(false);
-          return;
-        }
-
-        const [showDetails, seasonList] = await Promise.all([
-          getShowDetails(numericShowId),
-          getShowSeasons(numericShowId),
-        ]);
-
-        setShow(showDetails);
-        setSeasons(seasonList);
-        setSelectedSeason(seasonList[0] || null);
-        setLoading(false);
       } catch (error) {
-        console.error("Error loading TV seasons:", error);
-        setLoading(false);
+        console.error("Error loading season auth state:", error);
       }
     });
 
     return () => unsubscribe();
-  }, [router, showId]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSeasonGuide = async () => {
+      try {
+        setLoading(true);
+        const resolved = await resolveTvRouteParam(showRouteParam);
+
+        if (cancelled) return;
+
+        if (!resolved) {
+          setShow(null);
+          setShowPath(null);
+          setSeasons([]);
+          setSelectedSeason(null);
+          setLoading(false);
+          return;
+        }
+
+        const seasonList = await getShowSeasons(resolved.show.id);
+        if (cancelled) return;
+
+        setShow(resolved.show);
+        setShowPath(resolved.canonicalPath);
+        setSeasons(seasonList);
+        setSelectedSeason(seasonList[0] || null);
+
+        if (pathname !== `${resolved.canonicalPath}/seasons`) {
+          const nextUrl = searchParamsString
+            ? `${resolved.canonicalPath}/seasons?${searchParamsString}`
+            : `${resolved.canonicalPath}/seasons`;
+          router.replace(nextUrl);
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading TV seasons:", error);
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadSeasonGuide();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router, searchParamsString, showRouteParam]);
 
   useEffect(() => {
     if (!selectedSeason) {
@@ -115,7 +153,7 @@ export default function TvSeasonsPage() {
     router.push("/auth/login");
   };
 
-  if (loading || !user) {
+  if (loading) {
     return <CinematicLoading message="Loading season guide" />;
   }
 
@@ -123,7 +161,7 @@ export default function TvSeasonsPage() {
     <PageLayout user={user} onSignOut={handleSignOut}>
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <Link
-          href={`/tv/${showId}`}
+          href={showPath || "/dashboard"}
           className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#111111] px-4 py-2 text-sm font-bold text-[#f5f0de] transition hover:border-[#ff7a1a]/30 hover:text-[#ffb36b]"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -235,7 +273,7 @@ export default function TvSeasonsPage() {
               </p>
               {selectedSeason && (
                 <Link
-                  href={`/tv/${showId}/seasons/${selectedSeason.number}`}
+                  href={showPath ? `${showPath}/seasons/${selectedSeason.number}` : "/dashboard"}
                   className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#ffb36b] hover:text-[#ff7a1a]"
                 >
                   Open season page

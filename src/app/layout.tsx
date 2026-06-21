@@ -9,7 +9,7 @@ import LocalhostServiceWorkerCleanup from "@/components/LocalhostServiceWorkerCl
 import MobileInstallPrompt from "@/components/MobileInstallPrompt";
 import PwaBottomNav from "@/components/PwaBottomNav";
 import JsonLd from "@/components/JsonLd";
-import { websiteSchema } from "@/lib/seo";
+import { organizationSchema, websiteSchema } from "@/lib/seo";
 import { baseMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = baseMetadata({
@@ -17,7 +17,8 @@ export const metadata: Metadata = baseMetadata({
     default: "Canisterr",
     template: "%s | Canisterr",
   },
-  description: "Log, rate, and share movies with people who matter.",
+  description:
+    "Canisterr is a social movie platform where you discover films through friends, track your taste, share reviews, and find what to watch next.",
   applicationName: "Canisterr",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -57,6 +58,7 @@ export default function RootLayout({
         `}
         </Script>
         <JsonLd data={websiteSchema()} />
+        <JsonLd data={organizationSchema()} />
         <LocalhostServiceWorkerCleanup />
         <CurrentUserProvider>
           <HydrationFix>{children}</HydrationFix>

@@ -1,5 +1,5 @@
-import { get, ref, update } from "firebase/database";
-import { db } from "@/lib/firebase";
+import { get, ref } from "firebase/database";
+import { auth, db } from "@/lib/firebase";
 import { normalizeUsernameKey } from "@/lib/username-utils";
 
 export { getUsernameValidationError, normalizeUsernameKey } from "@/lib/username-utils";
@@ -31,15 +31,25 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
 export async function syncUsernameIndex(userId: string, username: string, previousUsername?: string | null) {
   const nextUsername = normalizeUsernameKey(username);
   if (!nextUsername) return;
-
-  const updates: Record<string, string | null> = {
-    [`usernames/${nextUsername}`]: userId,
-  };
-
-  const previousKey = previousUsername ? normalizeUsernameKey(previousUsername) : "";
-  if (previousKey && previousKey !== nextUsername) {
-    updates[`usernames/${previousKey}`] = null;
+  if (auth.currentUser?.uid !== userId) {
+    return;
   }
 
-  await update(ref(db), updates);
+  const idToken = await auth.currentUser.getIdToken();
+  const response = await fetch("/api/usernames/sync", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      idToken,
+      username: nextUsername,
+      previousUsername: previousUsername ? normalizeUsernameKey(previousUsername) : null,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error || "Username sync failed.");
+  }
 }

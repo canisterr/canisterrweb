@@ -64,9 +64,10 @@ export default function PublicLogPage() {
         const { titleHint, year } = parseMovieSlug(slug);
 
         // Resolve user and movie search in parallel
+        const movieQuery = year ? `${titleHint} ${year}` : titleHint;
         const [user, searchResults] = await Promise.all([
           getUserByUsername(username),
-          searchMovies(titleHint),
+          searchMovies(movieQuery, 1),
         ]);
 
         if (!user) { setError("User not found."); return; }

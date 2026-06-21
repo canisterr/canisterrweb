@@ -70,23 +70,15 @@ function cleanTags(tags: string[]): string[] {
   ).slice(0, 8);
 }
 
-export function getCinePostDisplayBody(post: Pick<CinePostWithDetails, "type" | "body">): string {
-  const body = post.body || "";
-  if (post.type !== "log" || !body) return body;
+const LOG_RATING_LABELS = ["Bad", "Average", "Good", "Masterpiece"] as const;
 
-  const legacyPrefixMatch = body.match(/^Just watched[^\n]*(?:\n\n)?/i);
-  if (!legacyPrefixMatch) return body;
-
-  return body.slice(legacyPrefixMatch[0].length).trimStart();
-}
-
-export function getCinePostLogRatingLabel(
+function extractCinePostLogRatingLabel(
   post: Pick<CinePostWithDetails, "type" | "body" | "tags">
 ): string | null {
   if (post.type !== "log") return null;
 
   const tags = Array.isArray(post.tags) ? post.tags : [];
-  const tagMatch = tags.find((tag) => ["Bad", "Average", "Good", "Masterpiece"].includes(String(tag)));
+  const tagMatch = tags.find((tag) => LOG_RATING_LABELS.includes(String(tag) as (typeof LOG_RATING_LABELS)[number]));
   if (tagMatch) return String(tagMatch);
 
   const bodyMatch = (post.body || "").match(/-\s*(Bad|Average|Good|Masterpiece)\s*$/i);
@@ -96,6 +88,68 @@ export function getCinePostLogRatingLabel(
   }
 
   return null;
+}
+
+export function normalizeCinePostContentId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^\d+$/.test(trimmed)) {
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const match = trimmed.match(/(\d+)\s*$/);
+  if (!match) return null;
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function getCinePostContentId(
+  post: Pick<CinePost, "content_id" | "movie_id">
+): number | null {
+  return normalizeCinePostContentId(post.content_id) ?? normalizeCinePostContentId(post.movie_id);
+}
+
+export function getCinePostContentHref(
+  post: Pick<CinePost, "list_id" | "content_id" | "content_type" | "movie_id">
+): string | null {
+  if (post.list_id && post.content_type === "list") {
+    return `/lists/${post.list_id}`;
+  }
+
+  const contentId = getCinePostContentId(post);
+  if (!contentId || !post.content_type || post.content_type === "list") return null;
+
+  return post.content_type === "tv" ? `/tv/${contentId}` : `/movie/${contentId}`;
+}
+
+export function getCinePostDisplayBody(
+  post: Pick<CinePostWithDetails, "type" | "body" | "tags" | "anchor_label" | "content_title">
+): string {
+  const body = post.body || "";
+  if (post.type !== "log") return body;
+
+  const legacyPrefixMatch = body.match(/^Just watched[^\n]*(?:\n\n)?/i);
+  const cleanedBody = legacyPrefixMatch ? body.slice(legacyPrefixMatch[0].length).trimStart() : body;
+  if (cleanedBody.trim()) return cleanedBody;
+
+  const title = post.content_title || post.anchor_label || "this title";
+  const rating = extractCinePostLogRatingLabel(post);
+  return rating ? `Logged ${title} as ${rating.toLowerCase()}.` : `Logged ${title}.`;
+}
+
+export function getCinePostLogRatingLabel(
+  post: Pick<CinePostWithDetails, "type" | "body" | "tags">
+): string | null {
+  return extractCinePostLogRatingLabel(post);
 }
 
 function reactionLabel(reaction: 0 | 1 | 1.5 | 2 | null | undefined): string {
@@ -310,7 +364,10 @@ export async function createCinePost(input: CreateCinePostInput): Promise<CinePo
   }
 
   if (input.content && !input.listId) {
-    post.content_id = input.content.id;
+    const normalizedContentId = normalizeCinePostContentId(input.content.id);
+    if (normalizedContentId) {
+      post.content_id = normalizedContentId;
+    }
   }
 
   if (input.personId) {
@@ -336,7 +393,10 @@ export async function createCinePost(input: CreateCinePostInput): Promise<CinePo
   post.poster_url = input.posterUrl ?? input.listCoverUrl ?? input.personProfileUrl ?? input.content?.poster_url ?? null;
 
   if (contentType === "movie" && input.content) {
-    post.movie_id = input.content.id;
+    const normalizedMovieId = normalizeCinePostContentId(input.content.id);
+    if (normalizedMovieId) {
+      post.movie_id = normalizedMovieId;
+    }
   }
 
   if (input.logId) {
@@ -355,7 +415,10 @@ export async function createLogCinePost(
 ): Promise<CinePost> {
   const title = content.title || (content as any).name || "this title";
   const rating = reactionLabel(log.reaction);
-  const body = caption?.trim() || "";
+  const trimmedCaption = caption?.trim() || "";
+  const body =
+    trimmedCaption ||
+    (rating !== "Unrated" ? `Logged ${title} as ${rating.toLowerCase()}.` : `Logged ${title}.`);
 
   return createCinePost({
     user,
@@ -575,7 +638,7 @@ export async function getCinePostsForContent(
 ): Promise<CinePostWithDetails[]> {
   const posts = await getCinePosts(currentUserId, 200, { sort: "recent" });
   return posts
-    .filter((post) => post.content_id === contentId && post.content_type === contentType)
+    .filter((post) => getCinePostContentId(post) === contentId && post.content_type === contentType)
     .slice(0, limit);
 }
 
@@ -584,8 +647,9 @@ export async function getRelatedCinePosts(
   currentUserId?: string,
   limit: number = 3
 ): Promise<CinePostWithDetails[]> {
-  if (!post.content_id || !post.content_type || post.content_type === "list") return [];
-  const posts = await getCinePostsForContent(post.content_id, post.content_type, currentUserId, 20);
+  const contentId = getCinePostContentId(post);
+  if (!contentId || !post.content_type || post.content_type === "list") return [];
+  const posts = await getCinePostsForContent(contentId, post.content_type, currentUserId, 20);
   return posts.filter((candidate) => candidate.id !== post.id).slice(0, limit);
 }
 
@@ -632,11 +696,15 @@ export async function setCinePostEngagement(
 ): Promise<void> {
   const engagementId = `${user.id}_${type}`;
   const engagementRef = ref(db, `engagement/${post.id}/${engagementId}`);
+  const existingEngagementSnapshot = await get(engagementRef);
 
   if (!enabled) {
+    if (!existingEngagementSnapshot.exists()) return;
     await remove(engagementRef);
     return;
   }
+
+  if (existingEngagementSnapshot.exists()) return;
 
   await set(engagementRef, {
     id: engagementId,

@@ -10,6 +10,7 @@ import { hasUserLoggedContent } from '@/lib/logs';
 import { createShareReply, getShareReplies } from '@/lib/share-replies';
 import { MessageCircle, SendHorizontal } from "lucide-react";
 import { reportAppError } from "@/lib/report-error";
+import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
 
 interface ShareModalProps {
   share: ShareWithDetails | null;
@@ -124,7 +125,23 @@ export default function ShareModal({
       console.error('Movie ID not found');
       return;
     }
-    const contentLink = share.content_type === 'tv' ? `/tv/${movieId}` : `/movie/${movieId}`;
+    const contentLink = share.content_type === 'tv'
+      ? buildTvPath({
+          id: movieId,
+          title: movie.title || movie.name || "Untitled",
+          name: movie.title || movie.name || "Untitled",
+          premiered: movie.premiered || movie.release_date || undefined,
+          release_date: movie.release_date || undefined,
+          language: movie.language || undefined,
+          network: movie.network || undefined,
+        })
+      : buildMoviePath({
+          id: movieId,
+          title: movie.title || "Untitled",
+          director: movie.director || null,
+          release_date: movie.release_date || null,
+          language: movie.language || undefined,
+        });
     router.push(contentLink);
   };
 

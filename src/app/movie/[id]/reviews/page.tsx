@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, get } from "firebase/database";
@@ -10,10 +10,10 @@ import PageLayout from "@/components/PageLayout";
 import CinematicLoading from "@/components/CinematicLoading";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getMovieDetails } from "@/lib/tmdb";
 import { getMovieReviewFeed } from "@/lib/movie-reviews";
 import { Movie, MovieReviewWithUser, User } from "@/types";
 import { getLogLikes, likeLog, unlikeLog } from "@/lib/log-likes";
+import { resolveMovieRouteParam } from "@/lib/content-slugs";
 
 type ScopeFilter = "all" | "friends";
 type SortFilter = "recent" | "oldest" | "rating";
@@ -56,10 +56,15 @@ function getReviewLogId(reviewId: string): string | null {
 export default function MovieReviewsPage() {
   const router = useRouter();
   const params = useParams();
-  const movieId = Number(params.id);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const movieRouteParam = Array.isArray(params.id) ? params.id[0] : String(params.id || "");
+  const searchParamsString = searchParams.toString();
+  const currentUrl = searchParamsString ? `${pathname}?${searchParamsString}` : pathname;
 
   const [user, setUser] = useState<User | null>(null);
   const [movie, setMovie] = useState<Movie | null>(null);
+  const [moviePath, setMoviePath] = useState<string | null>(null);
   const [reviews, setReviews] = useState<MovieReviewWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
@@ -74,7 +79,8 @@ export default function MovieReviewsPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        router.push("/auth/login");
+        setUser(null);
+        setFriendIds([]);
         return;
       }
 
@@ -110,28 +116,64 @@ export default function MovieReviewsPage() {
           setFriendIds([]);
         }
 
-        if (!Number.isNaN(movieId)) {
-          const [movieDetails, reviewFeed] = await Promise.all([
-            getMovieDetails(movieId),
-            getMovieReviewFeed(movieId, "movie"),
-          ]);
+      } catch (error) {
+        console.error("Error loading review auth state:", error);
+      }
+    });
 
-          if (movieDetails) {
-            setMovie({ ...movieDetails, created_at: new Date().toISOString() } as Movie);
-          }
+    return () => unsubscribe();
+  }, []);
 
-          setReviews(reviewFeed);
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMovieReviewsPage = async () => {
+      try {
+        setLoading(true);
+        const resolved = await resolveMovieRouteParam(movieRouteParam);
+
+        if (cancelled) return;
+
+        if (!resolved) {
+          setMovie(null);
+          setMoviePath(null);
+          setReviews([]);
+          setLoading(false);
+          return;
+        }
+
+        const [reviewFeed] = await Promise.all([
+          getMovieReviewFeed(resolved.movie.id, "movie"),
+        ]);
+
+        if (cancelled) return;
+
+        setMovie({ ...resolved.movie, created_at: new Date().toISOString() } as Movie);
+        setMoviePath(resolved.canonicalPath);
+        setReviews(reviewFeed);
+
+        if (pathname !== `${resolved.canonicalPath}/reviews`) {
+          const nextUrl = searchParamsString
+            ? `${resolved.canonicalPath}/reviews?${searchParamsString}`
+            : `${resolved.canonicalPath}/reviews`;
+          router.replace(nextUrl);
         }
 
         setLoading(false);
       } catch (error) {
         console.error("Error loading movie reviews page:", error);
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    });
+    };
 
-    return () => unsubscribe();
-  }, [movieId, router]);
+    void loadMovieReviewsPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [movieRouteParam, pathname, router, searchParamsString]);
 
   const handleSignOut = async () => {
     try {
@@ -217,7 +259,10 @@ export default function MovieReviewsPage() {
   }, [reviews, user]);
 
   const handleToggleReviewLike = async (review: MovieReviewWithUser) => {
-    if (!user) return;
+    if (!user) {
+      router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`);
+      return;
+    }
     const logId = getReviewLogId(review.id);
     if (!logId) return;
 
@@ -261,7 +306,7 @@ export default function MovieReviewsPage() {
     }
   };
 
-  if (loading || !user) {
+  if (loading) {
     return <CinematicLoading message="Movie reviews are loading" />;
   }
 
@@ -278,7 +323,7 @@ export default function MovieReviewsPage() {
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="mb-6 flex items-center justify-between gap-4">
             <Link
-              href={`/movie/${movieId}`}
+              href={moviePath || "/all-movies"}
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />

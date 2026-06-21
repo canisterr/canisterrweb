@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { ArrowLeft, PlayCircle, Star } from "lucide-react";
@@ -11,9 +11,10 @@ import CinematicLoading from "@/components/CinematicLoading";
 import LogMovieModal from "@/components/LogMovieModal";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getShowDetails, type ShowDetails } from "@/lib/tvmaze";
+import { type ShowDetails } from "@/lib/tvmaze";
 import { getSeasonEpisodes, getShowSeasons, type TVMazeEpisode, type TVMazeSeason } from "@/lib/tvmaze-seasons";
 import type { Content, User } from "@/types";
+import { resolveTvRouteParam } from "@/lib/content-slugs";
 
 function formatYear(dateStr?: string): string {
   if (!dateStr) return "";
@@ -28,11 +29,16 @@ function getEpisodeLabel(episode: TVMazeEpisode): string {
 export default function TvSeasonPage() {
   const router = useRouter();
   const params = useParams();
-  const showId = params.id as string;
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const showRouteParam = Array.isArray(params.id) ? params.id[0] : String(params.id || "");
   const seasonParam = params.season as string;
+  const searchParamsString = searchParams.toString();
+  const currentUrl = searchParamsString ? `${pathname}?${searchParamsString}` : pathname;
 
   const [user, setUser] = useState<User | null>(null);
   const [show, setShow] = useState<ShowDetails | null>(null);
+  const [showPath, setShowPath] = useState<string | null>(null);
   const [seasons, setSeasons] = useState<TVMazeSeason[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<TVMazeSeason | null>(null);
   const [episodes, setEpisodes] = useState<TVMazeEpisode[]>([]);
@@ -43,7 +49,7 @@ export default function TvSeasonPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        router.push("/auth/login");
+        setUser(null);
         return;
       }
 
@@ -59,33 +65,67 @@ export default function TvSeasonPage() {
         };
 
         setUser(currentUser);
-
-        const numericShowId = Number(showId);
-        if (!numericShowId || Number.isNaN(numericShowId)) {
-          setLoading(false);
-          return;
-        }
-
-        const [showDetails, seasonList] = await Promise.all([
-          getShowDetails(numericShowId),
-          getShowSeasons(numericShowId),
-        ]);
-
-        const numericSeason = Number(seasonParam);
-        const matchingSeason = seasonList.find((season) => season.number === numericSeason) || seasonList[0] || null;
-
-        setShow(showDetails);
-        setSeasons(seasonList);
-        setSelectedSeason(matchingSeason);
-        setLoading(false);
       } catch (error) {
-        console.error("Error loading TV season page:", error);
-        setLoading(false);
+        console.error("Error loading season page auth state:", error);
       }
     });
 
     return () => unsubscribe();
-  }, [router, seasonParam, showId]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSeasonPage = async () => {
+      try {
+        setLoading(true);
+        const resolved = await resolveTvRouteParam(showRouteParam);
+
+        if (cancelled) return;
+
+        if (!resolved) {
+          setShow(null);
+          setShowPath(null);
+          setSeasons([]);
+          setSelectedSeason(null);
+          setLoading(false);
+          return;
+        }
+
+        const seasonList = await getShowSeasons(resolved.show.id);
+        const numericSeason = Number(seasonParam);
+        const matchingSeason = seasonList.find((season) => season.number === numericSeason) || seasonList[0] || null;
+
+        if (cancelled) return;
+
+        setShow(resolved.show);
+        setShowPath(resolved.canonicalPath);
+        setSeasons(seasonList);
+        setSelectedSeason(matchingSeason);
+
+        const expectedPath = `${resolved.canonicalPath}/seasons/${matchingSeason?.number || seasonParam}`;
+        if (pathname !== expectedPath) {
+          const nextUrl = searchParamsString
+            ? `${expectedPath}?${searchParamsString}`
+            : expectedPath;
+          router.replace(nextUrl);
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading TV season page:", error);
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadSeasonPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router, seasonParam, searchParamsString, showRouteParam]);
 
   useEffect(() => {
     if (!selectedSeason) {
@@ -125,12 +165,21 @@ export default function TvSeasonPage() {
     router.push("/auth/login");
   };
 
+  const handleOpenSeasonLog = () => {
+    if (!user) {
+      router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`);
+      return;
+    }
+
+    setShowLogMovieModal(true);
+  };
+
   const seasonContent = useMemo<Content | null>(() => {
     if (!show) return null;
     return show as unknown as Content;
   }, [show]);
 
-  if (loading || !user) {
+  if (loading) {
     return <CinematicLoading message="Loading season page" />;
   }
 
@@ -139,14 +188,14 @@ export default function TvSeasonPage() {
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-5 flex flex-wrap items-center gap-3">
           <Link
-            href={`/tv/${showId}/seasons`}
+            href={showPath ? `${showPath}/seasons` : "/dashboard"}
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#111111] px-4 py-2 text-sm font-bold text-[#f5f0de] transition hover:border-[#ff7a1a]/30 hover:text-[#ffb36b]"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to seasons
           </Link>
           <Link
-            href={`/tv/${showId}`}
+            href={showPath || "/dashboard"}
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#111111] px-4 py-2 text-sm font-bold text-[#f5f0de] transition hover:border-[#ff7a1a]/30 hover:text-[#ffb36b]"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -196,7 +245,7 @@ export default function TvSeasonPage() {
               <div className="mt-5 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowLogMovieModal(true)}
+                  onClick={handleOpenSeasonLog}
                   className="inline-flex items-center gap-2 rounded-full bg-[#ff7a1a] px-4 py-2 text-sm font-black text-black transition hover:bg-[#ff8d3b]"
                 >
                   <Star className="h-4 w-4" />
