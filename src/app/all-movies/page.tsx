@@ -189,8 +189,8 @@ export default function AllMoviesPage() {
 
     const combined =
       activityFilter === "shared"
-        ? [...sharedActivities, ...loggedActivities]
-        : [...loggedActivities, ...sharedActivities];
+        ? sharedActivities
+        : loggedActivities;
 
     return combined
       .filter((item) => !query || item.searchText.includes(query))

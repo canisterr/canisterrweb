@@ -127,6 +127,45 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
+function normalizeShowSearchQuery(query: string): string {
+  const normalized = normalizeSearchText(query);
+  const yearMatch = normalized.match(/\b(19|20)\d{2}$/);
+  const yearSuffix = yearMatch?.[0] || "";
+  const normalizedTitle = yearSuffix
+    ? normalized.slice(0, normalized.lastIndexOf(yearSuffix)).trim()
+    : normalized;
+  const compact = normalizedTitle.replace(/\s+/g, "");
+  const brooklynSuffix = compact.match(/(99|nine9|ninenine)$/)?.[0] || "";
+  const brooklynTitle = brooklynSuffix ? compact.slice(0, -brooklynSuffix.length) : "";
+
+  if (
+    compact === "b99" ||
+    /^bro?oklyn(99|nine9|ninenine)$/.test(compact) ||
+    /^bro?oklyn\s+(99|nine\s*9|nine\s*nine)$/.test(normalizedTitle) ||
+    (Boolean(brooklynSuffix) && brooklynTitle.startsWith("br") && getEditDistance(brooklynTitle, "brooklyn") <= 4)
+  ) {
+    return yearSuffix ? `Brooklyn Nine-Nine ${yearSuffix}` : "Brooklyn Nine-Nine";
+  }
+
+  return query.trim();
+}
+
+function getEditDistance(left: string, right: string): number {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j += 1) {
+      current[j] = left[i - 1] === right[j - 1]
+        ? previous[j - 1]
+        : Math.min(previous[j - 1], previous[j], current[j - 1]) + 1;
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[right.length];
+}
+
 function getShowSearchCacheKey(query: string): string {
   return `tv-search:${normalizeSearchText(query)}`;
 }
@@ -146,7 +185,7 @@ function dedupeShows(shows: ShowDetails[]): ShowDetails[] {
 }
 
 function rankShows(shows: ShowDetails[], query: string): ShowDetails[] {
-  const normalizedQuery = normalizeSearchText(query);
+  const normalizedQuery = normalizeSearchText(normalizeShowSearchQuery(query));
   if (!normalizedQuery) return shows;
 
   return [...shows].sort((a, b) => {
@@ -347,7 +386,7 @@ export async function getSuggestedShowsByGenres(genres: string[], limit: number 
 
 export async function searchShows(query: string): Promise<ShowDetails[]> {
   try {
-    const trimmedQuery = query.trim();
+    const trimmedQuery = normalizeShowSearchQuery(query);
     if (!trimmedQuery) return [];
 
     const cacheKey = getShowSearchCacheKey(trimmedQuery);

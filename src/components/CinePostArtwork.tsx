@@ -44,7 +44,7 @@ export default function CinePostArtwork({
             ))}
         </div>
       ) : fallbackSrc ? (
-        <img src={fallbackSrc} alt={alt} className={`absolute inset-0 h-full w-full object-cover ${mediaClassName}`} />
+        <img src={fallbackSrc} alt={alt} className={`absolute inset-0 h-full w-full object-contain ${mediaClassName}`} />
       ) : (
         <div className={isBrutalist ? "h-full w-full bg-[#1a1a1a]" : "h-full w-full bg-slate-100"} />
       )}

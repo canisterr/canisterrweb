@@ -843,11 +843,8 @@ export default function DashboardPage() {
                               {item.byline}
                             </p>
                             <div className="mt-1.5 flex items-center justify-between gap-1 sm:mt-2.5 sm:gap-2">
-                              <span className="flex min-w-0 items-center gap-1 text-[7px] font-bold uppercase text-[#ff7a1a] sm:gap-1.5 sm:text-[10px]">
-                                <span className="relative flex h-3 w-3 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-[#25282d] text-[6px] text-[#f5f0de] sm:h-4 sm:w-4 sm:text-[7px]">
-                                  {item.avatarUrl ? <img src={item.avatarUrl} alt="" className="h-full w-full object-cover" /> : item.avatarLabel.charAt(0).toUpperCase()}
-                                </span>
-                                <span className="truncate">{item.kind === "shared" ? "shared" : item.reaction}</span>
+                              <span className="truncate text-[7px] font-bold uppercase text-[#ff7a1a] sm:text-[10px]">
+                                {item.kind === "shared" ? "shared" : item.reaction}
                               </span>
                               {item.kind === "shared" && item.note ? (
                                 <span

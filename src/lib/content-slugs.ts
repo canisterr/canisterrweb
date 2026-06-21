@@ -99,11 +99,54 @@ function getSlugDisambiguator(slug: string): string | null {
   return disambiguator ? slugifyContentLabel(disambiguator) : null;
 }
 
+function normalizeTvTitleHint(titleHint: string): string {
+  const normalized = normalizeToken(titleHint);
+  const compact = normalized.replace(/\s+/g, "");
+  const brooklynSuffix = compact.match(/(99|nine9|ninenine)$/)?.[0] || "";
+  const brooklynTitle = brooklynSuffix ? compact.slice(0, -brooklynSuffix.length) : "";
+
+  if (
+    compact === "b99" ||
+    /^bro?oklyn(99|nine9|ninenine)$/.test(compact) ||
+    /^bro?oklyn\s+(99|nine\s*9|nine\s*nine)$/.test(normalized) ||
+    (Boolean(brooklynSuffix) && brooklynTitle.startsWith("br") && getEditDistance(brooklynTitle, "brooklyn") <= 4)
+  ) {
+    return "brooklyn nine nine";
+  }
+
+  return normalized;
+}
+
+function getTvSearchAliases(titleHint: string): string[] {
+  const normalizedHint = normalizeTvTitleHint(titleHint);
+  if (normalizedHint === "brooklyn nine nine") {
+    return [titleHint, "Brooklyn Nine-Nine", "Brooklyn Nine Nine"];
+  }
+
+  return [titleHint];
+}
+
+function getEditDistance(left: string, right: string): number {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j += 1) {
+      current[j] = left[i - 1] === right[j - 1]
+        ? previous[j - 1]
+        : Math.min(previous[j - 1], previous[j], current[j - 1]) + 1;
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[right.length];
+}
+
 function getMovieDisambiguator(movie: SlugMovie): string {
   return slugifyContentLabel(movie.director || "") || DEFAULT_MOVIE_DISAMBIGUATOR;
 }
 
-function getTvDisambiguator(show: SlugShow): string {
+function getTvDisambiguator(show: SlugShow): string | null {
   const creator =
     show.crew_details?.find((person) => {
       const job = normalizeToken(person.job || "");
@@ -112,8 +155,8 @@ function getTvDisambiguator(show: SlugShow): string {
   const networkName =
     typeof show.network === "string"
       ? show.network
-      : show.network?.name || show.language || "";
-  return slugifyContentLabel(creator || networkName) || DEFAULT_TV_DISAMBIGUATOR;
+      : show.network?.name || "";
+  return slugifyContentLabel(creator || networkName) || null;
 }
 
 function filterMoviesWithSameTitle(movie: SlugMovie, candidates: SlugMovie[]): SlugMovie[] {
@@ -157,11 +200,18 @@ export function buildTvSlug(show: SlugShow, candidates: SlugShow[] = [show]): st
   const language = getLanguageShortForm(show.language);
   const baseSlug = `${slugifyContentLabel(show.title || show.name || "") || "tv-show"}${year ? `-${year}` : ""}`;
   const disambiguator = getTvDisambiguator(show);
-  const slugCore = `${baseSlug}${SLUG_SEPARATOR}${disambiguator}${language ? `${SLUG_SEPARATOR}${language}` : ""}`;
+  const slugParts = [baseSlug];
+  if (disambiguator) {
+    slugParts.push(disambiguator);
+  }
+  if (language && language !== disambiguator) {
+    slugParts.push(language);
+  }
+  const slugCore = slugParts.join(SLUG_SEPARATOR);
   const sameSlugCoreShows = filterShowsWithSameTitle(show, candidates).filter(
     (candidate) =>
       getYearFromDate(candidate.premiered || candidate.release_date) === year &&
-      getTvDisambiguator(candidate) === disambiguator &&
+      (getTvDisambiguator(candidate) || "") === (disambiguator || "") &&
       getLanguageShortForm(candidate.language) === language
   );
 
@@ -204,15 +254,19 @@ async function loadMovieSlugCandidates(titleHint: string, year: string | null) {
 }
 
 async function loadTvSlugCandidates(titleHint: string, year: string | null) {
-  const yearQuery = year ? `${titleHint} ${year}` : titleHint;
-  const primaryResults = await searchShows(yearQuery);
-  const fallbackResults = year ? await searchShows(titleHint) : [];
-  const searchResults = [...primaryResults, ...fallbackResults];
-  const normalizedHint = normalizeToken(titleHint);
+  const normalizedHint = normalizeTvTitleHint(titleHint);
+  const searchQueries = Array.from(
+    new Set(
+      getTvSearchAliases(titleHint).flatMap((alias) =>
+        year ? [`${alias} ${year}`, alias] : [alias]
+      )
+    )
+  );
+  const searchResults = (await Promise.all(searchQueries.map((query) => searchShows(query)))).flat();
   const matchingIds = Array.from(
     new Set(
       searchResults
-        .filter((result) => normalizeToken(result.title || result.name || "") === normalizedHint)
+        .filter((result) => normalizeTvTitleHint(result.title || result.name || "") === normalizedHint)
         .slice(0, 8)
         .map((result) => result.id)
     )
@@ -301,14 +355,7 @@ export async function resolveTvRouteParam(param: string): Promise<ResolvedTvRout
         year &&
         getYearFromDate(candidate.premiered || candidate.release_date) === year &&
         requestedDisambiguator &&
-        requestedDisambiguator !== DEFAULT_TV_DISAMBIGUATOR &&
         getTvDisambiguator(candidate) === requestedDisambiguator
-    ) ||
-    candidates.find(
-      (candidate) =>
-        year &&
-        getYearFromDate(candidate.premiered || candidate.release_date) === year &&
-        requestedDisambiguator === DEFAULT_TV_DISAMBIGUATOR
     ) ||
     candidates.find(
       (candidate) =>

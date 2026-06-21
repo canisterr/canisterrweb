@@ -967,7 +967,7 @@ export default function CinePostsFeed({
         collageImages={post.list_cover_images}
         alt={post.content_title || post.anchor_label}
         className="h-full w-full"
-        mediaClassName="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+        mediaClassName="transition duration-300 group-hover:scale-105"
         theme="brutalist"
       />
     );
@@ -976,7 +976,7 @@ export default function CinePostsFeed({
       <article
         key={post.id}
         data-feed-post-id={post.id}
-        className="grid min-h-[12.5rem] grid-cols-[6.25rem_minmax(0,1fr)] overflow-hidden border border-white/10 bg-[#080a0d] text-[#f5f0de] shadow-[0_12px_32px_rgba(0,0,0,0.18)] sm:min-h-[13.5rem] sm:grid-cols-[8.25rem_minmax(0,1fr)]"
+        className="grid min-h-[12.5rem] grid-cols-[8.35rem_minmax(0,1fr)] overflow-hidden border border-white/10 bg-[#080a0d] text-[#f5f0de] shadow-[0_12px_32px_rgba(0,0,0,0.18)] sm:min-h-[13.5rem] sm:grid-cols-[9rem_minmax(0,1fr)]"
       >
         {contentHref ? (
           <Link
