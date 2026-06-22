@@ -13,7 +13,7 @@ import { baseMetadata, organizationSchema, websiteSchema } from "@/lib/seo";
 
 export const metadata: Metadata = baseMetadata({
   title: {
-    default: "Canisterr",
+    default: "Canisterr - Your Cinema Identity",
     template: "%s | Canisterr",
   },
   description:

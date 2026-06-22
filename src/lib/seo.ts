@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 export const BASE_URL = "https://canisterr.com";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
 const DEFAULT_OG_IMAGE = `${BASE_URL}/logo.png`;
+const DEFAULT_SITE_TITLE = "Canisterr - Your Cinema Identity";
 const DEFAULT_SITE_DESCRIPTION =
   "Canisterr is a social movie platform where you discover films through friends, track your taste, share reviews, and find what to watch next.";
 
@@ -61,7 +62,7 @@ export function baseMetadata(overrides: Partial<Metadata> = {}): Metadata {
   return {
     metadataBase: new URL(BASE_URL),
     title: {
-      default: "Canisterr",
+      default: DEFAULT_SITE_TITLE,
       template: "%s | Canisterr",
     },
     description: DEFAULT_SITE_DESCRIPTION,
@@ -83,7 +84,7 @@ export function baseMetadata(overrides: Partial<Metadata> = {}): Metadata {
       siteName: "Canisterr",
       locale: "en_US",
       type: "website",
-      title: "Canisterr",
+      title: DEFAULT_SITE_TITLE,
       description: DEFAULT_SITE_DESCRIPTION,
       url: BASE_URL,
       images: [{ url: DEFAULT_OG_IMAGE, width: 512, height: 512, alt: "Canisterr" }],
@@ -91,7 +92,7 @@ export function baseMetadata(overrides: Partial<Metadata> = {}): Metadata {
     twitter: {
       card: "summary_large_image",
       site: "@canisterr",
-      title: "Canisterr",
+      title: DEFAULT_SITE_TITLE,
       description: DEFAULT_SITE_DESCRIPTION,
       images: [DEFAULT_OG_IMAGE],
     },
