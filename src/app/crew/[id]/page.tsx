@@ -21,6 +21,16 @@ const getCrewPageData = cache(async (routeParam: string) => {
   return { parsed, profile };
 });
 
+const getSafeCrewPageData = cache(async (routeParam: string) => {
+  try {
+    const data = await getCrewPageData(routeParam);
+    return { ...data, failed: false as const };
+  } catch (error) {
+    console.error("Crew page failed:", error);
+    return { parsed: null, profile: null, failed: true as const };
+  }
+});
+
 function CrewStateCard({
   title,
   description,
@@ -58,46 +68,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CrewPage({ params }: Props) {
   const { id } = await params;
 
-  try {
-    const { parsed, profile } = await getCrewPageData(id);
+  const { parsed, profile, failed } = await getSafeCrewPageData(id);
 
-    if (!parsed) {
-      return (
-        <CrewStateCard
-          title="Invalid crew link"
-          description="This career page URL is incomplete. Try opening the person again from search."
-        />
-      );
-    }
-
-    if (!profile) {
-      return (
-        <CrewStateCard
-          title="Crew member not found"
-          description="We could not find this person on TMDB right now. Try another search result or check back in a moment."
-        />
-      );
-    }
-
-    const canonicalPath = buildCrewPath({ id: profile.id, name: profile.name });
-    if (`/crew/${id}` !== canonicalPath) {
-      redirect(canonicalPath);
-    }
-
-    return (
-      <>
-        <JsonLd data={crewPersonSchema(profile)} />
-        <JsonLd
-          data={breadcrumbSchema([
-            { name: "Home", url: BASE_URL },
-            { name: profile.name, url: `${BASE_URL}${canonicalPath}` },
-          ])}
-        />
-        <CrewPageClient profile={profile} />
-      </>
-    );
-  } catch (error) {
-    console.error("Crew page failed:", error);
+  if (failed) {
     return (
       <CrewStateCard
         title="Career timeline unavailable"
@@ -105,4 +78,40 @@ export default async function CrewPage({ params }: Props) {
       />
     );
   }
+
+  if (!parsed) {
+    return (
+      <CrewStateCard
+        title="Invalid crew link"
+        description="This career page URL is incomplete. Try opening the person again from search."
+      />
+    );
+  }
+
+  if (!profile) {
+    return (
+      <CrewStateCard
+        title="Crew member not found"
+        description="We could not find this person on TMDB right now. Try another search result or check back in a moment."
+      />
+    );
+  }
+
+  const canonicalPath = buildCrewPath({ id: profile.id, name: profile.name });
+  if (`/crew/${id}` !== canonicalPath) {
+    redirect(canonicalPath);
+  }
+
+  return (
+    <>
+      <JsonLd data={crewPersonSchema(profile)} />
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: "Home", url: BASE_URL },
+          { name: profile.name, url: `${BASE_URL}${canonicalPath}` },
+        ])}
+      />
+      <CrewPageClient profile={profile} />
+    </>
+  );
 }

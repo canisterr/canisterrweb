@@ -322,14 +322,14 @@ export default function LogMovieModal({
       setContainsSpoiler(Boolean(existingLog.contains_spoiler));
       setTicketImageUrl(existingLog.ticket_image_url || null);
 
-      const existingContext = existingLog.context_log || {};
+      const existingContext = (existingLog.context_log || {}) as Record<string, unknown>;
       setShowContextLog(false);
-      setLocation(existingContext.location || "");
-      setWatchedWith(existingContext.watched_with || "");
-      setMood(existingLog.mood || existingContext.mood || "");
-      setContextTags(existingContext.tags || "");
-      setContextNotes(existingContext.notes || "");
-      const rewatchValue = (existingContext as Record<string, unknown>).rewatch;
+      setLocation(typeof existingContext.location === "string" ? existingContext.location : "");
+      setWatchedWith(typeof existingContext.watched_with === "string" ? existingContext.watched_with : "");
+      setMood(existingLog.mood || (typeof existingContext.mood === "string" ? existingContext.mood : ""));
+      setContextTags(typeof existingContext.tags === "string" ? existingContext.tags : "");
+      setContextNotes(typeof existingContext.notes === "string" ? existingContext.notes : "");
+      const rewatchValue = existingContext.rewatch;
       setIsRewatch(rewatchValue === "true" || rewatchValue === true);
       setShareToFriends(false);
       setShareAsPost(false);
@@ -949,6 +949,4 @@ export default function LogMovieModal({
       </form>
     </div>
   );
-}
-
 }

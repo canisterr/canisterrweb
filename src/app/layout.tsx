@@ -9,8 +9,7 @@ import LocalhostServiceWorkerCleanup from "@/components/LocalhostServiceWorkerCl
 import MobileInstallPrompt from "@/components/MobileInstallPrompt";
 import PwaBottomNav from "@/components/PwaBottomNav";
 import JsonLd from "@/components/JsonLd";
-import { websiteSchema } from "@/lib/seo";
-import { baseMetadata } from "@/lib/seo";
+import { baseMetadata, organizationSchema, websiteSchema } from "@/lib/seo";
 
 export const metadata: Metadata = baseMetadata({
   title: {

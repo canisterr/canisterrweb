@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle, Sparkles, X } from "lucide-react";
 import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import CinePostArtwork from "@/components/CinePostArtwork";
+import SpoilerText from "@/components/SpoilerText";
 import { CinePostEngagementType, CinePostWithDetails, Content, TMDBMovie, User } from "@/types";
 import {
   getCinePostContentHref,
@@ -54,9 +55,6 @@ function getAuthorUsername(user: User): string | null {
   return user.username ? `@${user.username}` : null;
 }
 
-function getAuthorUsername(user: User, currentUser: User | null): string | null {
-  return getDisplayUserHandle(user, currentUser);
-}
 function Avatar({
   user,
   size = "h-9 w-9",
@@ -1281,7 +1279,7 @@ export default function CinePostsFeed({
               </div>
             </div>
           ) : (
-            <>
+            <div>
               <div className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-3 p-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-5 sm:p-5">
                 {contentHref ? (
                   <Link
@@ -1420,13 +1418,15 @@ export default function CinePostsFeed({
                     : isBrutalist
                     ? "text-white/65 hover:text-[#ffb36b]"
                     : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                }`}
+                  }`}
                 aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
               >
                 <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-blue-500") : ""}`} />
               </button>
             </div>
           </div>
+            </div>
+          )}
         </article>
 
         {withDiscoveryRails && index === 1 && renderPopularSection()}

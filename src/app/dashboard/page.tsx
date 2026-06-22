@@ -55,6 +55,10 @@ function isCrewSearchResult(result: GlobalSearchResult): result is SearchCrewRes
   return "resultType" in result && result.resultType === "crew";
 }
 
+function isContentSearchResult(result: GlobalSearchResult): result is Content {
+  return !isCrewSearchResult(result);
+}
+
 function normalizeSearchText(value: string): string {
   return value
     .toLowerCase()
@@ -681,9 +685,9 @@ export default function DashboardPage() {
                 {/* List Results */}
                 <div className="space-y-1">
                   {searchResults
-                    .filter((result) => {
+                    .filter((result): result is Content => {
+                      if (!isContentSearchResult(result)) return false;
                       if (searchFilter === "all") return true;
-                      if (isCrewSearchResult(result)) return searchFilter === "crew";
                       if (searchFilter === "movie") return result.type === "movie";
                       if (searchFilter === "tv") return result.type === "tv";
                       return false;
@@ -738,6 +742,13 @@ export default function DashboardPage() {
                         </Link>
                       )
                     )}
+
+                  {(searchFilter === "all" || searchFilter === "crew") &&
+                    searchResults
+                      .filter((result): result is SearchCrewResult => isCrewSearchResult(result))
+                      .map((result) => (
+                        <CrewSearchCard key={`crew-${result.id}`} person={result} />
+                      ))}
 
                   {(searchFilter === "all" || searchFilter === "accounts") && accountResults.map((account) => (
                     <Link key={`account-${account.username}`} href={`/profile/${account.username}`}>

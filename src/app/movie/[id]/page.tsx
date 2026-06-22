@@ -19,6 +19,7 @@ import { getLogsForContent } from "@/lib/logs";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
+import { buildCrewPath } from "@/lib/crew";
 import { resolveMovieRouteParam } from "@/lib/content-slugs";
 import {
   ArrowLeft,
@@ -326,7 +327,12 @@ export default function MoviePage() {
 
   useEffect(() => {
     if (!movie) return;
-    void loadMovieLogData(movie.id, user?.id || "__guest__", movie);
+
+    const timer = window.setTimeout(() => {
+      void loadMovieLogData(movie.id, user?.id || "__guest__", movie);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [movie, user?.id]);
 
   useEffect(() => {

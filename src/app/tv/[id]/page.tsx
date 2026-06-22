@@ -20,6 +20,7 @@ import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
 import { signOut as authSignOut } from "@/lib/auth";
 import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
+import { buildCrewPath } from "@/lib/crew";
 import { resolveTvRouteParam } from "@/lib/content-slugs";
 import { User, Content, MovieReviewWithUser, MovieLog, MovieLogWithContent } from "@/types";
 
@@ -289,7 +290,12 @@ export default function TVShowPage() {
 
   useEffect(() => {
     if (!show) return;
-    void loadShowLogData(show.id, user?.id || "__guest__", show);
+
+    const timer = window.setTimeout(() => {
+      void loadShowLogData(show.id, user?.id || "__guest__", show);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [show, user?.id]);
 
   const handleSignOut = async () => {

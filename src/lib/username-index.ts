@@ -1,6 +1,16 @@
-import { get, ref, update } from "firebase/database";
-import { db } from "@/lib/firebase";
+import { get, ref } from "firebase/database";
+import { auth, db } from "@/lib/firebase";
+import {
+  getUsernameValidationError,
+  normalizeUsernameKey,
+} from "@/lib/username-utils";
+
 export { getUsernameValidationError, normalizeUsernameKey } from "@/lib/username-utils";
+
+function isPermissionDeniedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /permission/i.test(message) && /denied/i.test(message);
+}
 
 export function getUsernameIndexRef(username: string) {
   return ref(db, `usernames/${normalizeUsernameKey(username)}`);

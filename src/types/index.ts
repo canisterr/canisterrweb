@@ -274,9 +274,11 @@ export interface MovieLog {
     location?: string; // Where they watched (e.g., "Cinema", "Home")
     watched_with?: string; // Who they watched with (free text, can include @mentions)
     mood?: string; // Mood during watching
+    tags?: string; // Free-form tags for the watch context
+    notes?: string; // Extra viewing context notes
+    rewatch?: string | boolean; // Stored rewatch flag from older and newer payloads
   };
 
-  contains_spoiler?: boolean; // Whether the review contains spoilers
   ticket_image_url?: string | null; // Custom image/ticket uploaded for the log
   imported_from_csv?: boolean; // Marks logs created from a ratings CSV import
 

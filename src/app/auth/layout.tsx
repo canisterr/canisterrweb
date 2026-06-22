@@ -3,29 +3,36 @@
 import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
-export default function AuthLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+function AuthLayoutTransition({ children }: { children: ReactNode }) {
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
-    setEntered(false);
     const raf = requestAnimationFrame(() => setEntered(true));
 
     return () => {
       cancelAnimationFrame(raf);
     };
-  }, [pathname]);
+  }, []);
+
+  return (
+    <div
+      className={`min-h-dvh transition-all duration-500 ease-out ${
+        entered ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export default function AuthLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
 
   return (
     <div className="min-h-dvh bg-[#090909] text-[#f5f0de]">
-      <div
-        key={pathname}
-        className={`min-h-dvh transition-all duration-500 ease-out ${
-          entered ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-        }`}
-      >
+      <AuthLayoutTransition key={pathname}>
         {children}
-      </div>
+      </AuthLayoutTransition>
     </div>
   );
 }
