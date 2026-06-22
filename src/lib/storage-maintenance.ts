@@ -4,7 +4,6 @@ const CACHE_PREFIXES = ["cp_", "tmdb-search:", "tv-search:", "tv-browse:"];
 const CACHE_EXACT_KEYS = ["cineparte.search.recent", "cine_search_history", "canisterr_seen_push_notifications"];
 const CACHE_FALLBACK_PREFIXES = ["cinepost-feed-seen:", "share-recipient-priority:", "notif_seen_"];
 const LAST_RESORT_PREFIXES = ["canisterr_current_user:"];
-const STORAGE_KEYS_TO_PRESERVE = ["firebase:previous_websocket_failure"];
 
 let nativeStorageGetItem: Storage["getItem"] | null = null;
 let nativeStorageSetItem: Storage["setItem"] | null = null;
@@ -91,6 +90,10 @@ function canUseLocalStorage(): boolean {
 
 function hasPrefixMatch(key: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => key.startsWith(prefix));
+}
+
+function isDiscardableQuotaWrite(key: string): boolean {
+  return key.startsWith("firebase:");
 }
 
 function readExpiresAt(raw: string | null): number | null {
@@ -191,7 +194,7 @@ export function ensureLocalStorageHeadroom(options?: { preserveKeys?: string[] }
     return true;
   }
 
-  const preserveKeys = new Set([...(options?.preserveKeys ?? []), ...STORAGE_KEYS_TO_PRESERVE]);
+  const preserveKeys = new Set(options?.preserveKeys ?? []);
 
   clearExpiredCacheEntries(preserveKeys);
   if (tryStorageProbe()) {
@@ -240,7 +243,15 @@ export function installLocalStorageQuotaGuard(): void {
 
       try {
         ensureLocalStorageHeadroom({ preserveKeys: [key] });
-        nativeStorageSetItem!.call(this, key, value);
+        try {
+          nativeStorageSetItem!.call(this, key, value);
+        } catch (retryError) {
+          if (isDiscardableQuotaWrite(key) && isStorageQuotaExceeded(retryError)) {
+            return;
+          }
+
+          throw retryError;
+        }
       } finally {
         quotaRecoveryActive = false;
       }
