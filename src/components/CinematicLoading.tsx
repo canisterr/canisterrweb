@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import LoadingTypewriterText from "@/components/LoadingTypewriterText";
 import { takePendingLoadingTitle } from "@/lib/loading-title";
 
 type CinematicLoadingProps = {
@@ -15,41 +16,75 @@ export default function CinematicLoading({
 }: CinematicLoadingProps) {
   const [loadingTitle] = useState(() => title || takePendingLoadingTitle() || "");
 
-  const displayText = loadingTitle || message;
-
   return (
     <div className="relative flex min-h-dvh w-screen items-center justify-center overflow-hidden px-4 text-slate-50">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,122,26,0.22),_transparent_30%),radial-gradient(circle_at_80%_18%,_rgba(255,173,89,0.14),_transparent_26%),linear-gradient(180deg,_#140c08_0%,_#120b07_54%,_#090504_100%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.06),_transparent_30%,_rgba(255,255,255,0.03)_58%,_transparent_82%)] opacity-70" />
-      <div className="pointer-events-none absolute -left-24 top-20 h-64 w-64 rounded-full bg-[#ff7a1a]/20 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-4 right-0 h-72 w-72 rounded-full bg-[#ff9c4a]/15 blur-3xl" />
+      <div className="pointer-events-none absolute inset-0 bg-[#000000]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,122,26,0.16),_transparent_26%),radial-gradient(circle_at_80%_18%,_rgba(255,173,89,0.08),_transparent_24%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(180deg,rgba(255,255,255,0.015)_0px,rgba(255,255,255,0.015)_1px,transparent_1px,transparent_24px)] opacity-40" />
 
-      <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-        <div className="relative mb-8 flex h-40 w-40 items-center justify-center">
-          <div className="absolute inset-0 rounded-full border border-[#ff7a1a]/20 bg-white/5 shadow-[0_0_80px_rgba(255,122,26,0.2)] backdrop-blur-2xl" />
-          <div className="absolute inset-3 rounded-full border border-white/5 bg-black/20" />
-          <div className="absolute inset-6 rounded-full border border-[#ff7a1a]/30 bg-[#ff7a1a]/10" />
-          <Loader2 className="relative z-10 h-14 w-14 animate-spin text-[#ff7a1a]" strokeWidth={2.4} />
-        </div>
-
-        <div className="w-full rounded-[2rem] border border-white/10 bg-white/[0.08] p-6 text-center shadow-2xl shadow-black/30 backdrop-blur-2xl">
-          <div className="mx-auto flex w-fit items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#ff7a1a]/30 bg-[#ff7a1a]/10 shadow-[0_0_24px_rgba(255,122,26,0.28)]">
-              <div className="h-3.5 w-3.5 rounded-full border-2 border-[#ffb36b] border-t-transparent animate-spin" />
+      <div className="relative z-10 w-full max-w-2xl">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label={message}
+          className="overflow-hidden border border-white/10 bg-[#050505] shadow-[0_32px_100px_rgba(0,0,0,0.65)]"
+        >
+          <div className="border-b border-white/10 bg-[#101010] px-4 py-3 sm:px-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#ff7a1a]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#ffb36b]/70" />
+                <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
+              </div>
+              <p className="text-[10px] uppercase tracking-[0.24em] text-white/38">Movie cassette</p>
             </div>
-            <p className="brand-wordmark text-4xl font-bold tracking-tight text-[#fff2e1] sm:text-5xl">
-              Canisterr
-            </p>
           </div>
 
-          <p className="mt-4 text-base font-semibold text-[#fff2e1]">{message}</p>
-          <p className="mt-2 text-sm text-[#ffcf9d]/80">Buffering your scene with a warm orange glow.</p>
+          <div className="relative px-4 py-5 sm:px-6 sm:py-6">
+            <div className="border border-white/10 bg-[#0b0b0b] p-3 sm:p-4">
+              <div className="rounded-sm border border-[#ff7a1a]/18 bg-[#f1dfbf] px-4 py-3 text-[#111111] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-black/55">Canisterr loading</p>
+                    <LoadingTypewriterText
+                      text={loadingTitle || message}
+                      className="mt-2 block break-words font-mono text-base leading-6 text-black sm:text-xl"
+                    />
+                  </div>
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center border border-black/15 bg-black/5 text-[#a14f00]">
+                    <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.5} />
+                  </div>
+                </div>
+              </div>
 
-          <div className="mx-auto mt-5 h-1.5 w-40 overflow-hidden rounded-full bg-white/10">
-            <div className="cinematic-loading-bar h-full w-1/2 rounded-full bg-gradient-to-r from-[#ff7a1a] via-[#ff9c4a] to-[#ffd08a]" />
+              <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 sm:gap-5">
+                <div className="relative flex aspect-square items-center justify-center rounded-full border border-white/12 bg-[#151515]">
+                  <div className="absolute h-[72%] w-[72%] rounded-full border border-white/10 bg-[#0c0c0c]" />
+                  <div className="absolute h-[36%] w-[36%] rounded-full border border-[#ff7a1a]/25 bg-[#1b1b1b]" />
+                  <div className="absolute h-2.5 w-2.5 rounded-full bg-[#ffb36b]" />
+                </div>
+
+                <div className="flex h-10 w-16 items-center justify-center border-y border-white/10 bg-[#121212] text-[#ff9c4a] sm:h-12 sm:w-20">
+                  <div className="h-2 w-2 rounded-full bg-current shadow-[0_0_12px_rgba(255,156,74,0.35)]" />
+                </div>
+
+                <div className="relative flex aspect-square items-center justify-center rounded-full border border-white/12 bg-[#151515]">
+                  <div className="absolute h-[72%] w-[72%] rounded-full border border-white/10 bg-[#0c0c0c]" />
+                  <div className="absolute h-[36%] w-[36%] rounded-full border border-[#ff7a1a]/25 bg-[#1b1b1b]" />
+                  <div className="absolute h-2.5 w-2.5 rounded-full bg-[#ffb36b]" />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-3">
+                <div className="h-2 flex-1 overflow-hidden bg-white/8">
+                  <div className="cinematic-loading-bar h-full w-1/2 bg-gradient-to-r from-[#ff7a1a] via-[#ff9c4a] to-[#ffd08a]" />
+                </div>
+                <span className="text-[10px] uppercase tracking-[0.18em] text-white/42">Spooling</span>
+              </div>
+
+              <p className="mt-4 text-sm leading-6 text-white/62">{message}</p>
+            </div>
           </div>
-
-          <p className="mt-5 text-[11px] text-white/40">Loading content in the background while the interface settles.</p>
         </div>
       </div>
     </div>
