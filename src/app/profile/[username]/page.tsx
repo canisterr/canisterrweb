@@ -1932,7 +1932,9 @@ function ProfilePageInner() {
                                   </span>
                                 ) : null}
                               </div>
-                              <p className="truncate text-xs text-white/55">{getDisplayUserHandle(listedUser, currentUser)}</p>
+                              {getDisplayUserHandle(listedUser, currentUser) ? (
+                                <p className="truncate text-xs text-white/55">{getDisplayUserHandle(listedUser, currentUser)}</p>
+                              ) : null}
                             </div>
                           </Link>
 

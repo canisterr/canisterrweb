@@ -54,6 +54,10 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
+function normalizeAccountSearchText(value: string): string {
+  return value.trim().replace(/^@/, "").toLowerCase();
+}
+
 function rankSearchResults<T extends { title: string }>(items: T[], query: string): T[] {
   const normalizedQuery = normalizeSearchText(query);
   if (!normalizedQuery) return items;
@@ -327,11 +331,11 @@ export default function DashboardPage() {
         ).slice(0, 20);
         setSearchResults(combined);
 
-        const normalizedQuery = query.trim().toLowerCase();
+        const normalizedQuery = normalizeAccountSearchText(query);
         const usersMatched = Object.values(usersData)
           .filter((entry: any) => {
-            const username = String(entry?.username || "").toLowerCase();
-            const name = String(entry?.name || "").toLowerCase();
+            const username = normalizeAccountSearchText(String(entry?.username || ""));
+            const name = normalizeAccountSearchText(String(entry?.name || ""));
             return username.includes(normalizedQuery) || name.includes(normalizedQuery);
           })
           .slice(0, 20)

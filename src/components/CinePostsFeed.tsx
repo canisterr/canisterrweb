@@ -48,6 +48,13 @@ function profileHref(user: User): string {
   return `/profile/${user.username || user.id}`;
 }
 
+function getAuthorDisplayName(post: CinePostWithDetails, currentUser: User | null): string {
+  return getDisplayUserName(post.user, currentUser);
+}
+
+function getAuthorUsername(user: User, currentUser: User | null): string | null {
+  return getDisplayUserHandle(user, currentUser);
+}
 function Avatar({
   user,
   size = "h-9 w-9",
@@ -168,6 +175,10 @@ function getFeedCountButtonClass(theme: "default" | "brutalist", active = false)
   return `inline-flex h-full min-w-[2.5rem] items-center justify-center px-3 text-xs font-black tabular-nums transition-colors disabled:cursor-default ${
     active ? "text-rose-600" : "text-slate-500 disabled:opacity-45"
   }`;
+}
+
+function sortPostsNewestFirst(posts: CinePostWithDetails[]): CinePostWithDetails[] {
+  return [...posts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 type RailItem = {
@@ -945,8 +956,24 @@ export default function CinePostsFeed({
   };
 
   const priorityFriendPosts = posts.filter((post) => post.feedTier === 0);
-  const mainFeedPosts = posts.filter((post) => post.feedTier !== 0 && (lockedFeedPostIds.has(post.id) || !post.liked_by_current_user));
-  const likedPosts = posts.filter((post) => post.liked_by_current_user && !lockedFeedPostIds.has(post.id) && post.feedTier !== 0);
+  const mainFeedPosts = posts.filter(
+    (post) =>
+      post.feedTier !== 0 &&
+      (post.user_id === currentUser?.id || lockedFeedPostIds.has(post.id) || !post.liked_by_current_user)
+  );
+  const likedPosts = posts.filter(
+    (post) =>
+      post.user_id !== currentUser?.id &&
+      post.liked_by_current_user &&
+      !lockedFeedPostIds.has(post.id) &&
+      post.feedTier !== 0
+  );
+  const ownMainFeedPosts = mainFeedPosts.filter((post) => post.user_id === currentUser?.id);
+  const allVisibleNonPriorityPostsLiked =
+    posts.some((post) => post.feedTier !== 0) &&
+    posts.filter((post) => post.feedTier !== 0).every((post) => post.liked_by_current_user || post.user_id === currentUser?.id);
+  const chronologicalFallbackPosts = allVisibleNonPriorityPostsLiked ? sortPostsNewestFirst(likedPosts) : likedPosts;
+  const chronologicalOwnPosts = allVisibleNonPriorityPostsLiked ? sortPostsNewestFirst(ownMainFeedPosts) : ownMainFeedPosts;
 
   const renderHomePostCard = (post: CinePostWithDetails) => {
     const contentHref = getContentHref(post);
@@ -1417,6 +1444,10 @@ export default function CinePostsFeed({
               <div key={item} className={`h-48 animate-pulse ${isBrutalist ? "bg-white/5" : "rounded-[1.75rem] bg-slate-100"}`} />
             ))}
           </div>
+        ) : allVisibleNonPriorityPostsLiked && chronologicalFallbackPosts.length > 0 ? (
+          <div className={isBrutalist ? "divide-y divide-white/10" : "space-y-4"}>
+            {chronologicalFallbackPosts.map((post, index) => renderPostCard(post, index, false))}
+          </div>
         ) : mainFeedPosts.length === 0 ? (
           <div className={`p-6 text-center ${isBrutalist ? "bg-black" : "rounded-[1.75rem] border border-dashed border-slate-300 bg-white"}`}>
             <Sparkles className={`mx-auto mb-3 h-8 w-8 ${isBrutalist ? "text-[#ff7a1a]" : "text-slate-300"}`} />
@@ -1429,7 +1460,20 @@ export default function CinePostsFeed({
           </div>
         )}
 
-        {likedPosts.length > 0 && (
+        {allVisibleNonPriorityPostsLiked && chronologicalOwnPosts.length > 0 ? (
+          <section className="space-y-3 pt-2">
+            <div>
+              <h2 className={`text-[11px] uppercase tracking-[0.3em] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+                Your Posts
+              </h2>
+            </div>
+            <div className={isBrutalist ? "divide-y divide-white/10" : "space-y-4"}>
+              {chronologicalOwnPosts.map((post, index) => renderPostCard(post, index, false))}
+            </div>
+          </section>
+        ) : null}
+
+        {!allVisibleNonPriorityPostsLiked && likedPosts.length > 0 && (
           <section className="space-y-3 pt-2">
             <div>
               <h2 className={`text-[11px] uppercase tracking-[0.3em] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>

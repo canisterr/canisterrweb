@@ -223,6 +223,7 @@ async function getAcceptedFriendIds(currentUserId?: string): Promise<Set<string>
 function rankPost(
   post: CinePostWithDetails,
   context: {
+    currentUserId?: string;
     friendIds: Set<string>;
     seenPostIds: Set<string>;
     tasteTags: Set<string>;
@@ -230,6 +231,7 @@ function rankPost(
   }
 ): CinePostWithDetails {
   const ageHours = getAgeHours(post.created_at);
+  const isOwnPost = Boolean(context.currentUserId && post.user_id === context.currentUserId);
   const isFromFriend = context.friendIds.has(post.user_id);
   const seenByUser = context.seenPostIds.has(post.id);
   const postTasteTags = getPostTasteTags(post);
@@ -237,14 +239,18 @@ function rankPost(
 
   const recencyScore = 240 / Math.pow(ageHours + 2, 0.85);
   const popularityScore = post.score * 18 + post.likes_count * 2 + post.comments_count * 4 + post.saves_count * 5;
+  const ownPostScore = isOwnPost ? 280 : 0;
   const friendScore = isFromFriend ? 260 : 0;
   const unseenBoost = isFromFriend && !seenByUser && ageHours < 48 ? 500 : 0;
+  const ownFreshBoost = isOwnPost && ageHours < 72 ? 420 : 0;
   const freshPublicBoost = !isFromFriend && ageHours < 24 ? 70 : 0;
   const tasteScore = tasteMatches > 0 ? 120 + tasteMatches * 35 : 0;
   const popularBoost = context.popularIds.has(post.id) ? 160 : 0;
 
   let feedTier = 5;
-  if (post.liked_by_current_user) {
+  if (isOwnPost && ageHours < 72) {
+    feedTier = 1;
+  } else if (post.liked_by_current_user) {
     feedTier = 9;
   } else if (isFromFriend && !seenByUser && ageHours < 48) {
     feedTier = 0;
@@ -261,7 +267,8 @@ function rankPost(
   return {
     ...post,
     feedTier,
-    feedScore: recencyScore + popularityScore + friendScore + unseenBoost + freshPublicBoost + tasteScore + popularBoost,
+    feedScore:
+      recencyScore + popularityScore + ownPostScore + friendScore + unseenBoost + ownFreshBoost + freshPublicBoost + tasteScore + popularBoost,
     isFromFriend,
     seenByUser,
     tasteMatchScore: tasteMatches,
@@ -527,6 +534,7 @@ export async function getCinePosts(
     return enrichedPosts
       .map((post) =>
         rankPost(post, {
+          currentUserId,
           friendIds,
           seenPostIds,
           tasteTags,

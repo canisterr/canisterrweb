@@ -23,6 +23,10 @@ function normalizeLabel(value?: string | null): string {
   return value?.trim().replace(/^@/, "") || "";
 }
 
+function normalizeUserSearchTerm(value?: string | null): string {
+  return normalizeLabel(value).toLowerCase();
+}
+
 function isPlaceholderLabel(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   return (
@@ -32,54 +36,67 @@ function isPlaceholderLabel(value: string): boolean {
     normalized === "anonymous" ||
     normalized === "guest" ||
     normalized === "user" ||
-    /^user\s+[a-z0-9]+$/.test(normalized)
+    /^user\s+[a-z0-9_-]+$/.test(normalized)
   );
 }
 
-export function formatFallbackUserName() {
+function isOpaqueUserIdentifier(value: string): boolean {
+  const normalized = normalizeLabel(value);
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z0-9_-]{16,}$/.test(normalized);
+}
+
+function isPublicIdentityLabel(value?: string | null, canonicalId?: string): boolean {
+  const normalized = normalizeLabel(value);
+  if (!normalized) return false;
+  if (isPlaceholderLabel(normalized) || isOpaqueUserIdentifier(normalized)) return false;
+  if (canonicalId && normalized === normalizeLabel(canonicalId)) return false;
+  return true;
+}
+
+export function formatFallbackUserName(_userId?: string) {
   return "User";
 }
 
 export function getDisplayUserName(user: Pick<User, "id" | "username" | "name">, currentUser?: User | null): string {
   if (currentUser && currentUser.id === user.id) {
     const currentName = currentUser.name?.trim();
-    if (currentName && !isPlaceholderLabel(currentName)) {
+    if (isPublicIdentityLabel(currentName, user.id)) {
       return currentName;
     }
 
     const currentUsername = currentUser.username?.trim();
-    if (currentUsername && !isPlaceholderLabel(currentUsername) && currentUsername !== currentUser.id.trim()) {
+    if (isPublicIdentityLabel(currentUsername, user.id)) {
       return currentUsername.startsWith("@") ? currentUsername : `@${currentUsername}`;
     }
   }
 
   const name = user.name?.trim();
-  if (name && !isPlaceholderLabel(name) && name !== user.id.trim()) {
+  if (isPublicIdentityLabel(name, user.id)) {
     return name;
   }
 
   const username = user.username?.trim();
-  if (username && !isPlaceholderLabel(username) && username !== user.id.trim()) {
+  if (isPublicIdentityLabel(username, user.id)) {
     return username.startsWith("@") ? username : `@${username}`;
   }
 
   return formatFallbackUserName();
 }
 
-export function getDisplayUserHandle(user: Pick<User, "id" | "username">, currentUser?: User | null): string {
+export function getDisplayUserHandle(user: Pick<User, "id" | "username">, currentUser?: User | null): string | null {
   if (currentUser && currentUser.id === user.id) {
     const currentUsername = currentUser.username?.trim();
-    if (currentUsername && !isPlaceholderLabel(currentUsername) && currentUsername !== currentUser.id.trim()) {
+    if (isPublicIdentityLabel(currentUsername, user.id)) {
       return currentUsername.startsWith("@") ? currentUsername : `@${currentUsername}`;
     }
   }
 
   const username = user.username?.trim();
-  if (username && !isPlaceholderLabel(username) && username !== user.id.trim()) {
+  if (isPublicIdentityLabel(username, user.id)) {
     return username.startsWith("@") ? username : `@${username}`;
   }
 
-  return "@user";
+  return null;
 }
 
 export function normalizeUserRecord(id: string, raw: NormalizableUserRecord): User {
@@ -87,9 +104,9 @@ export function normalizeUserRecord(id: string, raw: NormalizableUserRecord): Us
   const name = normalizeLabel(raw.name);
   const createdAt = "created_at" in raw ? raw.created_at : "createdAt" in raw ? raw.createdAt : undefined;
   const displayName =
-    (name && !isPlaceholderLabel(name) && name !== id.trim() ? name : null) ||
-    (username && !isPlaceholderLabel(username) && username !== id.trim() ? username : null) ||
-    formatFallbackUserName();
+    (isPublicIdentityLabel(name, id) ? name : null) ||
+    (isPublicIdentityLabel(username, id) ? username : null) ||
+    formatFallbackUserName(id);
 
   return {
     // The RTDB key is the canonical user id; never trust a stored `raw.id` to override it.
@@ -105,7 +122,7 @@ export function createFallbackUser(userId: string): User {
   return {
     id: userId,
     username: userId,
-    name: formatFallbackUserName(),
+    name: formatFallbackUserName(userId),
     avatar_url: null,
     created_at: new Date().toISOString(),
   };
@@ -142,25 +159,41 @@ const cachedGetAllUsers = createTimedCache<[], Record<string, User>>({
 
 const cachedSearchUsers = createTimedCache<[string], Record<string, User>>({
   ttlMs: ALL_USERS_TTL_MS,
-  key: (term) => term.trim().toLowerCase(),
+  key: (term) => normalizeUserSearchTerm(term),
   loader: async (term) => {
-    const normalized = term.trim().toLowerCase();
+    const normalized = normalizeUserSearchTerm(term);
     if (!normalized) return {};
-
-    const searchBounds = `${normalized}\uf8ff`;
-    const [usernameSnapshot, nameSnapshot] = await Promise.all([
-      get(query(ref(db, "users"), orderByChild("username"), startAt(normalized), endAt(searchBounds), limitToFirst(20))),
-      get(query(ref(db, "users"), orderByChild("name_lower"), startAt(normalized), endAt(searchBounds), limitToFirst(20))),
-    ]);
 
     const matches = new Map<string, User>();
 
-    for (const snapshot of [usernameSnapshot, nameSnapshot]) {
-      if (!snapshot.exists()) continue;
+    try {
+      const searchBounds = `${normalized}\uf8ff`;
+      const [usernameSnapshot, nameSnapshot] = await Promise.all([
+        get(query(ref(db, "users"), orderByChild("username_lower"), startAt(normalized), endAt(searchBounds), limitToFirst(20))),
+        get(query(ref(db, "users"), orderByChild("name_lower"), startAt(normalized), endAt(searchBounds), limitToFirst(20))),
+      ]);
 
-      const value = snapshot.val() as Record<string, UserRecord>;
-      for (const [id, user] of Object.entries(value)) {
-        matches.set(id, normalizeUserRecord(id, user));
+      for (const snapshot of [usernameSnapshot, nameSnapshot]) {
+        if (!snapshot.exists()) continue;
+
+        const value = snapshot.val() as Record<string, UserRecord>;
+        for (const [id, user] of Object.entries(value)) {
+          matches.set(id, normalizeUserRecord(id, user));
+        }
+      }
+    } catch (error) {
+      console.warn("Indexed user search unavailable, falling back to cached user scan:", error);
+    }
+
+    if (matches.size < 20) {
+      const allUsers = await cachedGetAllUsers();
+      for (const [id, user] of Object.entries(allUsers)) {
+        const username = normalizeUserSearchTerm(user.username);
+        const name = normalizeUserSearchTerm(user.name);
+        if ((username.includes(normalized) || name.includes(normalized)) && !matches.has(id)) {
+          matches.set(id, user);
+        }
+        if (matches.size >= 20) break;
       }
     }
 
