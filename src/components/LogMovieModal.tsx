@@ -949,5 +949,6 @@ export default function LogMovieModal({
       </form>
     </div>
   );
+}
 
 }

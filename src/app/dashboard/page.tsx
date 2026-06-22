@@ -808,7 +808,6 @@ export default function DashboardPage() {
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-black tracking-tight text-[#f5f0de] sm:text-2xl">Friends Activity</h2>
-                  <p className="mt-0.5 text-xs text-white/50 sm:text-sm">See what your friends are watching and saying</p>
                 </div>
                 <button
                   type="button"

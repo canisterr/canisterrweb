@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle, Sparkles, X } from "lucide-react";
 import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import CinePostArtwork from "@/components/CinePostArtwork";
-import SpoilerText from "@/components/SpoilerText";
 import { CinePostEngagementType, CinePostWithDetails, Content, TMDBMovie, User } from "@/types";
 import {
   getCinePostContentHref,
@@ -18,7 +17,6 @@ import {
 } from "@/lib/cineposts";
 import { getPublicLists, getListWithDetails } from "@/lib/lists";
 import { getPopularMovies } from "@/lib/tmdb";
-import { getTasteBasedPopularMovies } from "@/lib/movie-recommendations";
 import { getBlurDataUrl, getTmdbPosterUrl } from "@/lib/performance";
 import { lsGet, lsSet } from "@/lib/local-cache";
 import { getDisplayUserHandle, getDisplayUserName } from "@/lib/users";
@@ -225,24 +223,7 @@ function buildSuggestedRailItems(items: Content[]): RailItem[] {
   return items.map((item) => ({
     id: String(item.id),
     label: item.title || (item as any).name || "Untitled",
-    href:
-      item.type === "tv"
-            ? buildTvPath({
-            id: item.id,
-            title: item.title || (item as any).name || "Untitled",
-            name: item.title || (item as any).name || "Untitled",
-            premiered: (item as any).premiered || item.release_date || undefined,
-            release_date: item.release_date || undefined,
-            language: item.language || (item as any).original_language || undefined,
-            network: (item as any).network || undefined,
-          })
-        : buildMoviePath({
-            id: item.id,
-            title: item.title || "Untitled",
-            director: item.director || null,
-            release_date: item.release_date || null,
-            language: item.language || undefined,
-          }),
+    href: item.type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`,
     posterUrl: item.poster_url || null,
     meta: item.type === "tv" ? "Suggested show" : "Suggested movie",
   }));
@@ -506,7 +487,7 @@ function PeopleModal({
       <div
         className={`w-full max-w-md border p-4 shadow-2xl ${
           isBrutalist
-            ? "border-white/10 bg-[#111111] text-[#f5f0de]"
+            ? "border-white/10 bg-black text-[#f5f0de]"
             : "rounded-[1.75rem] border-slate-200 bg-white"
         }`}
       >
@@ -570,7 +551,6 @@ export default function CinePostsFeed({
   const isHome = variant === "home";
   const router = useRouter();
   const popularRailRef = useRef<HTMLDivElement | null>(null);
-  const suggestedRailRef = useRef<HTMLDivElement | null>(null);
   const discoverRailRef = useRef<HTMLDivElement | null>(null);
   const seenPostsRef = useRef<Set<string>>(new Set());
   const [posts, setPosts] = useState<CinePostWithDetails[]>([]);
@@ -578,8 +558,6 @@ export default function CinePostsFeed({
   const [loading, setLoading] = useState(true);
   const [popularMovies, setPopularMovies] = useState<RailItem[]>([]);
   const [popularLoading, setPopularLoading] = useState(true);
-  const [suggestedMovies, setSuggestedMovies] = useState<RailItem[]>([]);
-  const [suggestedLoading, setSuggestedLoading] = useState(true);
   const [discoverLists, setDiscoverLists] = useState<DiscoverListItem[]>([]);
   const [discoverLoading, setDiscoverLoading] = useState(true);
   const [peopleModalTitle, setPeopleModalTitle] = useState("");
@@ -708,20 +686,17 @@ export default function CinePostsFeed({
 
     const loadDiscoveryRails = async () => {
       setPopularLoading(true);
-      setSuggestedLoading(true);
       setDiscoverLoading(true);
 
       try {
-        const [popular, suggested, publicListsBase] = await Promise.all([
+        const [popular, publicListsBase] = await Promise.all([
           getPopularMovies(1, 20),
-          currentUser?.id ? getTasteBasedPopularMovies(currentUser.id, 10) : Promise.resolve([]),
           getPublicLists(8),
         ]);
 
         if (cancelled) return;
 
         setPopularMovies(buildPopularRailItems(popular));
-        setSuggestedMovies(buildSuggestedRailItems(suggested));
 
         const detailedLists = await Promise.all(
           publicListsBase.slice(0, 5).map(async (list) => {
@@ -757,7 +732,6 @@ export default function CinePostsFeed({
       } finally {
         if (!cancelled) {
           setPopularLoading(false);
-          setSuggestedLoading(false);
           setDiscoverLoading(false);
         }
       }
@@ -890,21 +864,6 @@ export default function CinePostsFeed({
     </div>
   );
 
-  const renderSuggestedSection = () => (
-    <div key="suggested-movies-rail" className="pt-6">
-      <DiscoveryRail
-        title="Suggested Movies"
-        items={suggestedMovies}
-        loading={suggestedLoading}
-        emptyLabel={currentUser?.id ? "Suggested movies will appear here soon." : "Sign in to get personalized suggestions."}
-        railRef={suggestedRailRef}
-        theme={theme}
-        onLeft={() => scrollRail(suggestedRailRef, -1)}
-        onRight={() => scrollRail(suggestedRailRef, 1)}
-      />
-    </div>
-  );
-
   const renderDiscoverSection = () => (
     <div key="discover-lists-rail" className="pt-6">
       <DiscoverListRail
@@ -922,23 +881,17 @@ export default function CinePostsFeed({
   const renderMainFeedStream = () => {
     const stream: ReactNode[] = [];
     let insertedPopular = false;
-    let insertedSuggested = false;
     let insertedDiscover = false;
 
     mainFeedPosts.forEach((post, index) => {
       stream.push(renderPostCard(post, index, false));
 
-      if (!insertedPopular && index === 2) {
+      if (!insertedPopular && index === 1) {
         stream.push(renderPopularSection());
         insertedPopular = true;
       }
 
-      if (!insertedSuggested && index === 5) {
-        stream.push(renderSuggestedSection());
-        insertedSuggested = true;
-      }
-
-      if (!insertedDiscover && index === 8) {
+      if (!insertedDiscover && index === 4) {
         stream.push(renderDiscoverSection());
         insertedDiscover = true;
       }
@@ -946,10 +899,6 @@ export default function CinePostsFeed({
 
     if (!insertedPopular) {
       stream.push(renderPopularSection());
-    }
-
-    if (!insertedSuggested) {
-      stream.push(renderSuggestedSection());
     }
 
     if (!insertedDiscover) {
@@ -1127,7 +1076,7 @@ export default function CinePostsFeed({
     return (
       <div key={post.id} className={isBrutalist ? "py-3 sm:py-4" : "space-y-4"}>
         <article
-          className={`cursor-pointer ${isBrutalist ? "border border-white/10 bg-[#090c10] text-[#f5f0de]" : "overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]"}`}
+          className={`cursor-pointer ${isBrutalist ? "border border-white/10 bg-black text-[#f5f0de]" : "overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]"}`}
           role="button"
           tabIndex={0}
           data-feed-post-id={post.id}
@@ -1204,11 +1153,11 @@ export default function CinePostsFeed({
               </div>
             </div>
           ) : isBrutalist ? (
-            <div className="grid grid-cols-[7rem_minmax(0,1fr)] sm:grid-cols-[10rem_minmax(0,1fr)]">
+            <div className="grid grid-cols-[7.8rem_minmax(0,1fr)] sm:grid-cols-[10rem_minmax(0,1fr)]">
               {contentHref ? (
                 <Link
                   href={contentHref}
-                  className="group relative h-full min-h-[10.5rem] overflow-hidden border-r border-white/10 bg-transparent sm:min-h-[15rem]"
+                  className="group relative h-[11.7rem] overflow-hidden border-r border-white/10 bg-transparent sm:h-auto sm:min-h-[15rem]"
                   title={`Open ${post.content_title || post.anchor_label}`}
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -1223,7 +1172,7 @@ export default function CinePostsFeed({
                   />
                 </Link>
               ) : (
-                <div className="h-full min-h-[10.5rem] overflow-hidden border-r border-white/10 bg-transparent sm:min-h-[15rem]">
+                <div className="h-[11.7rem] overflow-hidden border-r border-white/10 bg-transparent sm:h-auto sm:min-h-[15rem]">
                   <CinePostArtwork
                     src={post.poster_url}
                     collageImages={post.list_cover_images}
@@ -1236,25 +1185,25 @@ export default function CinePostsFeed({
                 </div>
               )}
 
-              <div className="flex min-h-[10.5rem] flex-col px-3 py-3 sm:min-h-[15rem] sm:px-4 sm:py-3.5">
+              <div className="flex h-[11.7rem] flex-col px-2.5 py-2 sm:h-auto sm:min-h-[15rem] sm:px-4 sm:py-3.5">
                 <div className="flex items-start gap-2.5 sm:gap-3">
                   <Link href={profileHref(postAuthorUser)} className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
                     <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
                   </Link>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 pt-0.5">
                     <Link
                       href={profileHref(postAuthorUser)}
                       onClick={(event) => event.stopPropagation()}
-                      className="block truncate text-[1rem] font-black leading-none text-[#f5f0de] hover:text-[#ffb36b] sm:text-[1.12rem]"
+                      className="block truncate text-[0.96rem] font-black leading-[1.02] text-[#f5f0de] hover:text-[#ffb36b] sm:text-[1.12rem]"
                     >
                       {getAuthorDisplayName(post, currentUser)}
                     </Link>
                     {getAuthorUsername(postAuthorUser) ? (
-                        <p className="mt-0.5 truncate text-[0.9rem] text-[#ffb36b] sm:text-[0.95rem]">{getAuthorUsername(postAuthorUser)}</p>
+                        <p className="mt-0.5 truncate text-[0.76rem] font-medium leading-none text-[#ffb36b] sm:text-[0.9rem]">{getAuthorUsername(postAuthorUser)}</p>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-[0.82rem] text-white/45 sm:text-[0.92rem]">{relativeTime(post.created_at)}</span>
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <span className="text-[0.72rem] text-white/45 sm:text-[0.92rem]">{relativeTime(post.created_at)}</span>
                     <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
                       <CinePostOwnerMenu
                         post={post}
@@ -1267,8 +1216,8 @@ export default function CinePostsFeed({
                   </div>
                 </div>
 
-                <Link href={postHref} className="mt-3 block sm:mt-4" onClick={(event) => event.stopPropagation()}>
-                  <p className="whitespace-pre-wrap text-[0.92rem] leading-7 text-[#f5f0de]/90 sm:text-[1rem] sm:leading-8">
+                <Link href={postHref} className="mt-1.5 block sm:mt-4" onClick={(event) => event.stopPropagation()}>
+                  <p className="line-clamp-3 text-[0.78rem] leading-[1.25rem] text-[#f5f0de]/90 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[1rem] sm:leading-8">
                     {preview.text}
                   </p>
                 </Link>
@@ -1276,53 +1225,56 @@ export default function CinePostsFeed({
                 {preview.isTrimmed && (
                   <Link
                     href={postHref}
-                    className="mt-2 inline-flex text-[0.95rem] font-black text-[#ffb36b]"
+                    className="mt-0.5 inline-flex text-[0.76rem] font-black text-[#ffb36b] sm:text-[0.95rem]"
                     onClick={(event) => event.stopPropagation()}
                   >
                     Show more
                   </Link>
                 )}
 
-                <div className="mt-auto border-t border-white/10 pt-3 sm:pt-4">
-                  <div className="flex items-center justify-between gap-2.5">
+                <div className="mt-auto border-t border-white/10 pt-1.5 sm:pt-4">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <button
                         type="button"
                         onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
                         onMouseDown={(event) => event.stopPropagation()}
-                        className={`inline-flex min-h-[42px] items-center rounded-full border px-3.5 transition ${
-                          post.liked_by_current_user
-                            ? "border-[#ff7a1a]/25 text-[#ff7a1a]"
-                            : "border-white/10 text-white/65 hover:border-white/20 hover:text-[#ffb36b]"
+                        className={`inline-flex items-center text-[0.72rem] font-black transition sm:text-[0.88rem] ${
+                          post.liked_by_current_user ? "text-[#ff7a1a]" : "text-white/60 hover:text-[#ffb36b]"
                         }`}
                         aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
                       >
-                        <Heart className={`h-4.5 w-4.5 ${post.liked_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
-                        <span className="mx-3 h-5 w-px bg-white/10" />
-                        <span className="text-[0.92rem] font-black text-[#ffb36b]">{post.likes_count}</span>
+                        <Heart className={`h-3.25 w-3.25 sm:h-4 sm:w-4 ${post.liked_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openPeopleModal(post, "like", "Liked by")}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        disabled={post.likes_count === 0}
+                        className="px-1.5 py-1 text-[0.72rem] font-black text-[#ffb36b] transition hover:text-[#ffd2a7] disabled:text-white/30 disabled:opacity-50 sm:text-[0.88rem]"
+                        aria-label="View likes"
+                      >
+                        {post.likes_count}
                       </button>
                       <Link
                         href={postHref}
                         onClick={(event) => event.stopPropagation()}
-                        className="inline-flex min-h-[42px] items-center rounded-full border border-white/10 px-3.5 text-white/65 transition hover:border-white/20 hover:text-[#ffb36b]"
+                        className="inline-flex items-center gap-1 text-[0.72rem] font-black text-white/60 transition hover:text-[#ffb36b] sm:text-[0.88rem]"
                       >
-                        <MessageCircle className="h-4.5 w-4.5" />
-                        <span className="mx-3 h-5 w-px bg-white/10" />
-                        <span className="text-[0.92rem] font-black text-white/78">{post.comments_count}</span>
+                        <MessageCircle className="h-3.25 w-3.25 sm:h-4 sm:w-4" />
+                        <span>{post.comments_count}</span>
                       </Link>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
                       onMouseDown={(event) => event.stopPropagation()}
-                      className={`inline-flex min-h-[42px] items-center justify-center rounded-full border px-4 transition ${
-                        post.saved_by_current_user
-                          ? "border-white/15 text-[#ff7a1a]"
-                          : "border-white/10 text-white/65 hover:border-white/20 hover:text-[#ffb36b]"
+                      className={`inline-flex items-center justify-center text-white/60 transition ${
+                        post.saved_by_current_user ? "text-[#ff7a1a]" : "hover:text-[#ffb36b]"
                       }`}
                       aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
                     >
-                      <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                      <Bookmark className={`h-3.5 w-3.5 sm:h-4.5 sm:w-4.5 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
                     </button>
                   </div>
                 </div>
@@ -1477,9 +1429,8 @@ export default function CinePostsFeed({
           </div>
         </article>
 
-        {withDiscoveryRails && index === 4 && renderPopularSection()}
-        {withDiscoveryRails && index === 9 && renderSuggestedSection()}
-        {withDiscoveryRails && index === 14 && renderDiscoverSection()}
+        {withDiscoveryRails && index === 1 && renderPopularSection()}
+        {withDiscoveryRails && index === 4 && renderDiscoverSection()}
       </div>
     );
   };
@@ -1552,16 +1503,6 @@ export default function CinePostsFeed({
                 theme={theme}
                 onLeft={() => scrollRail(popularRailRef, -1)}
                 onRight={() => scrollRail(popularRailRef, 1)}
-              />
-              <DiscoveryRail
-                title="Suggested Movies"
-                items={suggestedMovies}
-                loading={suggestedLoading}
-                emptyLabel={currentUser?.id ? "Suggested movies will appear here soon." : "Sign in to get personalized suggestions."}
-                railRef={suggestedRailRef}
-                theme={theme}
-                onLeft={() => scrollRail(suggestedRailRef, -1)}
-                onRight={() => scrollRail(suggestedRailRef, 1)}
               />
               <DiscoverListRail
                 items={discoverLists}
