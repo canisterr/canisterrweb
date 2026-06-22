@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
 import { getDatabase, Database } from "firebase/database";
+import { ensureLocalStorageHeadroom } from "./storage-maintenance";
 
 const firebaseConfig = {
   apiKey: "AIzaSyC_RylgN_XYnCFcUo-n9vSNWddwHHzwqqU",
@@ -14,6 +15,10 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+if (typeof window !== "undefined") {
+  ensureLocalStorageHeadroom();
+}
 
 // Initialize Firebase Authentication
 export const auth: Auth = getAuth(app);

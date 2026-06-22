@@ -1,3 +1,5 @@
+import { setLocalStorageItemWithRecovery } from "./storage-maintenance";
+
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
 
 type CacheEnvelope<T> = {
@@ -44,15 +46,12 @@ export function readBrowserCacheEntry<T>(key: string): BrowserCacheReadResult<T>
 export function writeBrowserCache<T>(key: string, value: T, ttlMs: number = DEFAULT_TTL_MS): void {
   if (!isBrowserStorageAvailable()) return;
 
-  try {
-    const envelope: CacheEnvelope<T> = {
-      value,
-      expiresAt: Date.now() + ttlMs,
-    };
-    window.localStorage.setItem(key, JSON.stringify(envelope));
-  } catch {
-    // Ignore storage quota and privacy-mode failures.
-  }
+  const envelope: CacheEnvelope<T> = {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  };
+
+  setLocalStorageItemWithRecovery(key, JSON.stringify(envelope));
 }
 
 export function removeBrowserCache(key: string): void {
