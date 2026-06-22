@@ -129,50 +129,50 @@ function getPreview(body: string): { text: string; isTrimmed: boolean } {
 
 function getFeedSplitActionClass(theme: "default" | "brutalist", active = false): string {
   const base =
-    "group/action inline-flex h-10 items-center overflow-hidden rounded-full border transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]";
+    "group/action inline-flex h-8 items-center overflow-hidden border-0 bg-transparent shadow-none transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:h-10 sm:rounded-full sm:border";
 
   if (theme === "brutalist") {
     return `${base} ${
       active
-        ? "border-[#ff7a1a]/35 bg-[#ff7a1a]/12 text-[#ffb36b] shadow-[0_12px_28px_rgba(255,122,26,0.12)]"
-        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-[#f5f0de]"
+        ? "text-[#ffb36b] sm:border-[#ff7a1a]/35 sm:bg-[#ff7a1a]/12 sm:shadow-[0_12px_28px_rgba(255,122,26,0.12)]"
+        : "text-white/70 hover:text-[#f5f0de] sm:border-white/10 sm:bg-white/[0.03] sm:hover:border-[#ff8a1e]/30 sm:hover:bg-[#ff8a1e]/10"
     }`;
   }
 
   return `${base} ${
     active
-      ? "border-rose-200 bg-rose-50 text-rose-600 shadow-[0_12px_24px_rgba(244,63,94,0.12)]"
-      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+      ? "text-rose-600 sm:border-rose-200 sm:bg-rose-50 sm:shadow-[0_12px_24px_rgba(244,63,94,0.12)]"
+      : "text-slate-600 hover:text-slate-900 sm:border-slate-200 sm:bg-white sm:hover:border-slate-300 sm:hover:bg-slate-50"
   }`;
 }
 
 function getFeedActionChipClass(theme: "default" | "brutalist", active = false): string {
   const base =
-    "group/chip inline-flex h-10 items-center gap-2 rounded-full border px-3 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]";
+    "group/chip inline-flex h-8 items-center gap-1.5 border-0 bg-transparent px-0 shadow-none transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:h-10 sm:gap-2 sm:rounded-full sm:border sm:px-3";
 
   if (theme === "brutalist") {
     return `${base} ${
       active
-        ? "border-[#ff7a1a]/35 bg-[#ff7a1a]/12 text-[#ffb36b] shadow-[0_12px_28px_rgba(255,122,26,0.12)]"
-        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-[#f5f0de]"
+        ? "text-[#ffb36b] sm:border-[#ff7a1a]/35 sm:bg-[#ff7a1a]/12 sm:shadow-[0_12px_28px_rgba(255,122,26,0.12)]"
+        : "text-white/70 hover:text-[#f5f0de] sm:border-white/10 sm:bg-white/[0.03] sm:hover:border-[#ff8a1e]/30 sm:hover:bg-[#ff8a1e]/10"
     }`;
   }
 
   return `${base} ${
     active
-      ? "border-sky-200 bg-sky-50 text-sky-600 shadow-[0_12px_24px_rgba(14,165,233,0.12)]"
-      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+      ? "text-sky-600 sm:border-sky-200 sm:bg-sky-50 sm:shadow-[0_12px_24px_rgba(14,165,233,0.12)]"
+      : "text-slate-600 hover:text-slate-900 sm:border-slate-200 sm:bg-white sm:hover:border-slate-300 sm:hover:bg-slate-50"
   }`;
 }
 
 function getFeedCountButtonClass(theme: "default" | "brutalist", active = false): string {
   if (theme === "brutalist") {
-    return `inline-flex h-full min-w-[2.5rem] items-center justify-center px-3 text-xs font-black tabular-nums transition-colors disabled:cursor-default ${
+    return `inline-flex h-full min-w-[2rem] items-center justify-center px-1.5 text-xs font-black tabular-nums transition-colors disabled:cursor-default sm:min-w-[2.5rem] sm:px-3 ${
       active ? "text-[#ffd8ae]" : "text-[#ffb36b] disabled:opacity-45"
     }`;
   }
 
-  return `inline-flex h-full min-w-[2.5rem] items-center justify-center px-3 text-xs font-black tabular-nums transition-colors disabled:cursor-default ${
+  return `inline-flex h-full min-w-[2rem] items-center justify-center px-1.5 text-xs font-black tabular-nums transition-colors disabled:cursor-default sm:min-w-[2.5rem] sm:px-3 ${
     active ? "text-rose-600" : "text-slate-500 disabled:opacity-45"
   }`;
 }
@@ -954,36 +954,36 @@ export default function CinePostsFeed({
       <article
         key={post.id}
         data-feed-post-id={post.id}
-        className="grid min-h-[12.5rem] grid-cols-[8.35rem_minmax(0,1fr)] overflow-hidden border border-white/10 bg-[#080a0d] text-[#f5f0de] shadow-[0_12px_32px_rgba(0,0,0,0.18)] sm:min-h-[13.5rem] sm:grid-cols-[9rem_minmax(0,1fr)]"
+        className="grid min-h-[10.35rem] grid-cols-[7.1rem_minmax(0,1fr)] overflow-hidden border border-white/10 bg-[#080a0d] text-[#f5f0de] shadow-[0_12px_32px_rgba(0,0,0,0.18)] sm:min-h-[13.5rem] sm:grid-cols-[9rem_minmax(0,1fr)]"
       >
         {contentHref ? (
           <Link
             href={contentHref}
-            className="group relative block h-full min-h-[12.5rem] overflow-hidden bg-black sm:min-h-[13.5rem]"
+            className="group relative block h-full min-h-[10.35rem] overflow-hidden bg-black sm:min-h-[13.5rem]"
             title={`Open ${post.content_title || post.anchor_label}`}
           >
             {artwork}
           </Link>
         ) : (
-          <div className="group relative h-full min-h-[12.5rem] overflow-hidden bg-black sm:min-h-[13.5rem]">
+          <div className="group relative h-full min-h-[10.35rem] overflow-hidden bg-black sm:min-h-[13.5rem]">
             {artwork}
           </div>
         )}
 
-        <div className="flex min-w-0 flex-col px-3 pt-3 sm:px-4 sm:pt-4">
-          <div className="flex min-w-0 items-start gap-2.5">
+        <div className="flex min-w-0 flex-col px-2.5 pt-2.5 sm:px-4 sm:pt-4">
+          <div className="flex min-w-0 items-start gap-2">
             <Link href={profileHref(postAuthorUser)} className="flex-shrink-0">
               <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
             </Link>
             <Link href={profileHref(postAuthorUser)} className="min-w-0 flex-1 pt-0.5">
-              <p className="truncate text-sm font-black leading-tight text-[#f5f0de]">
+              <p className="truncate text-[13px] font-black leading-tight text-[#f5f0de] sm:text-sm">
                 {getDisplayUserName(postAuthorUser, currentUser)}
               </p>
               <p className="mt-0.5 truncate text-[10px] leading-tight text-white/55 sm:text-xs">
                 {getDisplayUserHandle(postAuthorUser, currentUser)}
               </p>
             </Link>
-            <div className="flex flex-shrink-0 items-center gap-2 text-[10px] text-white/50 sm:gap-3 sm:text-xs">
+            <div className="flex flex-shrink-0 items-center gap-1.5 text-[10px] text-white/50 sm:gap-3 sm:text-xs">
               <span>{relativeTime(post.created_at)}</span>
               <CinePostOwnerMenu
                 post={post}
@@ -995,33 +995,33 @@ export default function CinePostsFeed({
             </div>
           </div>
 
-          <div className="mt-3 flex-1 sm:mt-4">
+          <div className="mt-2 flex-1 sm:mt-4">
             <SpoilerText
               spoiler={post.contains_spoiler}
-              className="whitespace-pre-wrap text-xs leading-5 text-[#f5f0de]/92 sm:text-sm sm:leading-6"
+              className="line-clamp-3 text-[11px] leading-[1.1rem] text-[#f5f0de]/92 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-sm sm:leading-6"
             >
               <Link href={postHref}>{preview.text}</Link>
               {preview.isTrimmed && <span className="mt-1 block text-xs font-bold text-[#ff9b4a]">Show more</span>}
             </SpoilerText>
           </div>
 
-          <div className="mt-3 flex items-center justify-between border-t border-white/10 py-3 pl-1 sm:mt-4">
+          <div className="mt-2.5 flex items-center justify-between border-t border-white/10 py-2.5 pl-0.5 sm:mt-4 sm:py-3">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className={getFeedSplitActionClass(theme, post.liked_by_current_user)}>
                 <button
                   type="button"
                   onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
                   disabled={likePending}
-                  className="inline-flex h-full items-center justify-center px-3 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="inline-flex h-full items-center justify-center px-1.5 disabled:cursor-not-allowed disabled:opacity-70 sm:px-3"
                   aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
                 >
                   <Heart
-                    className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
+                    className={`h-4 w-4 transition-transform duration-200 group-hover/action:scale-110 sm:h-[18px] sm:w-[18px] ${
                       post.liked_by_current_user ? "fill-[#ff7a1a]" : ""
                     }`}
                   />
                 </button>
-                <div className="h-4 w-px bg-current/15" />
+                <div className="h-3.5 w-px bg-current/15 sm:h-4" />
                 <button
                   type="button"
                   onClick={() => openPeopleModal(post, "like", "Liked by")}
@@ -1035,7 +1035,7 @@ export default function CinePostsFeed({
                 href={postHref}
                 className={getFeedActionChipClass(theme)}
               >
-                <MessageCircle className="h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110" />
+                <MessageCircle className="h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px]" />
                 <span className="text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
               </Link>
             </div>
@@ -1047,7 +1047,7 @@ export default function CinePostsFeed({
               aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
             >
               <Bookmark
-                className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/chip:scale-110 ${
+                className={`h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px] ${
                   post.saved_by_current_user ? "fill-[#ff7a1a]" : ""
                 }`}
               />
@@ -1074,7 +1074,7 @@ export default function CinePostsFeed({
     return (
       <div key={post.id} className={isBrutalist ? "py-3 sm:py-4" : "space-y-4"}>
         <article
-          className={`cursor-pointer ${isBrutalist ? "border border-white/10 bg-black text-[#f5f0de]" : "overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]"}`}
+          className={`cursor-pointer ${isBrutalist ? "border border-white/10 bg-black text-[#f5f0de]" : "overflow-hidden rounded-[1.1rem] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)] sm:rounded-[1.75rem]"}`}
           role="button"
           tabIndex={0}
           data-feed-post-id={post.id}
@@ -1151,11 +1151,11 @@ export default function CinePostsFeed({
               </div>
             </div>
           ) : isBrutalist ? (
-            <div className="grid grid-cols-[7.8rem_minmax(0,1fr)] sm:grid-cols-[10rem_minmax(0,1fr)]">
+            <div className="grid grid-cols-[6.9rem_minmax(0,1fr)] sm:grid-cols-[10rem_minmax(0,1fr)]">
               {contentHref ? (
                 <Link
                   href={contentHref}
-                  className="group relative h-[11.7rem] overflow-hidden border-r border-white/10 bg-transparent sm:h-auto sm:min-h-[15rem]"
+                  className="group relative h-[10.15rem] overflow-hidden border-r border-white/10 bg-transparent sm:h-auto sm:min-h-[15rem]"
                   title={`Open ${post.content_title || post.anchor_label}`}
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -1170,7 +1170,7 @@ export default function CinePostsFeed({
                   />
                 </Link>
               ) : (
-                <div className="h-[11.7rem] overflow-hidden border-r border-white/10 bg-transparent sm:h-auto sm:min-h-[15rem]">
+                <div className="h-[10.15rem] overflow-hidden border-r border-white/10 bg-transparent sm:h-auto sm:min-h-[15rem]">
                   <CinePostArtwork
                     src={post.poster_url}
                     collageImages={post.list_cover_images}
@@ -1183,8 +1183,8 @@ export default function CinePostsFeed({
                 </div>
               )}
 
-              <div className="flex h-[11.7rem] flex-col px-2.5 py-2 sm:h-auto sm:min-h-[15rem] sm:px-4 sm:py-3.5">
-                <div className="flex items-start gap-2.5 sm:gap-3">
+              <div className="flex h-[10.15rem] flex-col px-2 py-1.5 sm:h-auto sm:min-h-[15rem] sm:px-4 sm:py-3.5">
+                <div className="flex items-start gap-2 sm:gap-3">
                   <Link href={profileHref(postAuthorUser)} className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
                     <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
                   </Link>
@@ -1192,16 +1192,16 @@ export default function CinePostsFeed({
                     <Link
                       href={profileHref(postAuthorUser)}
                       onClick={(event) => event.stopPropagation()}
-                      className="block truncate text-[0.96rem] font-black leading-[1.02] text-[#f5f0de] hover:text-[#ffb36b] sm:text-[1.12rem]"
+                      className="block truncate text-[0.88rem] font-black leading-[1.02] text-[#f5f0de] hover:text-[#ffb36b] sm:text-[1.12rem]"
                     >
                       {getAuthorDisplayName(post, currentUser)}
                     </Link>
                     {getAuthorUsername(postAuthorUser) ? (
-                        <p className="mt-0.5 truncate text-[0.76rem] font-medium leading-none text-[#ffb36b] sm:text-[0.9rem]">{getAuthorUsername(postAuthorUser)}</p>
+                        <p className="mt-0.5 truncate text-[0.72rem] font-medium leading-none text-[#ffb36b] sm:text-[0.9rem]">{getAuthorUsername(postAuthorUser)}</p>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <span className="text-[0.72rem] text-white/45 sm:text-[0.92rem]">{relativeTime(post.created_at)}</span>
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <span className="text-[0.68rem] text-white/45 sm:text-[0.92rem]">{relativeTime(post.created_at)}</span>
                     <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
                       <CinePostOwnerMenu
                         post={post}
@@ -1214,8 +1214,8 @@ export default function CinePostsFeed({
                   </div>
                 </div>
 
-                <Link href={postHref} className="mt-1.5 block sm:mt-4" onClick={(event) => event.stopPropagation()}>
-                  <p className="line-clamp-3 text-[0.78rem] leading-[1.25rem] text-[#f5f0de]/90 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[1rem] sm:leading-8">
+                <Link href={postHref} className="mt-1 block sm:mt-4" onClick={(event) => event.stopPropagation()}>
+                  <p className="line-clamp-3 text-[0.72rem] leading-[1.1rem] text-[#f5f0de]/90 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[1rem] sm:leading-8">
                     {preview.text}
                   </p>
                 </Link>
@@ -1223,7 +1223,7 @@ export default function CinePostsFeed({
                 {preview.isTrimmed && (
                   <Link
                     href={postHref}
-                    className="mt-0.5 inline-flex text-[0.76rem] font-black text-[#ffb36b] sm:text-[0.95rem]"
+                    className="mt-0.5 inline-flex text-[0.72rem] font-black text-[#ffb36b] sm:text-[0.95rem]"
                     onClick={(event) => event.stopPropagation()}
                   >
                     Show more
@@ -1231,25 +1231,25 @@ export default function CinePostsFeed({
                 )}
 
                 <div className="mt-auto border-t border-white/10 pt-1.5 sm:pt-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
                         onMouseDown={(event) => event.stopPropagation()}
-                        className={`inline-flex items-center text-[0.72rem] font-black transition sm:text-[0.88rem] ${
+                        className={`inline-flex items-center text-[0.68rem] font-black transition sm:text-[0.88rem] ${
                           post.liked_by_current_user ? "text-[#ff7a1a]" : "text-white/60 hover:text-[#ffb36b]"
                         }`}
                         aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
                       >
-                        <Heart className={`h-3.25 w-3.25 sm:h-4 sm:w-4 ${post.liked_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                        <Heart className={`h-3 w-3 sm:h-4 sm:w-4 ${post.liked_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
                       </button>
                       <button
                         type="button"
                         onClick={() => openPeopleModal(post, "like", "Liked by")}
                         onMouseDown={(event) => event.stopPropagation()}
                         disabled={post.likes_count === 0}
-                        className="px-1.5 py-1 text-[0.72rem] font-black text-[#ffb36b] transition hover:text-[#ffd2a7] disabled:text-white/30 disabled:opacity-50 sm:text-[0.88rem]"
+                        className="px-1 py-1 text-[0.68rem] font-black text-[#ffb36b] transition hover:text-[#ffd2a7] disabled:text-white/30 disabled:opacity-50 sm:px-1.5 sm:text-[0.88rem]"
                         aria-label="View likes"
                       >
                         {post.likes_count}
@@ -1257,9 +1257,9 @@ export default function CinePostsFeed({
                       <Link
                         href={postHref}
                         onClick={(event) => event.stopPropagation()}
-                        className="inline-flex items-center gap-1 text-[0.72rem] font-black text-white/60 transition hover:text-[#ffb36b] sm:text-[0.88rem]"
+                        className="inline-flex items-center gap-1 text-[0.68rem] font-black text-white/60 transition hover:text-[#ffb36b] sm:text-[0.88rem]"
                       >
-                        <MessageCircle className="h-3.25 w-3.25 sm:h-4 sm:w-4" />
+                        <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span>{post.comments_count}</span>
                       </Link>
                     </div>
@@ -1272,7 +1272,7 @@ export default function CinePostsFeed({
                       }`}
                       aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
                     >
-                      <Bookmark className={`h-3.5 w-3.5 sm:h-4.5 sm:w-4.5 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
+                      <Bookmark className={`h-3.25 w-3.25 sm:h-4.5 sm:w-4.5 ${post.saved_by_current_user ? "fill-[#ff7a1a]" : ""}`} />
                     </button>
                   </div>
                 </div>
@@ -1280,11 +1280,11 @@ export default function CinePostsFeed({
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-3 p-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-5 sm:p-5">
+              <div className="grid grid-cols-[4.7rem_minmax(0,1fr)] gap-2.5 p-2.5 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-5 sm:p-5">
                 {contentHref ? (
                   <Link
                     href={contentHref}
-                    className="group relative aspect-[2/3] overflow-hidden rounded-[1.4rem] bg-slate-950 shadow-sm"
+                    className="group relative aspect-[2/3] overflow-hidden rounded-[1rem] bg-slate-950 shadow-sm sm:rounded-[1.4rem]"
                     title={`Open ${post.content_title || post.anchor_label}`}
                     onClick={(event) => event.stopPropagation()}
                   >
@@ -1298,7 +1298,7 @@ export default function CinePostsFeed({
                     />
                   </Link>
                 ) : (
-                  <div className="aspect-[2/3] overflow-hidden rounded-[1.4rem] bg-slate-950 shadow-sm">
+                  <div className="aspect-[2/3] overflow-hidden rounded-[1rem] bg-slate-950 shadow-sm sm:rounded-[1.4rem]">
                     <CinePostArtwork
                       src={post.poster_url}
                       collageImages={post.list_cover_images}
@@ -1310,8 +1310,8 @@ export default function CinePostsFeed({
                   </div>
                 )}
 
-                <div className="min-w-0 py-1">
-                  <div className="flex items-start gap-3">
+                <div className="min-w-0 py-0.5">
+                  <div className="flex items-start gap-2">
                     <Link href={profileHref(postAuthorUser)} className="flex-shrink-0" onClick={(event) => event.stopPropagation()}>
                       <Avatar user={postAuthorUser} size="h-7 w-7 sm:h-8 sm:w-8" dark={isBrutalist} />
                     </Link>
@@ -1320,17 +1320,17 @@ export default function CinePostsFeed({
                         <Link
                           href={profileHref(postAuthorUser)}
                           onClick={(event) => event.stopPropagation()}
-                          className={`text-[13px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
+                          className={`text-[12px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
                         >
                           {getAuthorDisplayName(post, currentUser)}
                         </Link>
                         <span className={`text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
                       </div>
                       {getAuthorUsername(postAuthorUser) ? (
-                        <p className="mt-1 text-xs text-slate-400">{getAuthorUsername(postAuthorUser)}</p>
+                        <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">{getAuthorUsername(postAuthorUser)}</p>
                       ) : null}
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2.5">
                       <span className="text-[10px] text-slate-400 sm:text-xs">{relativeTime(post.created_at)}</span>
                       <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
                         <CinePostOwnerMenu
@@ -1344,8 +1344,8 @@ export default function CinePostsFeed({
                     </div>
                   </div>
 
-                  <Link href={postHref} className="mt-2 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
-                    <p className={`whitespace-pre-wrap text-[13px] leading-5 sm:text-[14px] sm:leading-6 ${
+                  <Link href={postHref} className="mt-1.5 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
+                    <p className={`line-clamp-3 text-[12px] leading-[1.05rem] sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[14px] sm:leading-6 ${
                       isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
                     }`}>
                       {preview.text}
@@ -1355,7 +1355,7 @@ export default function CinePostsFeed({
                   {preview.isTrimmed && (
                     <Link
                       href={postHref}
-                      className="mt-3 inline-flex text-[11px] font-black text-[#f5f0de] sm:mt-2 sm:text-sm"
+                      className="mt-2 inline-flex text-[10px] font-black text-[#f5f0de] sm:mt-2 sm:text-sm"
                       onClick={(event) => event.stopPropagation()}
                     >
                       Show more
@@ -1364,7 +1364,7 @@ export default function CinePostsFeed({
                 </div>
               </div>
 
-          <div className={`py-3 sm:py-4 ${isBrutalist ? "border-t border-white/10" : "border-t border-slate-100 px-3 sm:px-5"}`}>
+          <div className={`py-2.5 sm:py-4 ${isBrutalist ? "border-t border-white/10" : "border-t border-slate-100 px-2.5 sm:px-5"}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <button
@@ -1375,21 +1375,21 @@ export default function CinePostsFeed({
                     post.liked_by_current_user
                       ? isBrutalist
                         ? "text-[#ff7a1a]"
-                        : "bg-rose-50 text-rose-600"
+                        : "text-rose-600 sm:bg-rose-50"
                       : isBrutalist
                       ? "text-white/65 hover:text-[#ffb36b]"
-                      : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                      : "text-slate-600 hover:text-slate-900 sm:bg-slate-50 sm:hover:bg-slate-100"
                   }`}
                   aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
                 >
-                  <Heart className={`h-5 w-5 ${post.liked_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-rose-500") : ""}`} />
+                  <Heart className={`h-4 w-4 sm:h-5 sm:w-5 ${post.liked_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-rose-500") : ""}`} />
                 </button>
                 <button
                   type="button"
                   onClick={() => openPeopleModal(post, "like", "Liked by")}
                   onMouseDown={(event) => event.stopPropagation()}
                   disabled={post.likes_count === 0}
-                  className={`px-1 py-2 text-sm font-black disabled:opacity-40 ${
+                  className={`px-1 py-1.5 text-xs font-black disabled:opacity-40 sm:py-2 sm:text-sm ${
                     isBrutalist ? "text-[#ffb36b]" : "text-rose-600 disabled:text-slate-400"
                   }`}
                 >
@@ -1399,10 +1399,10 @@ export default function CinePostsFeed({
                   href={postHref}
                   onClick={(event) => event.stopPropagation()}
                   className={`inline-flex items-center justify-center gap-1.5 transition ${
-                    isBrutalist ? "text-white/65 hover:text-[#ffb36b]" : "rounded-2xl bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 sm:px-3 sm:text-sm"
+                    isBrutalist ? "text-white/65 hover:text-[#ffb36b]" : "px-0 py-0 text-xs font-bold text-slate-600 hover:text-slate-900 sm:rounded-2xl sm:bg-slate-50 sm:px-3 sm:py-2 sm:text-sm sm:hover:bg-slate-100"
                   }`}
                 >
-                  <MessageCircle className="h-5 w-5" />
+                  <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                   {post.comments_count}
                 </Link>
               </div>
@@ -1414,14 +1414,14 @@ export default function CinePostsFeed({
                   post.saved_by_current_user
                     ? isBrutalist
                       ? "text-[#ff7a1a]"
-                      : "bg-blue-50 text-[#f5f0de]"
+                      : "text-blue-600 sm:bg-blue-50"
                     : isBrutalist
                     ? "text-white/65 hover:text-[#ffb36b]"
-                    : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                    : "text-slate-600 hover:text-slate-900 sm:bg-slate-50 sm:hover:bg-slate-100"
                   }`}
                 aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
               >
-                <Bookmark className={`h-5 w-5 ${post.saved_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-blue-500") : ""}`} />
+                <Bookmark className={`h-4 w-4 sm:h-5 sm:w-5 ${post.saved_by_current_user ? (isBrutalist ? "fill-[#ff7a1a]" : "fill-blue-500") : ""}`} />
               </button>
             </div>
           </div>
