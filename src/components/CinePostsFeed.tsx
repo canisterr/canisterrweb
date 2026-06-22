@@ -274,7 +274,7 @@ function DiscoveryRail({
     <section className="space-y-3">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h3 className={`text-[11px] uppercase tracking-[0.3em] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+          <h3 className={`text-xs uppercase tracking-[0.24em] sm:text-[11px] sm:tracking-[0.3em] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
             {title}
           </h3>
         </div>
@@ -310,7 +310,7 @@ function DiscoveryRail({
 
       <div
         ref={railRef}
-        className="grid grid-flow-col gap-3 overflow-x-auto scroll-smooth pb-1 pr-1 scrollbar-hide snap-x snap-mandatory auto-cols-[7.5rem] sm:auto-cols-[8rem] lg:auto-cols-[calc((100%-3rem)/5)]"
+        className="grid grid-flow-col gap-3 overflow-x-auto scroll-smooth pb-1 pr-1 scrollbar-hide snap-x snap-mandatory auto-cols-[8.25rem] sm:auto-cols-[8rem] lg:auto-cols-[calc((100%-3rem)/5)]"
       >
         {loading ? (
           Array.from({ length: 10 }).map((_, index) => (
@@ -343,10 +343,10 @@ function DiscoveryRail({
                     <div className="flex h-full w-full items-center justify-center text-xs text-white/35">No poster</div>
                   )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2 pt-8">
-                    <p className="line-clamp-2 text-[11px] font-semibold leading-4 text-[#f5f0de]">{item.label}</p>
+                    <p className="line-clamp-2 text-[12px] font-semibold leading-[1.05rem] text-[#f5f0de] sm:text-[11px] sm:leading-4">{item.label}</p>
                   </div>
                 </div>
-                <p className={`mt-2 text-[10px] uppercase tracking-[0.18em] ${isBrutalist ? "text-white/35" : "text-slate-400"}`}>
+                <p className={`mt-2 text-[11px] uppercase tracking-[0.14em] sm:text-[10px] sm:tracking-[0.18em] ${isBrutalist ? "text-white/35" : "text-slate-400"}`}>
                   {item.meta}
                 </p>
               </div>
@@ -381,7 +381,7 @@ function DiscoverListRail({
     <section className="space-y-3">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h3 className={`text-[11px] uppercase tracking-[0.3em] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+          <h3 className={`text-xs uppercase tracking-[0.24em] sm:text-[11px] sm:tracking-[0.3em] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
             Discover Lists
           </h3>
         </div>
@@ -415,7 +415,7 @@ function DiscoverListRail({
 
       <div
         ref={railRef}
-        className="grid grid-flow-col gap-3 overflow-x-auto scroll-smooth pb-1 pr-1 scrollbar-hide snap-x snap-mandatory auto-cols-[7.5rem] sm:auto-cols-[8rem] lg:auto-cols-[calc((100%-3rem)/5)]"
+        className="grid grid-flow-col gap-3 overflow-x-auto scroll-smooth pb-1 pr-1 scrollbar-hide snap-x snap-mandatory auto-cols-[8.25rem] sm:auto-cols-[8rem] lg:auto-cols-[calc((100%-3rem)/5)]"
       >
         {loading ? (
           Array.from({ length: 6 }).map((_, index) => (
@@ -448,10 +448,10 @@ function DiscoverListRail({
                     <div className="flex h-full w-full items-center justify-center text-xs text-white/35">No poster</div>
                   )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2 pt-8">
-                    <p className="line-clamp-2 text-[11px] font-semibold leading-4 text-[#f5f0de]">{item.name}</p>
+                    <p className="line-clamp-2 text-[12px] font-semibold leading-[1.05rem] text-[#f5f0de] sm:text-[11px] sm:leading-4">{item.name}</p>
                   </div>
                 </div>
-                <p className={`mt-2 text-[10px] uppercase tracking-[0.18em] ${isBrutalist ? "text-white/35" : "text-slate-400"}`}>
+                <p className={`mt-2 text-[11px] uppercase tracking-[0.14em] sm:text-[10px] sm:tracking-[0.18em] ${isBrutalist ? "text-white/35" : "text-slate-400"}`}>
                   Public list
                 </p>
               </div>
@@ -976,14 +976,14 @@ export default function CinePostsFeed({
               <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
             </Link>
             <Link href={profileHref(postAuthorUser)} className="min-w-0 flex-1 pt-0.5">
-              <p className="truncate text-[13px] font-black leading-tight text-[#f5f0de] sm:text-sm">
+              <p className="truncate text-[15px] font-black leading-tight text-[#f5f0de] sm:text-sm">
                 {getDisplayUserName(postAuthorUser, currentUser)}
               </p>
-              <p className="mt-0.5 truncate text-[10px] leading-tight text-white/55 sm:text-xs">
+              <p className="mt-0.5 truncate text-[12px] leading-tight text-white/55 sm:text-xs">
                 {getDisplayUserHandle(postAuthorUser, currentUser)}
               </p>
             </Link>
-            <div className="flex flex-shrink-0 items-center gap-1.5 text-[10px] text-white/50 sm:gap-3 sm:text-xs">
+            <div className="flex flex-shrink-0 items-center gap-1.5 text-[12px] text-white/50 sm:gap-3 sm:text-xs">
               <span>{relativeTime(post.created_at)}</span>
               <CinePostOwnerMenu
                 post={post}
@@ -998,10 +998,10 @@ export default function CinePostsFeed({
           <div className="mt-2 flex-1 sm:mt-4">
             <SpoilerText
               spoiler={post.contains_spoiler}
-              className="line-clamp-3 text-[11px] leading-[1.1rem] text-[#f5f0de]/92 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-sm sm:leading-6"
+              className="line-clamp-3 text-[13px] leading-[1.28rem] text-[#f5f0de]/92 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-sm sm:leading-6"
             >
               <Link href={postHref}>{preview.text}</Link>
-              {preview.isTrimmed && <span className="mt-1 block text-xs font-bold text-[#ff9b4a]">Show more</span>}
+              {preview.isTrimmed && <span className="mt-1 block text-[12px] font-bold text-[#ff9b4a] sm:text-xs">Show more</span>}
             </SpoilerText>
           </div>
 
@@ -1192,16 +1192,16 @@ export default function CinePostsFeed({
                     <Link
                       href={profileHref(postAuthorUser)}
                       onClick={(event) => event.stopPropagation()}
-                      className="block truncate text-[0.88rem] font-black leading-[1.02] text-[#f5f0de] hover:text-[#ffb36b] sm:text-[1.12rem]"
+                      className="block truncate text-[1rem] font-black leading-[1.02] text-[#f5f0de] hover:text-[#ffb36b] sm:text-[1.12rem]"
                     >
                       {getAuthorDisplayName(post, currentUser)}
                     </Link>
                     {getAuthorUsername(postAuthorUser) ? (
-                        <p className="mt-0.5 truncate text-[0.72rem] font-medium leading-none text-[#ffb36b] sm:text-[0.9rem]">{getAuthorUsername(postAuthorUser)}</p>
+                        <p className="mt-0.5 truncate text-[0.8rem] font-medium leading-none text-[#ffb36b] sm:text-[0.9rem]">{getAuthorUsername(postAuthorUser)}</p>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1.5 pt-0.5">
-                    <span className="text-[0.68rem] text-white/45 sm:text-[0.92rem]">{relativeTime(post.created_at)}</span>
+                    <span className="text-[0.76rem] text-white/45 sm:text-[0.92rem]">{relativeTime(post.created_at)}</span>
                     <div onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
                       <CinePostOwnerMenu
                         post={post}
@@ -1215,7 +1215,7 @@ export default function CinePostsFeed({
                 </div>
 
                 <Link href={postHref} className="mt-1 block sm:mt-4" onClick={(event) => event.stopPropagation()}>
-                  <p className="line-clamp-3 text-[0.72rem] leading-[1.1rem] text-[#f5f0de]/90 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[1rem] sm:leading-8">
+                  <p className="line-clamp-3 text-[0.86rem] leading-[1.3rem] text-[#f5f0de]/90 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[1rem] sm:leading-8">
                     {preview.text}
                   </p>
                 </Link>
@@ -1223,7 +1223,7 @@ export default function CinePostsFeed({
                 {preview.isTrimmed && (
                   <Link
                     href={postHref}
-                    className="mt-0.5 inline-flex text-[0.72rem] font-black text-[#ffb36b] sm:text-[0.95rem]"
+                    className="mt-0.5 inline-flex text-[0.82rem] font-black text-[#ffb36b] sm:text-[0.95rem]"
                     onClick={(event) => event.stopPropagation()}
                   >
                     Show more
@@ -1320,14 +1320,14 @@ export default function CinePostsFeed({
                         <Link
                           href={profileHref(postAuthorUser)}
                           onClick={(event) => event.stopPropagation()}
-                          className={`text-[12px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
+                          className={`text-[14px] font-black leading-none sm:text-sm ${isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"}`}
                         >
                           {getAuthorDisplayName(post, currentUser)}
                         </Link>
-                        <span className={`text-[10px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
+                        <span className={`text-[12px] sm:text-xs ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>{relativeTime(post.created_at)}</span>
                       </div>
                       {getAuthorUsername(postAuthorUser) ? (
-                        <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">{getAuthorUsername(postAuthorUser)}</p>
+                        <p className="mt-1 text-[13px] text-slate-400 sm:text-xs">{getAuthorUsername(postAuthorUser)}</p>
                       ) : null}
                     </div>
                     <div className="flex items-center gap-2.5">
@@ -1345,7 +1345,7 @@ export default function CinePostsFeed({
                   </div>
 
                   <Link href={postHref} className="mt-1.5 block sm:mt-3" onClick={(event) => event.stopPropagation()}>
-                    <p className={`line-clamp-3 text-[12px] leading-[1.05rem] sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[14px] sm:leading-6 ${
+                    <p className={`line-clamp-3 text-[14px] leading-[1.32rem] sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[14px] sm:leading-6 ${
                       isBrutalist ? "text-[#f5f0de]/92" : "text-slate-700"
                     }`}>
                       {preview.text}
@@ -1355,7 +1355,7 @@ export default function CinePostsFeed({
                   {preview.isTrimmed && (
                     <Link
                       href={postHref}
-                      className="mt-2 inline-flex text-[10px] font-black text-[#f5f0de] sm:mt-2 sm:text-sm"
+                      className="mt-2 inline-flex text-[12px] font-black text-[#f5f0de] sm:mt-2 sm:text-sm"
                       onClick={(event) => event.stopPropagation()}
                     >
                       Show more
