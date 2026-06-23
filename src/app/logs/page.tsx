@@ -603,130 +603,131 @@ export default function LogsPage() {
           </div>
         </div>
 
-        <div className="space-y-0">
-          <div className="flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3">
-            <button
-              onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-              className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
-              aria-label="Previous month"
-            >
-              <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
+        <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(22rem,0.88fr)] lg:items-start lg:gap-5 lg:space-y-0">
+          <div className="space-y-0 lg:sticky lg:top-24">
+            <div className="flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3">
+              <button
+                onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
 
-            <div className="min-w-0 text-center">
-              <h2 className="text-2xl font-black uppercase leading-none tracking-normal text-[#f5f0de] sm:text-4xl">
-                {formatMonthName(currentMonth)}
-              </h2>
-              <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.24em] text-[#ffb36b] sm:text-[10px]">
-                {currentMonth.getFullYear()}
-              </p>
+              <div className="min-w-0 text-center">
+                <h2 className="text-2xl font-black uppercase leading-none tracking-normal text-[#f5f0de] sm:text-4xl">
+                  {formatMonthName(currentMonth)}
+                </h2>
+                <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.24em] text-[#ffb36b] sm:text-[10px]">
+                  {currentMonth.getFullYear()}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
+                aria-label="Next month"
+              >
+                <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
             </div>
 
-            <button
-              onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-              className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
-              aria-label="Next month"
-            >
-              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-          </div>
+            <div className="grid grid-cols-7 border-y border-white/10 bg-white/[0.02]">
+              {WEEKDAYS.map((day) => (
+                <div key={day} className="border-r border-white/10 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] text-[#ffb36b]/80 last:border-r-0 sm:text-xs">
+                  {day}
+                </div>
+              ))}
+            </div>
 
-          <div className="grid grid-cols-7 border-y border-white/10 bg-white/[0.02]">
-            {WEEKDAYS.map((day) => (
-              <div key={day} className="border-r border-white/10 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] text-[#ffb36b]/80 last:border-r-0 sm:text-xs">
-                {day}
-              </div>
-            ))}
-          </div>
+            <div className="grid grid-cols-7 bg-[#111111]">
+              {calendarCells.map((cell) => {
+                if (!cell.inMonth || !cell.date) {
+                  return <div key={cell.key} className="min-h-[6.25rem] border-b border-r border-white/10 bg-white/[0.02] sm:min-h-[9rem]" />;
+                }
 
-          <div className="grid grid-cols-7 bg-[#111111]">
-            {calendarCells.map((cell) => {
-              if (!cell.inMonth || !cell.date) {
-                return <div key={cell.key} className="min-h-[6.25rem] border-b border-r border-white/10 bg-white/[0.02] sm:min-h-[9rem]" />;
-              }
+                const day = cell.date.getDate();
+                const dayKey = cell.key;
+                const dayLogsInCell = (logsByDate.get(dayKey) || []).slice().sort(compareLogsDesc);
+                const isSelected = selectedDay === dayKey;
+                const visibleStackCount = Math.min(dayLogsInCell.length, 3);
+                const stackOffsetPx = dayLogsInCell.length > 1 ? 6 : 0;
+                const stackHeightOffsetPx = (visibleStackCount - 1) * stackOffsetPx;
 
-              const day = cell.date.getDate();
-              const dayKey = cell.key;
-              const dayLogsInCell = (logsByDate.get(dayKey) || []).slice().sort(compareLogsDesc);
-              const isSelected = selectedDay === dayKey;
-              const visibleStackCount = Math.min(dayLogsInCell.length, 3);
-              const stackOffsetPx = dayLogsInCell.length > 1 ? 6 : 0;
-              const stackHeightOffsetPx = (visibleStackCount - 1) * stackOffsetPx;
-
-              return (
-                <button
-                  key={cell.key}
-                  onClick={() => {
-                    setListMode("month");
-                    setSelectedDay((prev) => (prev === dayKey ? null : dayKey));
-                    scrollToListSection();
-                  }}
-                  className={`group relative min-h-[6.25rem] overflow-hidden border-b border-r border-white/10 text-left transition sm:min-h-[9rem] ${
-                    isSelected
-                      ? "bg-orange-500/10 shadow-[inset_0_0_0_2px_rgba(255,122,26,0.55)]"
-                      : dayLogsInCell.length > 0
-                      ? "bg-[#101010] hover:bg-white/[0.03]"
-                      : "bg-[#0f0f0f] hover:bg-white/[0.03]"
-                  }`}
-                >
-                  {dayLogsInCell.length > 0 ? (
-                    <div className="absolute inset-0">
-                      <div className="relative flex h-full w-full items-center justify-center">
-                        {dayLogsInCell.slice(0, 3).map((log, idx) => (
-                          log.content.poster_url ? (
-                            <Image
-                              key={log.id}
-                              src={log.content.poster_url}
-                              alt={log.content.title}
-                              width={120}
-                              height={180}
-                              className={`absolute h-full w-full object-cover shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition duration-200 group-hover:-translate-y-0.5 ${getPosterStackClass(idx)}`}
-                              style={{
-                                height: `calc(100% - ${stackHeightOffsetPx}px)`,
-                                left: 0,
-                                top: idx * stackOffsetPx,
-                                width: "100%",
-                                zIndex: 10 + idx,
-                              }}
-                              placeholder="blur"
-                              blurDataURL={getBlurDataUrl("#e2e8f0")}
-                            />
-                          ) : (
-                            <div
-                              key={log.id}
-                              className={`absolute flex h-full w-full items-center justify-center bg-slate-100 px-1 text-center text-[8px] font-bold text-slate-400 shadow-[0_8px_18px_rgba(15,23,42,0.16)] sm:text-[10px] ${getPosterStackClass(idx)}`}
-                              style={{
-                                height: `calc(100% - ${stackHeightOffsetPx}px)`,
-                                left: 0,
-                                top: idx * stackOffsetPx,
-                                width: "100%",
-                                zIndex: 10 + idx,
-                              }}
-                            >
-                              No poster
-                            </div>
-                          )
-                        ))}
+                return (
+                  <button
+                    key={cell.key}
+                    onClick={() => {
+                      setListMode("month");
+                      setSelectedDay((prev) => (prev === dayKey ? null : dayKey));
+                      scrollToListSection();
+                    }}
+                    className={`group relative min-h-[6.25rem] overflow-hidden border-b border-r border-white/10 text-left transition sm:min-h-[9rem] ${
+                      isSelected
+                        ? "bg-orange-500/10 shadow-[inset_0_0_0_2px_rgba(255,122,26,0.55)]"
+                        : dayLogsInCell.length > 0
+                        ? "bg-[#101010] hover:bg-white/[0.03]"
+                        : "bg-[#0f0f0f] hover:bg-white/[0.03]"
+                    }`}
+                  >
+                    {dayLogsInCell.length > 0 ? (
+                      <div className="absolute inset-0">
+                        <div className="relative flex h-full w-full items-center justify-center">
+                          {dayLogsInCell.slice(0, 3).map((log, idx) => (
+                            log.content.poster_url ? (
+                              <Image
+                                key={log.id}
+                                src={log.content.poster_url}
+                                alt={log.content.title}
+                                width={120}
+                                height={180}
+                                className={`absolute h-full w-full object-cover shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition duration-200 group-hover:-translate-y-0.5 ${getPosterStackClass(idx)}`}
+                                style={{
+                                  height: `calc(100% - ${stackHeightOffsetPx}px)`,
+                                  left: 0,
+                                  top: idx * stackOffsetPx,
+                                  width: "100%",
+                                  zIndex: 10 + idx,
+                                }}
+                                placeholder="blur"
+                                blurDataURL={getBlurDataUrl("#e2e8f0")}
+                              />
+                            ) : (
+                              <div
+                                key={log.id}
+                                className={`absolute flex h-full w-full items-center justify-center bg-slate-100 px-1 text-center text-[8px] font-bold text-slate-400 shadow-[0_8px_18px_rgba(15,23,42,0.16)] sm:text-[10px] ${getPosterStackClass(idx)}`}
+                                style={{
+                                  height: `calc(100% - ${stackHeightOffsetPx}px)`,
+                                  left: 0,
+                                  top: idx * stackOffsetPx,
+                                  width: "100%",
+                                  zIndex: 10 + idx,
+                                }}
+                              >
+                                No poster
+                              </div>
+                            )
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <>
-                      <span className={`absolute left-1.5 top-1.5 z-20 text-[11px] font-black sm:left-2.5 sm:top-2.5 sm:text-sm ${isSelected ? "text-[#ffb36b]" : "text-[#ff7a1a]"}`}>
-                        {day}
-                      </span>
-                      <div className="pointer-events-none absolute inset-x-3 bottom-3 hidden h-px bg-white/10 sm:block" />
-                    </>
-                  )}
-                </button>
-              );
-            })}
+                    ) : (
+                      <>
+                        <span className={`absolute left-1.5 top-1.5 z-20 text-[11px] font-black sm:left-2.5 sm:top-2.5 sm:text-sm ${isSelected ? "text-[#ffb36b]" : "text-[#ff7a1a]"}`}>
+                          {day}
+                        </span>
+                        <div className="pointer-events-none absolute inset-x-3 bottom-3 hidden h-px bg-white/10 sm:block" />
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-        <div
-          ref={listSectionRef}
-          className="relative -mx-1 scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-b from-[#2a2a2a]/95 via-[#1f1f1f]/95 to-[#141414]/95 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_50px_rgba(0,0,0,0.24)] sm:-mx-2 sm:p-4"
-        >
+          <div
+            ref={listSectionRef}
+            className="relative -mx-1 scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-b from-[#2a2a2a]/95 via-[#1f1f1f]/95 to-[#141414]/95 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_50px_rgba(0,0,0,0.24)] sm:-mx-2 sm:p-4 lg:mx-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
+          >
           <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-white/5 blur-3xl" />
           <div className="pointer-events-none absolute -right-16 top-56 h-48 w-48 rounded-full bg-white/4 blur-3xl" />
           <div className="relative mb-3 flex flex-col items-center gap-2.5 text-center">
@@ -809,6 +810,7 @@ export default function LogsPage() {
                 : "No logs for this selection."}
             </div>
           )}
+          </div>
         </div>
       </div>
 

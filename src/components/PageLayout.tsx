@@ -33,7 +33,8 @@ export default function PageLayout({
   headerAction = "notifications",
 }: PageLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { settings } = useCurrentUser();
+  const { settings, user: sessionUser } = useCurrentUser();
+  const effectiveUser = user ?? sessionUser;
   const isBrutalist = theme === "brutalist";
   const pathname = usePathname();
   const isPwa = useIsPwa();
@@ -45,7 +46,7 @@ export default function PageLayout({
 
     const root = document.documentElement;
 
-    if (!user) {
+    if (!effectiveUser) {
       root.dataset.cineTheme = DEFAULT_SETTINGS.appearance.theme;
       root.dataset.cineTextSize = DEFAULT_SETTINGS.appearance.textSize;
       root.dataset.cineReduceMotion = DEFAULT_SETTINGS.appearance.reduceMotion ? "true" : "false";
@@ -57,7 +58,7 @@ export default function PageLayout({
     root.dataset.cineTextSize = settings.appearance.textSize;
     root.dataset.cineReduceMotion = settings.appearance.reduceMotion ? "true" : "false";
     root.style.colorScheme = resolveThemePreference(settings.appearance.theme);
-  }, [settings, user]);
+  }, [effectiveUser, settings]);
 
   return (
     <div className={`${isBrutalist ? "brutalist bg-[#0a0a0a]" : "app-shell"} flex min-h-dvh overflow-x-hidden`}>
@@ -79,7 +80,7 @@ export default function PageLayout({
           >
             <Menu className="h-5 w-5" />
           </button>
-        ) : user ? (
+        ) : effectiveUser ? (
           <Link
             href="/profile"
             className={`absolute left-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full border transition lg:hidden ${
@@ -89,15 +90,15 @@ export default function PageLayout({
             }`}
             aria-label="Open profile"
           >
-            {user?.avatar_url ? (
+            {effectiveUser.avatar_url ? (
               <img
-                src={user.avatar_url}
-                alt={user.name}
+                src={effectiveUser.avatar_url}
+                alt={effectiveUser.name}
                 className="h-full w-full object-cover"
               />
             ) : (
               <span className={`text-[10px] font-bold ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-                {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                {effectiveUser.name?.charAt(0)?.toUpperCase() || "U"}
               </span>
             )}
           </Link>
@@ -112,16 +113,16 @@ export default function PageLayout({
             }`}
             aria-label="Open menu"
           >
-            <Menu className="h-5 w-5" />
+          <Menu className="h-5 w-5" />
           </button>
         )}
 
         <Link
-          href={user ? "/dashboard" : guestHeaderHref}
+          href={effectiveUser ? "/dashboard" : guestHeaderHref}
           className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition hover:opacity-80 ${
             isBrutalist ? "text-[#f5f0de]" : "text-zinc-950"
           }`}
-          aria-label={user ? "Go to home" : "Sign in"}
+          aria-label={effectiveUser ? "Go to home" : "Sign in"}
         >
           <Image
             src="/logo.png"
@@ -136,7 +137,7 @@ export default function PageLayout({
           </span>
         </Link>
         {headerAction === "settings" ? (
-          user ? (
+          effectiveUser ? (
             <Link
               href="/profile/settings"
               className={`absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border transition ${
@@ -161,8 +162,8 @@ export default function PageLayout({
             </Link>
           )
         ) : (
-          user ? (
-            <NotificationBellShell user={user} theme={theme} />
+          effectiveUser ? (
+            <NotificationBellShell user={effectiveUser} theme={theme} />
           ) : (
             <Link
               href={guestHeaderHref}
@@ -182,7 +183,7 @@ export default function PageLayout({
         <>
           {/* Sidebar: hidden on mobile, slide-in on open */}
           <SidebarShell
-            user={user}
+            user={effectiveUser}
             onSignOut={onSignOut}
             mobileOpen={sidebarOpen}
             onCloseMobile={() => setSidebarOpen(false)}
@@ -204,7 +205,7 @@ export default function PageLayout({
           reserveBottomNavSpace ? "pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0" : ""
         }`}
       >
-        {user ? (
+        {effectiveUser ? (
           <EmailVerificationBadgeShell className="mx-auto mt-3 w-full max-w-[1600px] px-1 sm:px-2" />
         ) : null}
         <div className={fullWidth ? "w-full" : "mx-auto w-full max-w-[1600px] px-3 py-2 sm:px-4 md:px-6 lg:px-8"}>

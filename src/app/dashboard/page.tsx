@@ -51,6 +51,17 @@ type SearchCrewResult = TMDBPersonSearchResult & {
 
 type GlobalSearchResult = Content | SearchCrewResult;
 
+function dedupeAccountResults(items: SearchAccount[]): SearchAccount[] {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const key = item.id || normalizeAccountSearchText(item.username);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function isCrewSearchResult(result: GlobalSearchResult): result is SearchCrewResult {
   return "resultType" in result && result.resultType === "crew";
 }
@@ -353,7 +364,8 @@ export default function DashboardPage() {
         setSearchResults([...combinedContent, ...crewResults]);
 
         const normalizedQuery = normalizeAccountSearchText(query);
-        const usersMatched = Object.values(usersData)
+        const usersMatched = dedupeAccountResults(
+          Object.values(usersData)
           .filter((entry: any) => {
             const username = normalizeAccountSearchText(String(entry?.username || ""));
             const name = normalizeAccountSearchText(String(entry?.name || ""));
@@ -366,7 +378,8 @@ export default function DashboardPage() {
             name: entry?.name || "User",
             avatar_url: entry?.avatar_url || null,
           }))
-          .filter((entry: SearchAccount) => entry.username);
+          .filter((entry: SearchAccount) => entry.username)
+        );
 
         setAccountResults(usersMatched);
         setShowSearchModal(true);
@@ -751,7 +764,7 @@ export default function DashboardPage() {
                       ))}
 
                   {(searchFilter === "all" || searchFilter === "accounts") && accountResults.map((account) => (
-                    <Link key={`account-${account.username}`} href={`/profile/${account.username}`}>
+                    <Link key={`account-${account.id || account.username}`} href={`/profile/${account.username}`}>
                       <div className="flex cursor-pointer items-center gap-3 border-b border-white/10 p-3 transition-colors last:border-b-0 hover:bg-white/5">
                         <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-[#1a1a1a]">
                           {account.avatar_url ? (
