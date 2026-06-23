@@ -121,6 +121,9 @@ function createShowContent(show: ShowDetails, createdAt: string): Content {
     created_at: createdAt,
     type: "tv",
     network: show.network,
+    source: show.source,
+    tmdb_id: show.tmdb_id,
+    tvmaze_id: show.tvmaze_id,
   };
 }
 

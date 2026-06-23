@@ -84,7 +84,7 @@ export default function TvSeasonsPage() {
           return;
         }
 
-        const seasonList = await getShowSeasons(resolved.show.id);
+        const seasonList = await getShowSeasons(resolved.show.id, resolved.show.tmdb_id);
         if (cancelled) return;
 
         setShow(resolved.show);

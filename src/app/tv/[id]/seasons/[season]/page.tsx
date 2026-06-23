@@ -92,7 +92,7 @@ export default function TvSeasonPage() {
           return;
         }
 
-        const seasonList = await getShowSeasons(resolved.show.id);
+        const seasonList = await getShowSeasons(resolved.show.id, resolved.show.tmdb_id);
         const numericSeason = Number(seasonParam);
         const matchingSeason = seasonList.find((season) => season.number === numericSeason) || seasonList[0] || null;
 

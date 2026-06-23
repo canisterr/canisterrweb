@@ -931,6 +931,7 @@ export default function CinePostsFeed({
     const postHref = `/posts/${post.id}`;
     const preview = getPreview(getCinePostDisplayBody(post));
     const postAuthorUser = currentUser && currentUser.id === post.user_id ? currentUser : post.user;
+    const isListPost = post.content_type === "list" && (post.list_items?.length || 0) > 0;
     const likePending = engagementPendingKeys.has(`${post.id}:like`);
     const savePending = engagementPendingKeys.has(`${post.id}:save`);
     const posterUrl =
@@ -954,106 +955,203 @@ export default function CinePostsFeed({
       <article
         key={post.id}
         data-feed-post-id={post.id}
-        className="grid min-h-[10.35rem] grid-cols-[7.1rem_minmax(0,1fr)] overflow-hidden border border-white/10 bg-[#080a0d] text-[#f5f0de] shadow-[0_12px_32px_rgba(0,0,0,0.18)] sm:min-h-[13.5rem] sm:grid-cols-[9rem_minmax(0,1fr)]"
+        className={`overflow-hidden border border-white/10 bg-[#080a0d] text-[#f5f0de] shadow-[0_12px_32px_rgba(0,0,0,0.18)] ${
+          isListPost
+            ? "px-3 py-3 sm:px-4 sm:py-4"
+            : "grid min-h-[10.35rem] grid-cols-[7.1rem_minmax(0,1fr)] sm:min-h-[13.5rem] sm:grid-cols-[9rem_minmax(0,1fr)]"
+        }`}
       >
-        {contentHref ? (
-          <Link
-            href={contentHref}
-            className="group relative block h-full min-h-[10.35rem] overflow-hidden bg-black sm:min-h-[13.5rem]"
-            title={`Open ${post.content_title || post.anchor_label}`}
-          >
-            {artwork}
-          </Link>
-        ) : (
-          <div className="group relative h-full min-h-[10.35rem] overflow-hidden bg-black sm:min-h-[13.5rem]">
-            {artwork}
-          </div>
-        )}
+        {isListPost ? (
+          <div className="flex min-w-0 flex-col">
+            <div className="flex min-w-0 items-start gap-2">
+              <Link href={profileHref(postAuthorUser)} className="flex-shrink-0">
+                <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
+              </Link>
+              <Link href={profileHref(postAuthorUser)} className="min-w-0 flex-1 pt-0.5">
+                <p className="truncate text-[15px] font-black leading-tight text-[#f5f0de] sm:text-sm">
+                  {getDisplayUserName(postAuthorUser, currentUser)}
+                </p>
+                <p className="mt-0.5 truncate text-[12px] leading-tight text-white/55 sm:text-xs">
+                  {getDisplayUserHandle(postAuthorUser, currentUser)}
+                </p>
+              </Link>
+              <div className="flex flex-shrink-0 items-center gap-1.5 text-[12px] text-white/50 sm:gap-3 sm:text-xs">
+                <span>{relativeTime(post.created_at)}</span>
+                <CinePostOwnerMenu
+                  post={post}
+                  currentUser={currentUser}
+                  onDeleted={refreshPosts}
+                  onUpdated={refreshPosts}
+                  theme="brutalist"
+                />
+              </div>
+            </div>
 
-        <div className="flex min-w-0 flex-col px-2.5 pt-2.5 sm:px-4 sm:pt-4">
-          <div className="flex min-w-0 items-start gap-2">
-            <Link href={profileHref(postAuthorUser)} className="flex-shrink-0">
-              <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
-            </Link>
-            <Link href={profileHref(postAuthorUser)} className="min-w-0 flex-1 pt-0.5">
-              <p className="truncate text-[15px] font-black leading-tight text-[#f5f0de] sm:text-sm">
-                {getDisplayUserName(postAuthorUser, currentUser)}
-              </p>
-              <p className="mt-0.5 truncate text-[12px] leading-tight text-white/55 sm:text-xs">
-                {getDisplayUserHandle(postAuthorUser, currentUser)}
-              </p>
-            </Link>
-            <div className="flex flex-shrink-0 items-center gap-1.5 text-[12px] text-white/50 sm:gap-3 sm:text-xs">
-              <span>{relativeTime(post.created_at)}</span>
-              <CinePostOwnerMenu
-                post={post}
-                currentUser={currentUser}
-                onDeleted={refreshPosts}
-                onUpdated={refreshPosts}
-                theme="brutalist"
-              />
+            <div className="mt-2 flex-1">
+              <SpoilerText
+                spoiler={post.contains_spoiler}
+                className="text-[13px] leading-[1.28rem] text-[#f5f0de]/92 sm:whitespace-pre-wrap sm:text-sm sm:leading-6"
+              >
+                <Link href={postHref}>{preview.text}</Link>
+                {preview.isTrimmed && <span className="mt-2 block text-[12px] font-black uppercase tracking-[0.14em] text-[#ffb36b] sm:text-xs">Show more</span>}
+              </SpoilerText>
+            </div>
+
+            <div className="mt-3">
+              <CinePostListStrip items={post.list_items || []} theme="brutalist" />
+            </div>
+
+            <div className="mt-3 flex items-center justify-between border-t border-white/10 py-2.5 pl-0.5 sm:py-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={getFeedSplitActionClass(theme, post.liked_by_current_user)}>
+                  <button
+                    type="button"
+                    onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
+                    disabled={likePending}
+                    className="inline-flex h-full items-center justify-center px-1.5 disabled:cursor-not-allowed disabled:opacity-70 sm:px-3"
+                    aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                  >
+                    <Heart
+                      className={`h-4 w-4 transition-transform duration-200 group-hover/action:scale-110 sm:h-[18px] sm:w-[18px] ${
+                        post.liked_by_current_user ? "fill-[#ff7a1a]" : ""
+                      }`}
+                    />
+                  </button>
+                  <div className="h-3.5 w-px bg-current/15 sm:h-4" />
+                  <button
+                    type="button"
+                    onClick={() => openPeopleModal(post, "like", "Liked by")}
+                    disabled={post.likes_count === 0}
+                    className={getFeedCountButtonClass(theme, post.liked_by_current_user)}
+                  >
+                    {post.likes_count}
+                  </button>
+                </div>
+                <Link
+                  href={postHref}
+                  className={getFeedActionChipClass(theme)}
+                >
+                  <MessageCircle className="h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px]" />
+                  <span className="text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
+                </Link>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
+                disabled={savePending}
+                className={`${getFeedActionChipClass(theme, post.saved_by_current_user)} disabled:cursor-not-allowed disabled:opacity-70`}
+                aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
+              >
+                <Bookmark
+                  className={`h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px] ${
+                    post.saved_by_current_user ? "fill-[#ff7a1a]" : ""
+                  }`}
+                />
+              </button>
             </div>
           </div>
+        ) : (
+          <>
+            {contentHref ? (
+              <Link
+                href={contentHref}
+                className="group relative block h-full min-h-[10.35rem] overflow-hidden bg-black sm:min-h-[13.5rem]"
+                title={`Open ${post.content_title || post.anchor_label}`}
+              >
+                {artwork}
+              </Link>
+            ) : (
+              <div className="group relative h-full min-h-[10.35rem] overflow-hidden bg-black sm:min-h-[13.5rem]">
+                {artwork}
+              </div>
+            )}
 
-          <div className="mt-2 flex-1 sm:mt-4">
-            <SpoilerText
-              spoiler={post.contains_spoiler}
-              className="line-clamp-3 text-[13px] leading-[1.28rem] text-[#f5f0de]/92 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-sm sm:leading-6"
-            >
-              <Link href={postHref}>{preview.text}</Link>
-              {preview.isTrimmed && <span className="mt-1 block text-[12px] font-bold text-[#ff9b4a] sm:text-xs">Show more</span>}
-            </SpoilerText>
-          </div>
+            <div className="flex min-w-0 flex-col px-2.5 pt-2.5 sm:px-4 sm:pt-4">
+              <div className="flex min-w-0 items-start gap-2">
+                <Link href={profileHref(postAuthorUser)} className="flex-shrink-0">
+                  <Avatar user={postAuthorUser} size="h-8 w-8 sm:h-9 sm:w-9" dark />
+                </Link>
+                <Link href={profileHref(postAuthorUser)} className="min-w-0 flex-1 pt-0.5">
+                  <p className="truncate text-[15px] font-black leading-tight text-[#f5f0de] sm:text-sm">
+                    {getDisplayUserName(postAuthorUser, currentUser)}
+                  </p>
+                  <p className="mt-0.5 truncate text-[12px] leading-tight text-white/55 sm:text-xs">
+                    {getDisplayUserHandle(postAuthorUser, currentUser)}
+                  </p>
+                </Link>
+                <div className="flex flex-shrink-0 items-center gap-1.5 text-[12px] text-white/50 sm:gap-3 sm:text-xs">
+                  <span>{relativeTime(post.created_at)}</span>
+                  <CinePostOwnerMenu
+                    post={post}
+                    currentUser={currentUser}
+                    onDeleted={refreshPosts}
+                    onUpdated={refreshPosts}
+                    theme="brutalist"
+                  />
+                </div>
+              </div>
 
-          <div className="mt-2.5 flex items-center justify-between border-t border-white/10 py-2.5 pl-0.5 sm:mt-4 sm:py-3">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={getFeedSplitActionClass(theme, post.liked_by_current_user)}>
+              <div className="mt-2 flex-1 sm:mt-4">
+                <SpoilerText
+                  spoiler={post.contains_spoiler}
+                  className="line-clamp-3 text-[13px] leading-[1.28rem] text-[#f5f0de]/92 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-sm sm:leading-6"
+                >
+                  <Link href={postHref}>{preview.text}</Link>
+                  {preview.isTrimmed && <span className="mt-1 block text-[12px] font-bold text-[#ff9b4a] sm:text-xs">Show more</span>}
+                </SpoilerText>
+              </div>
+
+              <div className="mt-2.5 flex items-center justify-between border-t border-white/10 py-2.5 pl-0.5 sm:mt-4 sm:py-3">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className={getFeedSplitActionClass(theme, post.liked_by_current_user)}>
+                    <button
+                      type="button"
+                      onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
+                      disabled={likePending}
+                      className="inline-flex h-full items-center justify-center px-1.5 disabled:cursor-not-allowed disabled:opacity-70 sm:px-3"
+                      aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                    >
+                      <Heart
+                        className={`h-4 w-4 transition-transform duration-200 group-hover/action:scale-110 sm:h-[18px] sm:w-[18px] ${
+                          post.liked_by_current_user ? "fill-[#ff7a1a]" : ""
+                        }`}
+                      />
+                    </button>
+                    <div className="h-3.5 w-px bg-current/15 sm:h-4" />
+                    <button
+                      type="button"
+                      onClick={() => openPeopleModal(post, "like", "Liked by")}
+                      disabled={post.likes_count === 0}
+                      className={getFeedCountButtonClass(theme, post.liked_by_current_user)}
+                    >
+                      {post.likes_count}
+                    </button>
+                  </div>
+                  <Link
+                    href={postHref}
+                    className={getFeedActionChipClass(theme)}
+                  >
+                    <MessageCircle className="h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px]" />
+                    <span className="text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
+                  </Link>
+                </div>
                 <button
                   type="button"
-                  onClick={() => handleEngagement(post, "like", !post.liked_by_current_user)}
-                  disabled={likePending}
-                  className="inline-flex h-full items-center justify-center px-1.5 disabled:cursor-not-allowed disabled:opacity-70 sm:px-3"
-                  aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
+                  onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
+                  disabled={savePending}
+                  className={`${getFeedActionChipClass(theme, post.saved_by_current_user)} disabled:cursor-not-allowed disabled:opacity-70`}
+                  aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
                 >
-                  <Heart
-                    className={`h-4 w-4 transition-transform duration-200 group-hover/action:scale-110 sm:h-[18px] sm:w-[18px] ${
-                      post.liked_by_current_user ? "fill-[#ff7a1a]" : ""
+                  <Bookmark
+                    className={`h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px] ${
+                      post.saved_by_current_user ? "fill-[#ff7a1a]" : ""
                     }`}
                   />
                 </button>
-                <div className="h-3.5 w-px bg-current/15 sm:h-4" />
-                <button
-                  type="button"
-                  onClick={() => openPeopleModal(post, "like", "Liked by")}
-                  disabled={post.likes_count === 0}
-                  className={getFeedCountButtonClass(theme, post.liked_by_current_user)}
-                >
-                  {post.likes_count}
-                </button>
               </div>
-              <Link
-                href={postHref}
-                className={getFeedActionChipClass(theme)}
-              >
-                <MessageCircle className="h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px]" />
-                <span className="text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
-              </Link>
             </div>
-            <button
-              type="button"
-              onClick={() => handleEngagement(post, "save", !post.saved_by_current_user)}
-              disabled={savePending}
-              className={`${getFeedActionChipClass(theme, post.saved_by_current_user)} disabled:cursor-not-allowed disabled:opacity-70`}
-              aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
-            >
-              <Bookmark
-                className={`h-4 w-4 transition-transform duration-200 group-hover/chip:scale-110 sm:h-[18px] sm:w-[18px] ${
-                  post.saved_by_current_user ? "fill-[#ff7a1a]" : ""
-                }`}
-              />
-            </button>
-          </div>
-        </div>
+          </>
+        )}
       </article>
     );
   };

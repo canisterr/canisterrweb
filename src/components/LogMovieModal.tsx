@@ -103,6 +103,7 @@ export default function LogMovieModal({
   const ALL_EPISODES_VALUE = "__all__";
   const isEditMode = mode === "edit";
   const contentLabel = content.type === "tv" ? "TV show" : "Movie";
+  const tvTmdbId = content.type === "tv" ? content.tmdb_id ?? null : null;
   const [watchedDate, setWatchedDate] = useState(new Date().toISOString().split("T")[0]);
   const [reaction, setReaction] = useState<null | 0 | 1 | 1.5 | 2>(null); // 0=Bad, 1=Good, 1.5=Average, 2=Masterpiece
   const [notes, setNotes] = useState("");
@@ -192,7 +193,7 @@ export default function LogMovieModal({
     const loadSeasons = async () => {
       try {
         setLoadingSeasons(true);
-        const seasons = await getShowSeasons(content.id);
+        const seasons = await getShowSeasons(content.id, tvTmdbId);
         if (cancelled) return;
         setTvSeasons(seasons);
         setSelectedSeasonScope((current) => {
@@ -230,7 +231,7 @@ export default function LogMovieModal({
     return () => {
       cancelled = true;
     };
-  }, [content.id, content.type, initialTvScope, isOpen]);
+  }, [content.id, content.type, initialTvScope, isOpen, tvTmdbId]);
 
   useEffect(() => {
     if (!isOpen || content.type !== "tv") return;
@@ -262,7 +263,7 @@ export default function LogMovieModal({
                 showId: content.id,
               }
             )
-          : await getShowEpisodes(content.id);
+          : await getShowEpisodes(content.id, tvTmdbId);
 
         if (cancelled) return;
         setTvEpisodes(episodes);
@@ -310,7 +311,7 @@ export default function LogMovieModal({
     return () => {
       cancelled = true;
     };
-  }, [content.id, content.type, existingLog, isEditMode, isOpen, selectedSeasonScope]);
+  }, [content.id, content.type, existingLog, isEditMode, isOpen, selectedSeasonScope, tvTmdbId]);
 
   useEffect(() => {
     if (!isOpen) return;

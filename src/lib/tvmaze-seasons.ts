@@ -1,4 +1,5 @@
 import { fetchTmdb } from "./tmdb-transport";
+import { getTmdbLookupId } from "./tvmaze";
 
 // Fetch all seasons for a TV show from TVMaze, with TMDB fallback.
 // https://www.tvmaze.com/api#show-seasons
@@ -106,7 +107,9 @@ function mapTMDBSeason(season: TMDBTVSeasonApi, showId: number): TVMazeSeason {
   };
 }
 
-export async function getShowSeasons(showId: number): Promise<TVMazeSeason[]> {
+export async function getShowSeasons(showId: number, tmdbId?: number | null): Promise<TVMazeSeason[]> {
+  const tmdbLookupId = getTmdbLookupId(showId, tmdbId);
+
   try {
     const response = await fetch(`https://api.tvmaze.com/shows/${showId}/seasons`);
     if (response.ok) {
@@ -130,22 +133,26 @@ export async function getShowSeasons(showId: number): Promise<TVMazeSeason[]> {
       }
     }
 
-    const tmdbResponse = await fetchTmdb(`tv/${showId}`);
+    if (!tmdbLookupId) return [];
+
+    const tmdbResponse = await fetchTmdb(`tv/${tmdbLookupId}`);
     if (!tmdbResponse.ok) return [];
 
     const tmdbData = (await tmdbResponse.json()) as { seasons?: TMDBTVSeasonApi[] };
     return (tmdbData.seasons || [])
       .filter((season) => typeof season.season_number === "number" && season.season_number > 0)
-      .map((season) => mapTMDBSeason(season, showId));
+      .map((season) => mapTMDBSeason(season, tmdbLookupId));
   } catch {
     try {
-      const tmdbResponse = await fetchTmdb(`tv/${showId}`);
+      if (!tmdbLookupId) return [];
+
+      const tmdbResponse = await fetchTmdb(`tv/${tmdbLookupId}`);
       if (!tmdbResponse.ok) return [];
 
       const tmdbData = (await tmdbResponse.json()) as { seasons?: TMDBTVSeasonApi[] };
       return (tmdbData.seasons || [])
         .filter((season) => typeof season.season_number === "number" && season.season_number > 0)
-        .map((season) => mapTMDBSeason(season, showId));
+        .map((season) => mapTMDBSeason(season, tmdbLookupId));
     } catch {
       return [];
     }
@@ -201,9 +208,9 @@ export async function getSeasonEpisodes(season: TVMazeSeason): Promise<TVMazeEpi
   }
 }
 
-export async function getShowEpisodes(showId: number): Promise<TVMazeEpisode[]> {
+export async function getShowEpisodes(showId: number, tmdbId?: number | null): Promise<TVMazeEpisode[]> {
   try {
-    const seasons = await getShowSeasons(showId);
+    const seasons = await getShowSeasons(showId, tmdbId);
     if (seasons.length === 0) return [];
 
     const seasonEpisodes = await Promise.all(seasons.map((season) => getSeasonEpisodes(season)));

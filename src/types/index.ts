@@ -56,6 +56,9 @@ export interface TVShow {
     name?: string;
   };
   streaming_services?: string[] | null;
+  source?: "tvmaze" | "tmdb";
+  tmdb_id?: number;
+  tvmaze_id?: number;
 }
 
 // Combined content type (movie or TV show)

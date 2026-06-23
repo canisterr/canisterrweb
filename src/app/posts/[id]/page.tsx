@@ -11,7 +11,6 @@ import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import PageLayout from "@/components/PageLayout";
 import CinePostArtwork from "@/components/CinePostArtwork";
 import CinePostListStrip from "@/components/CinePostListStrip";
-import SpoilerText from "@/components/SpoilerText";
 import { getDisplayUserName } from "@/lib/users";
 import {
   CinePostCommentWithUser,
@@ -98,6 +97,61 @@ function Avatar({ user, size = "h-10 w-10" }: { user: User; size?: string }) {
   return (
     <div className={`flex ${size} items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white`}>
       {user.name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+const POST_BODY_PREVIEW_LIMIT = 320;
+
+function ExpandablePostBody({
+  body,
+  spoiler,
+  className = "",
+  buttonClassName = "",
+}: {
+  body: string;
+  spoiler?: boolean | null;
+  className?: string;
+  buttonClassName?: string;
+}) {
+  const [revealed, setRevealed] = useState(!spoiler);
+  const [expanded, setExpanded] = useState(false);
+
+  const isTrimmed = body.length > POST_BODY_PREVIEW_LIMIT;
+  const visibleText =
+    expanded || !isTrimmed
+      ? body
+      : `${body.slice(0, POST_BODY_PREVIEW_LIMIT).trimEnd()}...`;
+
+  if (spoiler && !revealed) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setRevealed(true);
+        }}
+        className={`flex w-full flex-col items-start border border-white/12 bg-white/[0.03] px-4 py-3 text-left transition hover:border-[#ff7a1a]/55 ${buttonClassName}`}
+      >
+        <span className="text-xs font-black uppercase tracking-[0.18em] text-[#ff7a1a]">Contains spoiler</span>
+        <span className="mt-1 text-xs text-white/55">Click to see</span>
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <div className={className}>{linkify(visibleText)}</div>
+      {isTrimmed ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="mt-3 inline-flex rounded-full border border-[#ff7a1a]/20 bg-[#ff7a1a]/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-[#ffb36b] transition hover:border-[#ff9b4a]/40 hover:bg-[#ff7a1a]/14 hover:text-[#ffd8ae]"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -694,13 +748,12 @@ export default function CinePostPage() {
                   </div>
                 </div>
 
-                <SpoilerText
+                <ExpandablePostBody
+                  body={getCinePostDisplayBody(post)}
                   spoiler={post.contains_spoiler}
                   className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82"
                   buttonClassName="mt-6 max-w-3xl"
-                >
-                  {linkify(getCinePostDisplayBody(post))}
-                </SpoilerText>
+                />
 
                 <div className="mt-6">
                   <CinePostListStrip items={post.list_items || []} theme="brutalist" />
@@ -761,13 +814,12 @@ export default function CinePostPage() {
                     </div>
                   </div>
 
-                  <SpoilerText
+                  <ExpandablePostBody
+                    body={getCinePostDisplayBody(post)}
                     spoiler={post.contains_spoiler}
                     className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82"
                     buttonClassName="mt-6 max-w-3xl"
-                  >
-                    {linkify(getCinePostDisplayBody(post))}
-                  </SpoilerText>
+                  />
                 </div>
               </>
             )}

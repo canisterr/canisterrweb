@@ -349,6 +349,9 @@ export default function DashboardPage() {
           status: show.status,
           network: show.network || undefined,
           language: show.language || show.original_language || null,
+          source: show.source,
+          tmdb_id: show.tmdb_id,
+          tvmaze_id: show.tvmaze_id,
           created_at: new Date().toISOString(),
         }));
 

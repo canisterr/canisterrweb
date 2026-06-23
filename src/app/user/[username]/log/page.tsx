@@ -460,6 +460,9 @@ export default function UserLogPage() {
         type: "tv" as const,
         status: show.status || null,
         network: undefined,
+        source: show.source,
+        tmdb_id: show.tmdb_id,
+        tvmaze_id: show.tvmaze_id,
         created_at: new Date().toISOString(),
       }));
 
