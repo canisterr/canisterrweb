@@ -9,6 +9,7 @@ import { Bell, Check, Settings, Trash2, X } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import CinematicLoading from "@/components/CinematicLoading";
 import { auth, db } from "@/lib/firebase";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { signOut as authSignOut } from "@/lib/auth";
 import type { User } from "@/types";
 import {
@@ -83,14 +84,29 @@ export default function NotificationsPage() {
         setUser(currentUser);
 
         const notificationsRef = ref(db, `notifications/${currentUser.id}`);
-        unsubscribeNotifications = onValue(notificationsRef, (snapshot) => {
-          if (!snapshot.exists()) {
-            setNotifications([]);
-            return;
-          }
+        unsubscribeNotifications = onValue(
+          notificationsRef,
+          (snapshot) => {
+            if (!snapshot.exists()) {
+              setNotifications([]);
+              return;
+            }
 
-          setNotifications(sortNotificationItems(parseNotificationItems(snapshot.val())));
-        });
+            setNotifications(sortNotificationItems(parseNotificationItems(snapshot.val())));
+          },
+          (error) => {
+            if (isPermissionDeniedError(error)) {
+              console.warn("Notifications page listener is unavailable with the current Firebase permissions.");
+              setNotifications([]);
+              setLoading(false);
+              return;
+            }
+
+            console.error("Notifications page listener failed:", error);
+            setNotifications([]);
+            setLoading(false);
+          }
+        );
 
         setLoading(false);
       } catch (error) {

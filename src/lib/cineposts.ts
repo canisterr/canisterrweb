@@ -1,5 +1,6 @@
 import { auth, db } from "@/lib/firebase";
 import { ref, get, push, set, remove, query, orderByChild, equalTo } from "firebase/database";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import {
   CinePost,
   CinePostAnchorType,
@@ -105,7 +106,8 @@ export function normalizeCinePostContentId(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  const match = trimmed.match(/(\d+)\s*$/);
+  const match = trimmed.match(/^(?:movie|tv|content|tmdb)[-:_/]+(\d+)$/i)
+    || trimmed.match(/^\/(?:movie|tv)\/(\d+)$/i);
   if (!match) return null;
 
   const parsed = Number(match[1]);
@@ -772,11 +774,26 @@ export async function deleteCinePost(postId: string, userId: string): Promise<vo
     throw new Error("Only the post owner can delete this post");
   }
 
-  await Promise.all([
-    remove(ref(db, `posts/${postId}`)),
+  // Deleting the post itself is the only required step.
+  // Comment/engagement cleanup should not surface a false failure if rules block those paths.
+  await remove(ref(db, `posts/${postId}`));
+
+  const cleanupResults = await Promise.allSettled([
     remove(ref(db, `comments/${postId}`)),
     remove(ref(db, `engagement/${postId}`)),
   ]);
+
+  cleanupResults.forEach((result, index) => {
+    if (result.status !== "rejected") return;
+
+    const label = index === 0 ? "comments" : "engagement";
+    if (isPermissionDeniedError(result.reason)) {
+      console.warn(`CinePost ${label} cleanup skipped due to Firebase permissions.`);
+      return;
+    }
+
+    console.warn(`CinePost ${label} cleanup failed:`, result.reason);
+  });
 }
 
 export async function createCinePostComment(

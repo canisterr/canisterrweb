@@ -80,6 +80,12 @@ interface TMDBDetailedMovie {
   poster_path: string | null;
   backdrop_path: string | null;
   genres: Array<{ id: number; name: string }>;
+  production_countries?: Array<{
+    iso_3166_1?: string;
+    name?: string;
+  }>;
+  origin_country?: string[];
+  original_language?: string | null;
   director?: string;
   release_date: string;
   overview: string;
@@ -508,10 +514,17 @@ function normalizeMovieDetails(data: TMDBDetailedMovie) {
     director,
     actors,
     language: (data as any).original_language || null,
+    country: data.production_countries?.[0]?.name || null,
+    countries:
+      data.production_countries
+        ?.map((country) => country.name || "")
+        .filter((country) => country.trim().length > 0) || null,
     release_date: data.release_date,
     overview: data.overview,
     runtime: data.runtime,
     rating: data.vote_average,
+    popularity: data.popularity,
+    vote_count: data.vote_count,
     platforms: [],
     cast_details: castDetails,
     crew_details: crewDetails,

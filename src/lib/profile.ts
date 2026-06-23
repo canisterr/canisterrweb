@@ -14,6 +14,14 @@ export interface StatDistributionItem {
   label: string;
   count: number;
   percentage: number;
+  imageUrl?: string | null;
+}
+
+export interface StatHighlightItem {
+  title: string;
+  subtitle: string;
+  value: string;
+  posterUrl: string | null;
 }
 
 export interface DetailedUserStats {
@@ -41,6 +49,22 @@ export interface DetailedUserStats {
   topActors: StatDistributionItem[];
   topDirectors: StatDistributionItem[];
   languageDistribution: StatDistributionItem[];
+  passportCountryDistribution: StatDistributionItem[];
+  passportLanguageDistribution: StatDistributionItem[];
+  passportDecadeDistribution: StatDistributionItem[];
+  passportReleaseYearDistribution: StatDistributionItem[];
+  countriesExplored: number;
+  languagesExplored: number;
+  decadesExplored: number;
+  releaseYearsExplored: number;
+  worldMapCoveragePercentage: number;
+  hiddenGemsCount: number;
+  oldestMovieWatched: StatHighlightItem | null;
+  newestReleaseWatched: StatHighlightItem | null;
+  mostPopularMovieWatched: StatHighlightItem | null;
+  leastPopularMovieWatched: StatHighlightItem | null;
+  highestRatedMovieWatched: StatHighlightItem | null;
+  lowestRatedMovieWatched: StatHighlightItem | null;
   ratingInsight: string;
 }
 
@@ -125,7 +149,11 @@ async function getAcceptedFollowCountByRelation(
   return records.filter((follow) => follow.status === "accepted").length;
 }
 
-function createDistribution(counts: Record<string, number>, limit = 5): StatDistributionItem[] {
+function createDistribution(
+  counts: Record<string, number>,
+  limit = 5,
+  imageUrls?: Record<string, string | null>
+): StatDistributionItem[] {
   const entries = Object.entries(counts).sort(([, a], [, b]) => b - a);
   const total = entries.reduce((sum, [, count]) => sum + count, 0);
   if (total <= 0) return [];
@@ -136,6 +164,7 @@ function createDistribution(counts: Record<string, number>, limit = 5): StatDist
       label,
       count,
       percentage: Math.round((count / total) * 100),
+      imageUrl: imageUrls?.[label] || null,
     }));
 }
 
@@ -153,6 +182,45 @@ function formatLanguageName(value: string | null | undefined): string {
   }
 
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+function formatCountryName(value: string | null | undefined): string {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "Unknown";
+
+  if (trimmed.length === 2 && /^[a-z]{2}$/i.test(trimmed) && typeof Intl !== "undefined" && "DisplayNames" in Intl) {
+    try {
+      const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+      return displayNames.of(trimmed.toUpperCase()) || trimmed.toUpperCase();
+    } catch {
+      return trimmed.toUpperCase();
+    }
+  }
+
+  return trimmed;
+}
+
+function getReleaseYear(value: string | null | undefined): number | null {
+  const year = Number(String(value || "").slice(0, 4));
+  return Number.isFinite(year) && year > 1800 ? year : null;
+}
+
+function getDecadeLabel(year: number | null): string | null {
+  if (!year) return null;
+  return `${Math.floor(year / 10) * 10}s`;
+}
+
+function createHighlightItem(
+  content: Content,
+  subtitle: string,
+  value: string
+): StatHighlightItem {
+  return {
+    title: content.title || (content as any).name || "Unknown title",
+    subtitle,
+    value,
+    posterUrl: content.poster_url || null,
+  };
 }
 
 function getRatingInsight(
@@ -427,8 +495,14 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
     let ratingCount = 0;
     const genreCounts: Record<string, number> = {};
     const actorCounts: Record<string, number> = {};
+    const actorImageUrls: Record<string, string | null> = {};
     const directorCounts: Record<string, number> = {};
+    const directorImageUrls: Record<string, string | null> = {};
     const languageCounts: Record<string, number> = {};
+    const countryCounts: Record<string, number> = {};
+    const movieLanguageCounts: Record<string, number> = {};
+    const decadeCounts: Record<string, number> = {};
+    const releaseYearCounts: Record<string, number> = {};
 
     totalLogged = userLogs.length;
 
@@ -439,6 +513,19 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     const duplicateCounts = new Map<string, number>();
+    const hiddenGemMovieIds = new Set<number>();
+    let oldestMovieWatched: StatHighlightItem | null = null;
+    let newestReleaseWatched: StatHighlightItem | null = null;
+    let mostPopularMovieWatched: StatHighlightItem | null = null;
+    let leastPopularMovieWatched: StatHighlightItem | null = null;
+    let highestRatedMovieWatched: StatHighlightItem | null = null;
+    let lowestRatedMovieWatched: StatHighlightItem | null = null;
+    let oldestMovieYear: number | null = null;
+    let newestMovieYear: number | null = null;
+    let mostPopularScore: number | null = null;
+    let leastPopularScore: number | null = null;
+    let highestRatedScore: number | null = null;
+    let lowestRatedScore: number | null = null;
 
     const contentEntries = await mapWithConcurrency(watchedLogs, 4, async (log) => {
       const content = await getContentForStatLog(log);
@@ -498,8 +585,102 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
           directorCounts[content.director] = (directorCounts[content.director] || 0) + 1;
         }
 
+        const castDetails = ((content as any).cast_details || []) as Array<{ name?: string | null; profile_url?: string | null }>;
+        castDetails.forEach((person) => {
+          const actorName = person.name?.trim();
+          if (!actorName || actorImageUrls[actorName]) return;
+          if (person.profile_url) {
+            actorImageUrls[actorName] = person.profile_url;
+          }
+        });
+
+        const crewDetails = ((content as any).crew_details || []) as Array<{
+          name?: string | null;
+          job?: string | null;
+          department?: string | null;
+          profile_url?: string | null;
+        }>;
+        crewDetails.forEach((person) => {
+          const crewName = person.name?.trim();
+          if (!crewName || directorImageUrls[crewName]) return;
+          if (person.job === "Director" && person.profile_url) {
+            directorImageUrls[crewName] = person.profile_url;
+          }
+        });
+
         const languageLabel = formatLanguageName(content.language || null);
         languageCounts[languageLabel] = (languageCounts[languageLabel] || 0) + 1;
+
+        if (log.content_type === "movie") {
+          const releaseYear = getReleaseYear(content.release_date);
+          const decadeLabel = getDecadeLabel(releaseYear);
+          const countryLabel = formatCountryName(
+            (content as Content & { country?: string | null; countries?: string[] | null }).country ||
+              (content as Content & { countries?: string[] | null }).countries?.[0] ||
+              null
+          );
+          const movieLanguageLabel = formatLanguageName(content.language || null);
+          const popularityValue = Number((content as Content & { popularity?: number | null }).popularity);
+
+          if (countryLabel !== "Unknown") {
+            countryCounts[countryLabel] = (countryCounts[countryLabel] || 0) + 1;
+          }
+
+          if (movieLanguageLabel !== "Unknown") {
+            movieLanguageCounts[movieLanguageLabel] = (movieLanguageCounts[movieLanguageLabel] || 0) + 1;
+          }
+
+          if (decadeLabel) {
+            decadeCounts[decadeLabel] = (decadeCounts[decadeLabel] || 0) + 1;
+          }
+
+          if (releaseYear) {
+            const releaseYearLabel = String(releaseYear);
+            releaseYearCounts[releaseYearLabel] = (releaseYearCounts[releaseYearLabel] || 0) + 1;
+          }
+
+          if (releaseYear && (oldestMovieYear == null || releaseYear < oldestMovieYear)) {
+            oldestMovieYear = releaseYear;
+            oldestMovieWatched = createHighlightItem(content, "Oldest release in your watched movies", String(releaseYear));
+          }
+
+          if (releaseYear && (newestMovieYear == null || releaseYear > newestMovieYear)) {
+            newestMovieYear = releaseYear;
+            newestReleaseWatched = createHighlightItem(content, "Newest release in your watched movies", String(releaseYear));
+          }
+
+          if (Number.isFinite(popularityValue) && popularityValue > 0) {
+            const popularityLabel = `${Math.round(popularityValue)}`;
+
+            if (mostPopularScore == null || popularityValue > mostPopularScore) {
+              mostPopularScore = popularityValue;
+              mostPopularMovieWatched = createHighlightItem(content, "Most popular title you've logged", popularityLabel);
+            }
+
+            if (leastPopularScore == null || popularityValue < leastPopularScore) {
+              leastPopularScore = popularityValue;
+              leastPopularMovieWatched = createHighlightItem(content, "Lowest popularity among your watched movies", popularityLabel);
+            }
+          }
+
+          if (Number.isFinite(ratingValue) && ratingValue > 0) {
+            const ratingLabel = ratingValue.toFixed(1);
+
+            if (highestRatedScore == null || ratingValue > highestRatedScore) {
+              highestRatedScore = ratingValue;
+              highestRatedMovieWatched = createHighlightItem(content, "Highest TMDB rating in your watched movies", ratingLabel);
+            }
+
+            if (lowestRatedScore == null || ratingValue < lowestRatedScore) {
+              lowestRatedScore = ratingValue;
+              lowestRatedMovieWatched = createHighlightItem(content, "Lowest TMDB rating in your watched movies", ratingLabel);
+            }
+
+            if (Number.isFinite(popularityValue) && popularityValue > 0 && popularityValue <= 20 && ratingValue >= 7) {
+              hiddenGemMovieIds.add(log.content_id);
+            }
+          }
+        }
       }
     }
 
@@ -538,9 +719,25 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
       mostCommonMood,
       totalFriends: followersCount + followingCount,
       genreDistribution: createDistribution(genreCounts),
-      topActors: createDistribution(actorCounts),
-      topDirectors: createDistribution(directorCounts),
+      topActors: createDistribution(actorCounts, 5, actorImageUrls),
+      topDirectors: createDistribution(directorCounts, 5, directorImageUrls),
       languageDistribution: createDistribution(languageCounts),
+      passportCountryDistribution: createDistribution(countryCounts, 999),
+      passportLanguageDistribution: createDistribution(movieLanguageCounts, 999),
+      passportDecadeDistribution: createDistribution(decadeCounts, 999),
+      passportReleaseYearDistribution: createDistribution(releaseYearCounts, 999),
+      countriesExplored: Object.keys(countryCounts).length,
+      languagesExplored: Object.keys(movieLanguageCounts).length,
+      decadesExplored: Object.keys(decadeCounts).length,
+      releaseYearsExplored: Object.keys(releaseYearCounts).length,
+      worldMapCoveragePercentage: Math.round((Object.keys(countryCounts).length / 195) * 100),
+      hiddenGemsCount: hiddenGemMovieIds.size,
+      oldestMovieWatched,
+      newestReleaseWatched,
+      mostPopularMovieWatched,
+      leastPopularMovieWatched,
+      highestRatedMovieWatched,
+      lowestRatedMovieWatched,
       ratingInsight: getRatingInsight(masterpiecePercentage, averagePercentage, goodPercentage, badPercentage, watchedCount),
     };
   } catch (error) {
@@ -569,6 +766,22 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
       topActors: [],
       topDirectors: [],
       languageDistribution: [],
+      passportCountryDistribution: [],
+      passportLanguageDistribution: [],
+      passportDecadeDistribution: [],
+      passportReleaseYearDistribution: [],
+      countriesExplored: 0,
+      languagesExplored: 0,
+      decadesExplored: 0,
+      releaseYearsExplored: 0,
+      worldMapCoveragePercentage: 0,
+      hiddenGemsCount: 0,
+      oldestMovieWatched: null,
+      newestReleaseWatched: null,
+      mostPopularMovieWatched: null,
+      leastPopularMovieWatched: null,
+      highestRatedMovieWatched: null,
+      lowestRatedMovieWatched: null,
       ratingInsight: "Log a few films to reveal your rating personality.",
     };
   }

@@ -25,10 +25,14 @@ export interface Movie {
   actors?: string[] | null; // For match scoring
   cast?: string[] | null;
   language?: string | null; // For match scoring
+  country?: string | null;
+  countries?: string[] | null;
   release_date: string | null;
   overview: string | null;
   runtime: number | null;
   rating: number | null;
+  popularity?: number | null;
+  vote_count?: number | null;
   created_at: string;
   type?: "movie";
 }

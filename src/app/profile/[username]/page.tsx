@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import CinemaCardModal, { type CinemaCardSummary } from "@/components/CinemaCardModal";
 import DOMPurify from 'dompurify';
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -63,6 +64,12 @@ type ProfileBootstrapCache = {
   displayList: ListWithItems | null;
   selectedDisplayListId: string;
   recentMoodGenres: string[];
+};
+
+type RankedTasteValue = {
+  count: number;
+  firstSeen: number;
+  label: string;
 };
 
 function formatCompactCount(count: number): string {
@@ -136,6 +143,99 @@ function shouldShowFollowListHandle(user: Pick<User, "id" | "username" | "name">
   return Boolean(name && !isFallbackProfileName(name));
 }
 
+function formatCinemaCardLanguage(language: string | null | undefined): string | null {
+  const cleaned = language?.trim();
+  if (!cleaned) return null;
+
+  const normalized = cleaned.toLowerCase();
+  if (/^[a-z]{2,3}(-[a-z]{2})?$/.test(normalized) && typeof Intl !== "undefined" && "DisplayNames" in Intl) {
+    try {
+      const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+      const label = displayNames.of(normalized);
+      if (label) return label;
+    } catch {
+      // Ignore locale formatting failures and fall through to the raw label.
+    }
+  }
+
+  if (cleaned === normalized) {
+    return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  return cleaned;
+}
+
+function addRankedTasteValue(
+  collection: Map<string, RankedTasteValue>,
+  value: string | null | undefined,
+  index: number
+) {
+  const cleaned = value?.trim().replace(/\s+/g, " ");
+  if (!cleaned) return;
+
+  const key = cleaned.toLowerCase();
+  const existing = collection.get(key);
+  if (existing) {
+    existing.count += 1;
+    return;
+  }
+
+  collection.set(key, {
+    count: 1,
+    firstSeen: index,
+    label: cleaned,
+  });
+}
+
+function getTopRankedTasteValues(collection: Map<string, RankedTasteValue>, limit: number): string[] {
+  return Array.from(collection.values())
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.firstSeen - b.firstSeen;
+    })
+    .slice(0, limit)
+    .map((entry) => entry.label);
+}
+
+function buildCinemaCardSummary(logs: MovieLogWithContent[]): CinemaCardSummary {
+  const watchedLogs = logs.filter((log) => !log.watch_later && Boolean(log.watched_date));
+  const genreCounts = new Map<string, RankedTasteValue>();
+  const directorCounts = new Map<string, RankedTasteValue>();
+  const actorCounts = new Map<string, RankedTasteValue>();
+  const languageCounts = new Map<string, RankedTasteValue>();
+  let movieRuntimeTotal = 0;
+  let movieRuntimeCount = 0;
+
+  watchedLogs.forEach((log, index) => {
+    const content = log.content;
+
+    (content.genres || []).forEach((genre) => addRankedTasteValue(genreCounts, genre, index));
+    addRankedTasteValue(directorCounts, content.director || null, index);
+
+    const leadActor =
+      (Array.isArray(content.actors) && content.actors.length > 0 ? content.actors[0] : null) ||
+      (Array.isArray(content.cast) && content.cast.length > 0 ? content.cast[0] : null);
+    addRankedTasteValue(actorCounts, leadActor, index);
+
+    addRankedTasteValue(languageCounts, formatCinemaCardLanguage(content.language), index);
+
+    if (log.content_type === "movie" && Number.isFinite(content.runtime || 0) && (content.runtime || 0) > 0) {
+      movieRuntimeTotal += Number(content.runtime);
+      movieRuntimeCount += 1;
+    }
+  });
+
+  return {
+    topGenres: getTopRankedTasteValues(genreCounts, 2),
+    topDirector: getTopRankedTasteValues(directorCounts, 1)[0] || null,
+    topActor: getTopRankedTasteValues(actorCounts, 1)[0] || null,
+    topLanguage: getTopRankedTasteValues(languageCounts, 1)[0] || null,
+    averageRuntimeMinutes: movieRuntimeCount ? Math.round(movieRuntimeTotal / movieRuntimeCount) : null,
+    totalLoggedTitles: watchedLogs.length,
+    totalMovieLogs: movieRuntimeCount,
+  };
+}
+
 function ProfilePageInner() {
     // --- Ratings Import Modal State ---
     const [isRatingsImportOpen, setIsRatingsImportOpen] = useState(false);
@@ -165,6 +265,10 @@ function ProfilePageInner() {
   const [recentMoodGenres, setRecentMoodGenres] = useState<string[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
   const [listsLoading, setListsLoading] = useState(false);
+  const [isCinemaCardOpen, setIsCinemaCardOpen] = useState(false);
+  const [cinemaCardSummary, setCinemaCardSummary] = useState<CinemaCardSummary | null>(null);
+  const [cinemaCardLoading, setCinemaCardLoading] = useState(false);
+  const [cinemaCardError, setCinemaCardError] = useState<string | null>(null);
   const [allFollows, setAllFollows] = useState<FollowRecord[]>([]);
   const [followers, setFollowers] = useState<User[]>([]);
   const [following, setFollowing] = useState<User[]>([]);
@@ -299,6 +403,19 @@ function ProfilePageInner() {
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [showNotificationPopover, showProfileActionsMenu]);
+
+  useEffect(() => {
+    if (!isCinemaCardOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCinemaCardOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isCinemaCardOpen]);
 
   useEffect(() => {
     const ownsProfile = !!currentUser && !!profileUser && currentUser.id === profileUser.id;
@@ -576,6 +693,13 @@ function ProfilePageInner() {
       cancelled = true;
     };
   }, [canAccessActivity, profileUser]);
+
+  useEffect(() => {
+    setIsCinemaCardOpen(false);
+    setCinemaCardSummary(null);
+    setCinemaCardError(null);
+    setCinemaCardLoading(false);
+  }, [profileUser?.id]);
 
   useEffect(() => {
     if (!profileUser) return;
@@ -1065,6 +1189,41 @@ function ProfilePageInner() {
     router.push(`/user/${profileUser.username}/logs?reaction=${reaction}`);
   };
 
+  const handleTasteDrillDown = (type: "genre" | "actor" | "director" | "language", value: string) => {
+    if (!profileUser || !value.trim()) return;
+
+    const params = new URLSearchParams({
+      taste: type,
+      value,
+    });
+
+    router.push(`/user/${profileUser.username}/logs?${params.toString()}`);
+  };
+
+  const loadCinemaCard = async (targetUser: User) => {
+    try {
+      setCinemaCardLoading(true);
+      setCinemaCardError(null);
+      const logs = await getUserMovieLogs(targetUser.id, Number.MAX_SAFE_INTEGER, targetUser);
+      setCinemaCardSummary(buildCinemaCardSummary(logs));
+    } catch (error) {
+      console.error("[PROFILE] Error loading cinema card:", error);
+      setCinemaCardSummary(null);
+      setCinemaCardError("Could not build your Cinema Card right now. Please try again in a bit.");
+    } finally {
+      setCinemaCardLoading(false);
+    }
+  };
+
+  const handleOpenCinemaCard = () => {
+    if (!profileUser) return;
+
+    setIsCinemaCardOpen(true);
+    if (!cinemaCardSummary && !cinemaCardLoading) {
+      void loadCinemaCard(profileUser);
+    }
+  };
+
   const handleConnectDisplayList = async () => {
     if (!profileUser || !isOwnProfile || !selectedDisplayListId) {
       return;
@@ -1530,6 +1689,15 @@ function ProfilePageInner() {
                 <span className="font-black text-[#ffb36b]">{formatCompactCount(followingCount)}</span>
                 <span>following</span>
               </button>
+              {((isOwnProfile) || (canAccessProfile && currentUser && !hasBlockRelationship)) && (
+                <Link
+                  href={`/movie-matcher/${visibleUsername}`}
+                  aria-label="Open Movie Matcher"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-[#ff7a1a]/30 hover:bg-[#ff7a1a]/10 hover:text-[#ffb36b]"
+                >
+                  <Sparkles className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                </Link>
+              )}
             </div>
 
             <p className="mt-3 max-w-xl text-sm leading-6 text-[#f5f0de]/60 sm:text-base">
@@ -1580,29 +1748,31 @@ function ProfilePageInner() {
                   >
                     Edit Profile
                   </Link>
-                  <Link
-                    href={`/movie-matcher/${visibleUsername}`}
-                    className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-black text-[#f5f0de] transition hover:bg-white/10 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
+                  <button
+                    type="button"
+                    onClick={handleOpenCinemaCard}
+                    className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-[#ff7a1a]/35 bg-[#ff7a1a]/10 px-2 py-2 text-[11px] font-black text-[#ffd7b0] transition hover:bg-[#ff7a1a]/16 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
                   >
-                    Movie Matcher
-                  </Link>
+                    Cinema Card
+                  </button>
                 </>
               ) : (
                 <>
+                  {canAccessProfile && !hasBlockRelationship && (
+                    <button
+                      type="button"
+                      onClick={handleOpenCinemaCard}
+                      className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-[#ff7a1a]/35 bg-[#ff7a1a]/10 px-2 py-2 text-[11px] font-black text-[#ffd7b0] transition hover:bg-[#ff7a1a]/16 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
+                    >
+                      Cinema Card
+                    </button>
+                  )}
                   {canShowSharedMoviesLink && (
                     <Link
                       href={`/profile/${visibleUsername}/shared-movies`}
                       className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-black text-[#f5f0de] transition hover:bg-white/10 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
                     >
                       Shared Movies
-                    </Link>
-                  )}
-                  {canAccessProfile && currentUser && !hasBlockRelationship && (
-                    <Link
-                      href={`/movie-matcher/${visibleUsername}`}
-                      className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-black text-[#f5f0de] transition hover:bg-white/10 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
-                    >
-                      Movie Matcher
                     </Link>
                   )}
                 </>
@@ -2033,6 +2203,14 @@ function ProfilePageInner() {
             </div>
           </div>
         )}
+
+        <CinemaCardModal
+          isOpen={isCinemaCardOpen}
+          onClose={() => setIsCinemaCardOpen(false)}
+          summary={cinemaCardSummary}
+          loading={cinemaCardLoading}
+          error={cinemaCardError}
+        />
         {activeTab === "stats" && canAccessActivity && (
           <div className="space-y-6">
             {statsLoading || !stats ? (
@@ -2043,6 +2221,7 @@ function ProfilePageInner() {
               <StatsInsights
                 stats={stats}
                 onStatClick={handleStatDrillDown}
+                onTasteClick={handleTasteDrillDown}
               />
             )}
           </div>

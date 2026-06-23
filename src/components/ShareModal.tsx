@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { ShareReplyWithUser, ShareWithDetails, Content } from '@/types';
 import { ref, remove, update, onValue } from 'firebase/database';
 import { db } from '@/lib/firebase';
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import LogMovieModal from './LogMovieModal';
 import { hasUserLoggedContent } from '@/lib/logs';
 import { createShareReply, getShareReplies } from '@/lib/share-replies';
@@ -69,21 +70,40 @@ export default function ShareModal({
 
     setReplyLoading(true);
     const repliesRef = ref(db, `share_replies/${share.id}`);
-    const unsubscribe = onValue(repliesRef, async () => {
-      try {
-        const nextReplies = await getShareReplies(share.id, currentUserId);
-        setReplies(nextReplies);
-      } catch (error) {
+    const unsubscribe = onValue(
+      repliesRef,
+      async () => {
+        try {
+          const nextReplies = await getShareReplies(share.id, currentUserId);
+          setReplies(nextReplies);
+        } catch (error) {
+          reportAppError({
+            title: "Could not load replies",
+            message: "We could not load the replies for this share.",
+            details: error instanceof Error ? error.stack || error.message : String(error),
+          });
+          setReplies([]);
+        } finally {
+          setReplyLoading(false);
+        }
+      },
+      (error) => {
+        if (isPermissionDeniedError(error)) {
+          console.warn("Share replies listener is unavailable with the current Firebase permissions.");
+          setReplies([]);
+          setReplyLoading(false);
+          return;
+        }
+
         reportAppError({
           title: "Could not load replies",
           message: "We could not load the replies for this share.",
           details: error instanceof Error ? error.stack || error.message : String(error),
         });
         setReplies([]);
-      } finally {
         setReplyLoading(false);
       }
-    });
+    );
 
     return () => unsubscribe();
   }, [currentUserId, share?.id]);

@@ -122,12 +122,68 @@ function getSeasonLabel(log: MovieLogWithContent): string {
   return getTvEpisodeLabel(log);
 }
 
+function normalizeTasteValue(value: string | null | undefined): string {
+  return (value || "").trim().toLowerCase();
+}
+
+function formatLanguageLabel(value: string | null | undefined): string {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "unknown";
+
+  if (trimmed.length <= 3 && /^[a-z]{2,3}$/i.test(trimmed) && typeof Intl !== "undefined" && "DisplayNames" in Intl) {
+    try {
+      const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+      return (displayNames.of(trimmed.toLowerCase()) || trimmed).toLowerCase();
+    } catch {
+      return trimmed.toLowerCase();
+    }
+  }
+
+  return trimmed.toLowerCase();
+}
+
+function contentMatchesTasteFilter(
+  log: MovieLogWithContent,
+  tasteType: string | null,
+  tasteValue: string | null
+): boolean {
+  const normalizedValue = normalizeTasteValue(tasteValue);
+  if (!tasteType || !normalizedValue) return true;
+
+  if (tasteType === "genre") {
+    return (log.content.genres || []).some((genre) => normalizeTasteValue(genre) === normalizedValue);
+  }
+
+  if (tasteType === "actor") {
+    const actors = [
+      ...((log.content.actors || []) as string[]),
+      ...((log.content.cast || []) as string[]),
+    ];
+    return actors.some((actor) => normalizeTasteValue(actor) === normalizedValue);
+  }
+
+  if (tasteType === "director") {
+    return normalizeTasteValue(log.content.director || "") === normalizedValue;
+  }
+
+  if (tasteType === "language") {
+    return (
+      normalizeTasteValue(log.content.language || "") === normalizedValue ||
+      formatLanguageLabel(log.content.language || "") === normalizedValue
+    );
+  }
+
+  return true;
+}
+
 export default function PublicUserLogsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const username = params.username as string;
   const reactionFilter = searchParams.get("reaction");
   const contentFilter = searchParams.get("content");
+  const tasteFilter = searchParams.get("taste");
+  const tasteValue = searchParams.get("value");
   const listSectionRef = useRef<HTMLDivElement | null>(null);
 
   const hardRedirect = (path: string) => {
@@ -145,6 +201,10 @@ export default function PublicUserLogsPage() {
   const [listMode, setListMode] = useState<ListMode>("month");
 
   const normalizedContentFilter = contentFilter === "movie" || contentFilter === "tv" ? contentFilter : null;
+  const normalizedTasteFilter =
+    tasteFilter === "genre" || tasteFilter === "actor" || tasteFilter === "director" || tasteFilter === "language"
+      ? tasteFilter
+      : null;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -200,12 +260,12 @@ export default function PublicUserLogsPage() {
       }
 
       if (!reactionFilter || !["0", "1", "1.5", "2"].includes(reactionFilter)) {
-        return true;
+        return contentMatchesTasteFilter(log, normalizedTasteFilter, tasteValue);
       }
 
-      return String(log.reaction) === reactionFilter;
+      return String(log.reaction) === reactionFilter && contentMatchesTasteFilter(log, normalizedTasteFilter, tasteValue);
     });
-  }, [logs, normalizedContentFilter, reactionFilter]);
+  }, [logs, normalizedContentFilter, reactionFilter, normalizedTasteFilter, tasteValue]);
 
   const displayName = profileUser?.name || profileUser?.username || "User";
   const logTypeLabel =
@@ -214,6 +274,16 @@ export default function PublicUserLogsPage() {
       : normalizedContentFilter === "tv"
         ? "TV Logs"
         : "Logs";
+  const tasteLabelPrefix =
+    normalizedTasteFilter && tasteValue
+      ? `${tasteValue} ${normalizedTasteFilter === "genre"
+          ? "Genre"
+          : normalizedTasteFilter === "actor"
+            ? "Actor"
+            : normalizedTasteFilter === "director"
+              ? "Director"
+              : "Language"}`
+      : null;
   const pageTitle =
     reactionFilter === "2"
       ? `${displayName}'s Masterpiece ${logTypeLabel}`
@@ -223,7 +293,9 @@ export default function PublicUserLogsPage() {
           ? `${displayName}'s Good ${logTypeLabel}`
           : reactionFilter === "0"
             ? `${displayName}'s Bad ${logTypeLabel}`
-            : `${displayName}'s ${logTypeLabel}`;
+            : tasteLabelPrefix
+              ? `${displayName}'s ${tasteLabelPrefix} ${logTypeLabel}`
+              : `${displayName}'s ${logTypeLabel}`;
 
   const logsByDate = useMemo(() => {
     const map = new Map<string, MovieLogWithContent[]>();

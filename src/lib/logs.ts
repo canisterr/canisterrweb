@@ -18,6 +18,12 @@ import { lsGet, lsSet } from "./local-cache";
 import { createLogCreatedNotifications } from "./notifications";
 
 const IMPORTED_RATINGS_CSV_NOTE = "Imported from ratings CSV";
+let userLogPermissionWarningShown = false;
+
+function isPermissionDeniedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /permission/i.test(message) && /denied/i.test(message);
+}
 
 export function isImportedRatingsCsvLog(log: Pick<MovieLog, "notes" | "imported_from_csv">): boolean {
   return Boolean(log.imported_from_csv) || (log.notes || "").trim() === IMPORTED_RATINGS_CSV_NOTE;
@@ -334,6 +340,14 @@ async function getUserMovieLogsFromNetwork(
       user,
     }));
   } catch (error) {
+    if (isPermissionDeniedError(error)) {
+      if (!userLogPermissionWarningShown) {
+        userLogPermissionWarningShown = true;
+        console.warn("User movie log lookups are unavailable with the current Firebase read permissions.");
+      }
+      return [];
+    }
+
     console.error("Error fetching user movie logs:", error);
     return [];
   }

@@ -9,6 +9,7 @@ import ShareModal from "@/components/ShareModal";
 import TopActionBanner from "@/components/TopActionBanner";
 import { Content, ShareWithDetails, TMDBMovie, User } from "@/types";
 import { auth, db } from "@/lib/firebase";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { onAuthStateChanged } from "firebase/auth";
 import { equalTo, get, onValue, orderByChild, query, ref, set } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -267,85 +268,111 @@ function SharePageContent() {
           orderByChild("follower_id"),
           equalTo(currentUser.id)
         );
-        unsubscribeFollowers = onValue(followsRef, (snapshot) => {
-          try {
-            if (!snapshot.exists()) {
-              setFollowers([]);
-              return;
-            }
-
-            const followsData = snapshot.val() as Record<string, FollowRecord>;
-            const acceptedFollows = Object.values(followsData).filter(
-              (follow) => follow.follower_id === currentUser.id && follow.status === "accepted"
-            );
-
-            const loadFollowers = async () => {
-              const followerIds = acceptedFollows.map((follow) => follow.following_id);
-              const followerUsers = await getUsersByIds(followerIds);
-              if (!followerIds.length) {
+        unsubscribeFollowers = onValue(
+          followsRef,
+          (snapshot) => {
+            try {
+              if (!snapshot.exists()) {
                 setFollowers([]);
                 return;
               }
 
-              const followersList = followerIds
-                .map((friendId) => followerUsers[friendId])
-                .filter((friend): friend is User => Boolean(friend))
-                .filter((friend) => {
-                  const friendSettings = mergeSettings((friend as any)?.settings);
-                  return (
-                    friendSettings.account.status === "active" &&
-                    !isUsernameBlocked(latestCurrentUserSettings, friend.username) &&
-                    !isUsernameBlocked(friendSettings, currentUser.username)
-                  );
-                });
+              const followsData = snapshot.val() as Record<string, FollowRecord>;
+              const acceptedFollows = Object.values(followsData).filter(
+                (follow) => follow.follower_id === currentUser.id && follow.status === "accepted"
+              );
 
-              setFollowers(followersList);
-            };
+              const loadFollowers = async () => {
+                const followerIds = acceptedFollows.map((follow) => follow.following_id);
+                const followerUsers = await getUsersByIds(followerIds);
+                if (!followerIds.length) {
+                  setFollowers([]);
+                  return;
+                }
 
-            void loadFollowers();
-          } catch (error) {
-            console.error("Error fetching followers:", error);
+                const followersList = followerIds
+                  .map((friendId) => followerUsers[friendId])
+                  .filter((friend): friend is User => Boolean(friend))
+                  .filter((friend) => {
+                    const friendSettings = mergeSettings((friend as any)?.settings);
+                    return (
+                      friendSettings.account.status === "active" &&
+                      !isUsernameBlocked(latestCurrentUserSettings, friend.username) &&
+                      !isUsernameBlocked(friendSettings, currentUser.username)
+                    );
+                  });
+
+                setFollowers(followersList);
+              };
+
+              void loadFollowers();
+            } catch (error) {
+              console.error("Error fetching followers:", error);
+              setFollowers([]);
+            }
+          },
+          (error) => {
+            if (isPermissionDeniedError(error)) {
+              console.warn("Followers listener is unavailable with the current Firebase permissions.");
+              setFollowers([]);
+              return;
+            }
+
+            console.error("Followers listener failed:", error);
             setFollowers([]);
           }
-        });
+        );
 
         const sharesRef = query(
           ref(db, "shares"),
           orderByChild("sender_id"),
           equalTo(currentUser.id)
         );
-        unsubscribeShares = onValue(sharesRef, (snapshot) => {
-          if (!snapshot.exists()) {
-            setSentShares([]);
-            return;
-          }
+        unsubscribeShares = onValue(
+          sharesRef,
+          (snapshot) => {
+            if (!snapshot.exists()) {
+              setSentShares([]);
+              return;
+            }
 
-          try {
-            const sharesData = snapshot.val() as Record<string, ShareRecord>;
-            const sent = Object.entries(sharesData)
-              .map(([id, data]) => ({ id, ...data }))
-              .filter((share) => share.sender_id === currentUser.id)
-              .sort(
-                (a, b) =>
-                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              );
+            try {
+              const sharesData = snapshot.val() as Record<string, ShareRecord>;
+              const sent = Object.entries(sharesData)
+                .map(([id, data]) => ({ id, ...data }))
+                .filter((share) => share.sender_id === currentUser.id)
+                .sort(
+                  (a, b) =>
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
 
-            void (async () => {
-              const userIds = Array.from(new Set(sent.map((share) => share.receiver_id)));
-              const usersById = await getUsersByIds(userIds);
-              const sentWithDetails = sent.map((share) => ({
-                ...share,
-                movie: share.movie || null,
-                content: share.content || share.movie || null,
-                receiver: usersById[share.receiver_id],
-              }));
-              setSentShares(sentWithDetails as ShareWithDetails[]);
-            })();
-          } catch (error) {
-            console.error("Error fetching sent shares:", error);
+              void (async () => {
+                const userIds = Array.from(new Set(sent.map((share) => share.receiver_id)));
+                const usersById = await getUsersByIds(userIds);
+                const sentWithDetails = sent.map((share) => ({
+                  ...share,
+                  movie: share.movie || null,
+                  content: share.content || share.movie || null,
+                  receiver: usersById[share.receiver_id],
+                }));
+                setSentShares(sentWithDetails as ShareWithDetails[]);
+              })();
+            } catch (error) {
+              console.error("Error fetching sent shares:", error);
+              setSentShares([]);
+            }
+          },
+          (error) => {
+            if (isPermissionDeniedError(error)) {
+              console.warn("Shares listener is unavailable with the current Firebase permissions.");
+              setSentShares([]);
+              return;
+            }
+
+            console.error("Shares listener failed:", error);
             setSentShares([]);
           }
-        });
+        );
       } catch (error) {
         console.error("Error fetching user:", error);
         setLoading(false);

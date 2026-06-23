@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle, Sparkles, X } from "lucide-react";
+import { get, ref, set } from "firebase/database";
 import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import CinePostArtwork from "@/components/CinePostArtwork";
 import SpoilerText from "@/components/SpoilerText";
-import { CinePostEngagementType, CinePostWithDetails, Content, TMDBMovie, User } from "@/types";
+import { CinePost, CinePostEngagementType, CinePostWithDetails, Content, MovieLog, TMDBMovie, User } from "@/types";
 import {
   getCinePostContentHref,
   getCinePostEngagementUsers,
@@ -20,10 +21,13 @@ import { getPublicLists, getListWithDetails } from "@/lib/lists";
 import { getPopularMovies } from "@/lib/tmdb";
 import { getBlurDataUrl, getTmdbPosterUrl } from "@/lib/performance";
 import { lsGet, lsSet } from "@/lib/local-cache";
-import { getDisplayUserHandle, getDisplayUserName } from "@/lib/users";
+import { getDisplayUserHandle, getDisplayUserName, getUsersByIds } from "@/lib/users";
 import { reportAppError } from "@/lib/report-error";
 import CinePostListStrip from "@/components/CinePostListStrip";
 import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
+import { db } from "@/lib/firebase";
+import { createFollowAcceptedNotification } from "@/lib/notifications";
+import { getUserFollowRecords, type FollowRecord } from "@/lib/profile";
 
 interface CinePostsFeedProps {
   currentUser: User | null;
@@ -35,12 +39,22 @@ interface CinePostsFeedProps {
 const PREVIEW_LIMIT = 150;
 
 function relativeTime(dateString: string): string {
-  const diff = Date.now() - new Date(dateString).getTime();
+  const date = new Date(dateString);
+  const diff = Date.now() - date.getTime();
   const minutes = Math.max(1, Math.floor(diff / 60000));
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  const days = Math.floor(hours / 24);
+  if (days <= 14) {
+    return `${days} ${days === 1 ? "day" : "days"}`;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  }).format(date);
 }
 
 function profileHref(user: User): string {
@@ -197,6 +211,18 @@ type DiscoverListItem = {
   description: string | null;
 };
 
+type TopAccountItem = {
+  user: User;
+  logCount: number;
+  postCount: number;
+  latestCreatedAt: string;
+  activityScore: number;
+};
+
+const ACTIVE_ACCOUNT_LOOKBACK_DAYS = 45;
+const LOG_ACTIVITY_WEIGHT = 6;
+const POST_ACTIVITY_WEIGHT = 2;
+
 function tmdbPosterUrl(path: string | null): string | null {
   return getTmdbPosterUrl(path, "w342");
 }
@@ -240,11 +266,194 @@ function buildDiscoverListItems(allLists: DiscoverListItem[]): DiscoverListItem[
   return allLists;
 }
 
+function buildTopAccountScore({
+  logCount,
+  postCount,
+  latestCreatedAt,
+}: {
+  logCount: number;
+  postCount: number;
+  latestCreatedAt: string;
+}): number {
+  const latestDiffDays = Math.max(0, (Date.now() - new Date(latestCreatedAt).getTime()) / (24 * 60 * 60 * 1000));
+  const recencyBoost = latestDiffDays <= 3 ? 6 : latestDiffDays <= 7 ? 4 : latestDiffDays <= 14 ? 2 : 0;
+  return logCount * LOG_ACTIVITY_WEIGHT + postCount * POST_ACTIVITY_WEIGHT + recencyBoost;
+}
+
 function scrollRail(ref: { current: HTMLDivElement | null }, direction: -1 | 1) {
   const node = ref.current;
   if (!node) return;
   const amount = Math.max(node.clientWidth * 0.88, 320);
   node.scrollBy({ left: amount * direction, behavior: "smooth" });
+}
+
+function TopAccountsRail({
+  accounts,
+  loading,
+  followingIds,
+  currentUser,
+  followLoadingId,
+  onFollow,
+  railRef,
+  theme = "default",
+  onLeft,
+  onRight,
+}: {
+  accounts: TopAccountItem[];
+  loading: boolean;
+  followingIds: Set<string>;
+  currentUser: User | null;
+  followLoadingId: string | null;
+  onFollow: (user: User) => void;
+  railRef: { current: HTMLDivElement | null };
+  theme?: "default" | "brutalist";
+  onLeft?: () => void;
+  onRight?: () => void;
+}) {
+  const isBrutalist = theme === "brutalist";
+
+  if (!loading && accounts.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h3 className={`text-xs uppercase tracking-[0.24em] sm:text-[11px] sm:tracking-[0.3em] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+            Top Accounts
+          </h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onLeft}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+              isBrutalist
+                ? "border-white/10 bg-[#0a0a0a] text-[#f5f0de] hover:border-white/20"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+            }`}
+            aria-label="Scroll top accounts left"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onRight}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+              isBrutalist
+                ? "border-white/10 bg-[#0a0a0a] text-[#f5f0de] hover:border-white/20"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+            }`}
+            aria-label="Scroll top accounts right"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={railRef}
+        className="grid grid-flow-col gap-4 overflow-x-auto scroll-smooth pb-1 pr-1 scrollbar-hide snap-x snap-mandatory auto-cols-[18rem] sm:auto-cols-[18.5rem] lg:auto-cols-[calc((100%-4rem)/5)]"
+      >
+        {loading
+          ? Array.from({ length: 5 }).map((_, index) => (
+              <div
+                key={`top-account-skeleton-${index}`}
+                className={`snap-start min-h-[15rem] overflow-hidden rounded-[1.6rem] border p-5 ${
+                  isBrutalist ? "border-white/10 bg-white/[0.03]" : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="flex h-full flex-col">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="h-14 w-14 animate-pulse rounded-full bg-white/10" />
+                    <div className="mt-1 h-2.5 w-2.5 animate-pulse rounded-full bg-white/10" />
+                  </div>
+                  <div className="mt-4">
+                    <div className="h-5 w-32 animate-pulse rounded-full bg-white/10" />
+                    <div className="mt-2 h-4 w-24 animate-pulse rounded-full bg-white/5" />
+                  </div>
+                  <div className="mt-auto grid grid-cols-2 gap-2.5 pt-6">
+                    <div className="h-10 animate-pulse rounded-full bg-white/10" />
+                    <div className="h-10 animate-pulse rounded-full bg-white/5" />
+                  </div>
+                </div>
+              </div>
+            ))
+          : accounts.map((account) => {
+          const isFollowing = followingIds.has(account.user.id);
+          const isPending = followLoadingId === account.user.id;
+
+          return (
+            <div
+              key={account.user.id}
+              className={`group snap-start min-h-[15rem] overflow-hidden rounded-[1.7rem] border p-5 ${
+                isBrutalist
+                  ? "border-white/10 bg-black text-[#f5f0de] shadow-[0_16px_34px_rgba(0,0,0,0.28)]"
+                  : "border-slate-200 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.06)]"
+              }`}
+            >
+              <div className="flex h-full flex-col">
+                <div className="flex items-start justify-between gap-3">
+                  <Link href={profileHref(account.user)} className="flex-shrink-0">
+                    <Avatar user={account.user} size="h-14 w-14" dark={isBrutalist} />
+                  </Link>
+                  <span className={`h-2.5 w-2.5 rounded-full ${
+                    isBrutalist
+                      ? "bg-[#ff7a1a] shadow-[0_0_16px_rgba(255,122,26,0.75)]"
+                      : "bg-slate-900"
+                  }`} />
+                </div>
+
+                <div className="mt-4 min-w-0">
+                  <Link
+                    href={profileHref(account.user)}
+                    className={`block text-[1.12rem] font-black leading-tight ${
+                      isBrutalist ? "text-[#f5f0de] hover:text-[#ffb36b]" : "text-slate-950 hover:text-[#f5f0de]"
+                    }`}
+                  >
+                    <span className="block truncate">{getDisplayUserName(account.user, currentUser)}</span>
+                  </Link>
+                  {getDisplayUserHandle(account.user, currentUser) ? (
+                    <p className={`mt-2 truncate text-[0.95rem] ${isBrutalist ? "text-white/45" : "text-slate-400"}`}>
+                      {getDisplayUserHandle(account.user, currentUser)}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="mt-auto grid grid-cols-2 gap-2.5 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => onFollow(account.user)}
+                    disabled={isFollowing || isPending}
+                    className={`inline-flex h-10 min-w-0 items-center justify-center rounded-full px-3 text-[0.95rem] font-semibold transition ${
+                      isFollowing
+                        ? isBrutalist
+                          ? "border border-white/10 bg-white/[0.04] text-white/65"
+                          : "border border-slate-200 bg-slate-100 text-slate-500"
+                        : isBrutalist
+                          ? "bg-[#ff7a1a] text-[#0a0a0a] hover:bg-[#ff9347]"
+                          : "bg-slate-950 text-white hover:bg-slate-800"
+                    } disabled:cursor-not-allowed disabled:opacity-80`}
+                  >
+                    {isPending ? "Following..." : isFollowing ? "Following" : "Follow"}
+                  </button>
+                <Link
+                  href={profileHref(account.user)}
+                  className={`inline-flex h-10 min-w-0 items-center justify-center rounded-full border px-3 text-[0.95rem] font-semibold transition ${
+                    isBrutalist
+                      ? "border-white/10 bg-white/[0.03] text-[#f5f0de] hover:border-[#ff7a1a]/35 hover:text-[#ffb36b]"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    View
+                  </Link>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function DiscoveryRail({
@@ -550,6 +759,7 @@ export default function CinePostsFeed({
   const router = useRouter();
   const popularRailRef = useRef<HTMLDivElement | null>(null);
   const discoverRailRef = useRef<HTMLDivElement | null>(null);
+  const topAccountsRailRef = useRef<HTMLDivElement | null>(null);
   const seenPostsRef = useRef<Set<string>>(new Set());
   const [posts, setPosts] = useState<CinePostWithDetails[]>([]);
   const [lockedFeedPostIds, setLockedFeedPostIds] = useState<Set<string>>(new Set());
@@ -563,6 +773,10 @@ export default function CinePostsFeed({
   const [peopleModalLoading, setPeopleModalLoading] = useState(false);
   const [seenHistoryReady, setSeenHistoryReady] = useState(false);
   const [engagementPendingKeys, setEngagementPendingKeys] = useState<Set<string>>(new Set());
+  const [followRecords, setFollowRecords] = useState<FollowRecord[]>([]);
+  const [followActionLoadingId, setFollowActionLoadingId] = useState<string | null>(null);
+  const [topAccounts, setTopAccounts] = useState<TopAccountItem[]>([]);
+  const [topAccountsLoading, setTopAccountsLoading] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -586,6 +800,150 @@ export default function CinePostsFeed({
       setSeenHistoryReady(true);
     }
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setFollowRecords([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadFollowRecords = async () => {
+      try {
+        const records = await getUserFollowRecords(currentUser.id);
+        if (!cancelled) {
+          setFollowRecords(records);
+        }
+      } catch (error) {
+        console.error("Error loading follow records:", error);
+      }
+    };
+
+    void loadFollowRecords();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTopAccounts = async () => {
+      setTopAccountsLoading(true);
+
+      try {
+        const cutoff = Date.now() - ACTIVE_ACCOUNT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+        const [logsSnapshot, postsSnapshot] = await Promise.all([
+          get(ref(db, "movie_logs")),
+          get(ref(db, "posts")),
+        ]);
+
+        const activityMap = new Map<
+          string,
+          { logCount: number; postCount: number; latestCreatedAt: string }
+        >();
+
+        const updateActivity = (userId: string, kind: "log" | "post", createdAt?: string | null) => {
+          if (!userId || userId === currentUser?.id || !createdAt) return;
+
+          const createdTime = new Date(createdAt).getTime();
+          if (!Number.isFinite(createdTime) || createdTime < cutoff) return;
+
+          const current = activityMap.get(userId) || {
+            logCount: 0,
+            postCount: 0,
+            latestCreatedAt: createdAt,
+          };
+
+          if (kind === "log") {
+            current.logCount += 1;
+          } else {
+            current.postCount += 1;
+          }
+
+          if (new Date(current.latestCreatedAt).getTime() < createdTime) {
+            current.latestCreatedAt = createdAt;
+          }
+
+          activityMap.set(userId, current);
+        };
+
+        if (logsSnapshot.exists()) {
+          const logs = Object.values(logsSnapshot.val() as Record<string, MovieLog>);
+          logs.forEach((log) => {
+            if (log.watch_later) return;
+            updateActivity(log.user_id, "log", log.created_at);
+          });
+        }
+
+        if (postsSnapshot.exists()) {
+          const rawPosts = Object.values(postsSnapshot.val() as Record<string, CinePost>);
+          rawPosts.forEach((post) => updateActivity(post.user_id, "post", post.created_at));
+        }
+
+        const rankedIds = Array.from(activityMap.entries())
+          .filter(([, value]) => value.logCount > 0)
+          .sort((left, right) => {
+            const leftScore = buildTopAccountScore(left[1]);
+            const rightScore = buildTopAccountScore(right[1]);
+            if (rightScore !== leftScore) return rightScore - leftScore;
+            return new Date(right[1].latestCreatedAt).getTime() - new Date(left[1].latestCreatedAt).getTime();
+          })
+          .slice(0, 8)
+          .map(([userId]) => userId);
+
+        if (rankedIds.length === 0) {
+          if (!cancelled) {
+            setTopAccounts([]);
+          }
+          return;
+        }
+
+        const usersById = await getUsersByIds(rankedIds);
+        const nextTopAccounts = rankedIds
+          .map((userId) => {
+            const activity = activityMap.get(userId);
+            const user = usersById[userId];
+            if (!activity || !user) return null;
+
+            return {
+              user,
+              logCount: activity.logCount,
+              postCount: activity.postCount,
+              latestCreatedAt: activity.latestCreatedAt,
+              activityScore: buildTopAccountScore(activity),
+            } satisfies TopAccountItem;
+          })
+          .filter((account): account is TopAccountItem => Boolean(account))
+          .sort((left, right) => {
+            if (right.activityScore !== left.activityScore) return right.activityScore - left.activityScore;
+            return new Date(right.latestCreatedAt).getTime() - new Date(left.latestCreatedAt).getTime();
+          })
+          .slice(0, 5);
+
+        if (!cancelled) {
+          setTopAccounts(nextTopAccounts);
+        }
+      } catch (error) {
+        console.error("Error loading top accounts:", error);
+        if (!cancelled) {
+          setTopAccounts([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setTopAccountsLoading(false);
+        }
+      }
+    };
+
+    void loadTopAccounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, refreshKey]);
 
   const feedCacheKey = `feed_${currentUser?.id ?? "guest"}`;
   const FEED_TTL = 3 * 60 * 1000; // 3 minutes
@@ -847,6 +1205,70 @@ export default function CinePostsFeed({
     }
   };
 
+  const followingIds = useMemo(
+    () =>
+      new Set(
+        followRecords
+          .filter(
+            (follow) =>
+              follow.follower_id === currentUser?.id &&
+              follow.status === "accepted"
+          )
+          .map((follow) => follow.following_id)
+      ),
+    [currentUser?.id, followRecords]
+  );
+
+  const handleFollowAccount = async (targetUser: User) => {
+    if (!currentUser) {
+      router.push("/auth/login");
+      return;
+    }
+
+    if (currentUser.id === targetUser.id || followingIds.has(targetUser.id) || followActionLoadingId === targetUser.id) {
+      return;
+    }
+
+    try {
+      setFollowActionLoadingId(targetUser.id);
+
+      const existingFollow = followRecords.find(
+        (follow) =>
+          follow.follower_id === currentUser.id &&
+          follow.following_id === targetUser.id
+      );
+      const followId = existingFollow?.id || `${currentUser.id}-${targetUser.id}-${Date.now()}`;
+      const createdAt =
+        existingFollow?.createdAt ||
+        existingFollow?.created_at ||
+        new Date().toISOString();
+      const nextFollow: FollowRecord = {
+        id: followId,
+        follower_id: currentUser.id,
+        following_id: targetUser.id,
+        status: "accepted",
+        created_at: createdAt,
+        createdAt,
+      };
+
+      await set(ref(db, `follows/${followId}`), nextFollow);
+      await createFollowAcceptedNotification(targetUser.id, followId, currentUser, createdAt);
+
+      setFollowRecords((current) => [
+        ...current.filter((follow) => follow.id !== followId),
+        nextFollow,
+      ]);
+    } catch (error) {
+      reportAppError({
+        title: "Could not follow account",
+        message: "We could not follow this account right now.",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setFollowActionLoadingId(null);
+    }
+  };
+
   const renderPopularSection = () => (
     <div key="popular-movies-rail" className="pt-6">
       <DiscoveryRail
@@ -876,10 +1298,28 @@ export default function CinePostsFeed({
     </div>
   );
 
+  const renderTopAccountsSection = () => (
+    <div key="top-accounts-rail" className="pt-6">
+      <TopAccountsRail
+        accounts={topAccounts}
+        loading={topAccountsLoading}
+        followingIds={followingIds}
+        currentUser={currentUser}
+        followLoadingId={followActionLoadingId}
+        onFollow={handleFollowAccount}
+        railRef={topAccountsRailRef}
+        theme={theme}
+        onLeft={() => scrollRail(topAccountsRailRef, -1)}
+        onRight={() => scrollRail(topAccountsRailRef, 1)}
+      />
+    </div>
+  );
+
   const renderMainFeedStream = () => {
     const stream: ReactNode[] = [];
     let insertedPopular = false;
     let insertedDiscover = false;
+    let insertedTopAccounts = false;
 
     mainFeedPosts.forEach((post, index) => {
       stream.push(renderPostCard(post, index, false));
@@ -887,6 +1327,11 @@ export default function CinePostsFeed({
       if (!insertedPopular && index === 1) {
         stream.push(renderPopularSection());
         insertedPopular = true;
+      }
+
+      if (!insertedTopAccounts && index === 2 && (topAccountsLoading || topAccounts.length > 0)) {
+        stream.push(renderTopAccountsSection());
+        insertedTopAccounts = true;
       }
 
       if (!insertedDiscover && index === 4) {
@@ -897,6 +1342,10 @@ export default function CinePostsFeed({
 
     if (!insertedPopular) {
       stream.push(renderPopularSection());
+    }
+
+    if (!insertedTopAccounts && (topAccountsLoading || topAccounts.length > 0)) {
+      stream.push(renderTopAccountsSection());
     }
 
     if (!insertedDiscover) {
@@ -925,6 +1374,26 @@ export default function CinePostsFeed({
     posts.filter((post) => post.feedTier !== 0).every((post) => post.liked_by_current_user || post.user_id === currentUser?.id);
   const chronologicalFallbackPosts = allVisibleNonPriorityPostsLiked ? sortPostsNewestFirst(likedPosts) : likedPosts;
   const chronologicalOwnPosts = allVisibleNonPriorityPostsLiked ? sortPostsNewestFirst(ownMainFeedPosts) : ownMainFeedPosts;
+
+  const renderHomeFeedStream = () => {
+    const stream: ReactNode[] = [];
+    let insertedTopAccounts = false;
+
+    posts.forEach((post, index) => {
+      stream.push(renderHomePostCard(post));
+
+      if (!insertedTopAccounts && index === 2 && (topAccountsLoading || topAccounts.length > 0)) {
+        stream.push(renderTopAccountsSection());
+        insertedTopAccounts = true;
+      }
+    });
+
+    if (!insertedTopAccounts && (topAccountsLoading || topAccounts.length > 0)) {
+      stream.push(renderTopAccountsSection());
+    }
+
+    return stream;
+  };
 
   const renderHomePostCard = (post: CinePostWithDetails) => {
     const contentHref = getContentHref(post);
@@ -1549,7 +2018,7 @@ export default function CinePostsFeed({
             <p className="mt-1 text-sm text-white/50">Create the first post and it will appear here.</p>
           </div>
         ) : (
-          <div className="space-y-5">{posts.map(renderHomePostCard)}</div>
+          <div className="space-y-5">{renderHomeFeedStream()}</div>
         )}
 
         {peopleModalTitle && (

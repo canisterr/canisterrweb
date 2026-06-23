@@ -34,12 +34,22 @@ import {
 import { reportAppError } from "@/lib/report-error";
 
 function relativeTime(dateString: string): string {
-  const diff = Date.now() - new Date(dateString).getTime();
+  const date = new Date(dateString);
+  const diff = Date.now() - date.getTime();
   const minutes = Math.max(1, Math.floor(diff / 60000));
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  const days = Math.floor(hours / 24);
+  if (days <= 14) {
+    return `${days} ${days === 1 ? "day" : "days"}`;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  }).format(date);
 }
 
 function profileHref(user: User): string {

@@ -48,8 +48,29 @@ function createFallbackContentForLog(log: MovieLog): Content {
 /**
  * Get logs from users that current user is following (last 14 days)
  */
-export async function getFriendLogs(userId: string, daysBack: number = 14, limit: number = 50): Promise<(MovieLogWithContent & { friend: User })[]> {
+type GetFriendLogsOptions = {
+  daysBack?: number | null;
+  limit?: number | null;
+  dedupeByContent?: boolean;
+};
+
+export async function getFriendLogs(
+  userId: string,
+  daysBackOrOptions: number | GetFriendLogsOptions | null = 14,
+  limit: number = 50
+): Promise<(MovieLogWithContent & { friend: User })[]> {
   try {
+    const options =
+      typeof daysBackOrOptions === "object" && daysBackOrOptions !== null
+        ? daysBackOrOptions
+        : {
+            daysBack: daysBackOrOptions,
+            limit,
+          };
+    const daysBack = typeof options.daysBack === "number" ? options.daysBack : null;
+    const maxItems = typeof options.limit === "number" ? options.limit : null;
+    const dedupeByContent = options.dedupeByContent !== false;
+
     // 1. Get list of users that current user is following
     const followSnapshot = await get(
       query(ref(db, "follows"), orderByChild("follower_id"), equalTo(userId))
@@ -96,28 +117,43 @@ export async function getFriendLogs(userId: string, daysBack: number = 14, limit
     }
 
     // 3. Filter logs from following users created in last X days
-    const dateThreshold = new Date();
-    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
+    const dateThreshold =
+      typeof daysBack === "number" && Number.isFinite(daysBack)
+        ? new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000)
+        : null;
 
     const allLogs = logSnapshots.flatMap((snapshot) =>
       snapshot.exists() ? Object.values(snapshot.val()) : []
     );
-    const friendLogs = allLogs
+    const filteredLogs = allLogs
       .filter((log: any) => {
         const logDate = new Date(log.created_at);
         const watchKey = `${log.user_id}__${log.content_type}__${log.content_id}`;
-        return followingIds.includes(log.user_id) && logDate >= dateThreshold && !watchOnlyKeys.has(watchKey);
-      })
-      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .reduce((acc: any[], log: any) => {
-        const key = `${log.user_id}__${log.content_type}__${log.content_id}`;
-        if (acc.some((item) => `${item.user_id}__${item.content_type}__${item.content_id}` === key)) {
-          return acc;
+        if (!followingIds.includes(log.user_id) || watchOnlyKeys.has(watchKey)) {
+          return false;
         }
-        acc.push(log);
-        return acc;
-      }, [])
-      .slice(0, limit);
+        if (!dateThreshold) {
+          return true;
+        }
+        return logDate >= dateThreshold;
+      })
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const dedupedLogs = dedupeByContent
+      ? filteredLogs.reduce((acc: any[], log: any) => {
+          const key = `${log.user_id}__${log.content_type}__${log.content_id}`;
+          if (acc.some((item) => `${item.user_id}__${item.content_type}__${item.content_id}` === key)) {
+            return acc;
+          }
+          acc.push(log);
+          return acc;
+        }, [])
+      : filteredLogs;
+
+    const friendLogs =
+      typeof maxItems === "number" && Number.isFinite(maxItems)
+        ? dedupedLogs.slice(0, maxItems)
+        : dedupedLogs;
 
     // 4. Fetch content and user details for each log
     const friendUsers = await getUsersByIds(friendLogs.map((log: any) => log.user_id));

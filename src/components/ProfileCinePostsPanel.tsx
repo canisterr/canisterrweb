@@ -74,6 +74,7 @@ export default function ProfileCinePostsPanel({
           emptyText={empty}
           currentUser={currentUser}
           onPostMutated={() => setRefreshTick((value) => value + 1)}
+          theme="brutalist"
         />
       )}
     </section>

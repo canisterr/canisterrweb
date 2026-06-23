@@ -11,6 +11,7 @@ import TopActionBanner from "@/components/TopActionBanner";
 import CinematicLoading from "@/components/CinematicLoading";
 import { User, ShareWithDetails, Content, MovieLogWithContent, TMDBPersonSearchResult } from "@/types";
 import { db } from "@/lib/firebase";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { equalTo, onValue, orderByChild, query, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import { searchMovies, searchPeople } from "@/lib/tmdb";
@@ -198,48 +199,69 @@ export default function DashboardPage() {
         orderByChild("receiver_id"),
         equalTo(currentUser.id)
       );
-      unsubscribeShares = onValue(sharesRef, async (snapshot) => {
-        if (!snapshot.exists()) {
-          if (!cancelled) setShares([]);
-          return;
-        }
-
-        const allShares = snapshot.val();
-        const sharesList = Object.entries(allShares)
-          .map(([id, data]: any) => ({
-            id,
-            ...data,
-          }))
-          .filter((s: any) => s.receiver_id === currentUser.id)
-          .sort(
-            (a: any, b: any) =>
-              new Date(b.created_at).getTime() -
-              new Date(a.created_at).getTime()
-          );
-
-        try {
-          const usersData = await getUsersByIds(sharesList.map((share: any) => share.sender_id));
-
-          const sharesWithDetails: ShareWithDetails[] = sharesList.map((share: any) => ({
-            ...share,
-            movie: share.movie || null,
-            sender: usersData[share.sender_id],
-          }));
-
-          if (!cancelled) {
-            setShares(sharesWithDetails);
+      unsubscribeShares = onValue(
+        sharesRef,
+        async (snapshot) => {
+          if (!snapshot.exists()) {
+            if (!cancelled) setShares([]);
+            return;
           }
-        } catch (error) {
+
+          const allShares = snapshot.val();
+          const sharesList = Object.entries(allShares)
+            .map(([id, data]: any) => ({
+              id,
+              ...data,
+            }))
+            .filter((s: any) => s.receiver_id === currentUser.id)
+            .sort(
+              (a: any, b: any) =>
+                new Date(b.created_at).getTime() -
+                new Date(a.created_at).getTime()
+            );
+
+          try {
+            const usersData = await getUsersByIds(sharesList.map((share: any) => share.sender_id));
+
+            const sharesWithDetails: ShareWithDetails[] = sharesList.map((share: any) => ({
+              ...share,
+              movie: share.movie || null,
+              sender: usersData[share.sender_id],
+            }));
+
+            if (!cancelled) {
+              setShares(sharesWithDetails);
+            }
+          } catch (error) {
+            reportAppError({
+              title: "Shares failed to load",
+              message: "We could not load your shares right now.",
+              details: error instanceof Error ? error.stack || error.message : String(error),
+            });
+            if (!cancelled) {
+              setShares(sharesList);
+            }
+          }
+        },
+        (error) => {
+          if (isPermissionDeniedError(error)) {
+            console.warn("Dashboard shares listener is unavailable with the current Firebase permissions.");
+            if (!cancelled) {
+              setShares([]);
+            }
+            return;
+          }
+
           reportAppError({
             title: "Shares failed to load",
             message: "We could not load your shares right now.",
             details: error instanceof Error ? error.stack || error.message : String(error),
           });
           if (!cancelled) {
-            setShares(sharesList);
+            setShares([]);
           }
         }
-      });
+      );
     })();
 
     return () => {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, X } from "lucide-react";
 import { onValue, ref } from "firebase/database";
 import { db } from "@/lib/firebase";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import type { User } from "@/types";
 import { shouldShowNotificationForSettings } from "@/lib/settings";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -41,14 +42,27 @@ export default function NotificationBell({
     }
 
     const notificationsRef = ref(db, `notifications/${user.id}`);
-    const unsubscribe = onValue(notificationsRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        setNotifications([]);
-        return;
-      }
+    const unsubscribe = onValue(
+      notificationsRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setNotifications([]);
+          return;
+        }
 
-      setNotifications(sortNotificationItems(parseNotificationItems(snapshot.val())));
-    });
+        setNotifications(sortNotificationItems(parseNotificationItems(snapshot.val())));
+      },
+      (error) => {
+        if (isPermissionDeniedError(error)) {
+          console.warn("Notifications are unavailable with the current Firebase permissions.");
+          setNotifications([]);
+          return;
+        }
+
+        console.error("Notifications listener failed:", error);
+        setNotifications([]);
+      }
+    );
 
     return unsubscribe;
   }, [user]);

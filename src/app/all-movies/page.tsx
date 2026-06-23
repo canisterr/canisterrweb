@@ -12,6 +12,7 @@ import PageLayout from "@/components/PageLayout";
 import ShareModal from "@/components/ShareModal";
 import { signOut as authSignOut } from "@/lib/auth";
 import { auth, db } from "@/lib/firebase";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { getFriendLogs } from "@/lib/friend-logs";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
@@ -97,45 +98,64 @@ export default function AllMoviesPage() {
         setUser(currentUser);
 
         try {
-          const logs = await getFriendLogs(currentUser.id, 14, 100);
+          const logs = await getFriendLogs(currentUser.id, {
+            daysBack: null,
+            limit: null,
+            dedupeByContent: false,
+          });
           setFriendLogs(logs);
         } catch (error) {
           console.error("Error loading friend logs:", error);
         }
 
         const sharesRef = ref(db, "shares");
-        const unsubscribeShares = onValue(sharesRef, async (snapshot) => {
-          if (!snapshot.exists()) {
+        const unsubscribeShares = onValue(
+          sharesRef,
+          async (snapshot) => {
+            if (!snapshot.exists()) {
+              setShares([]);
+              setLoading(false);
+              return;
+            }
+
+            const sharesList = Object.entries(snapshot.val())
+              .map(([id, data]: any) => ({ id, ...data }))
+              .filter((share: any) => share.receiver_id === currentUser.id)
+              .sort(
+                (a: any, b: any) =>
+                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              );
+
+            try {
+              const usersData = await getUsersByIds(sharesList.map((share: any) => share.sender_id));
+              setShares(
+                sharesList.map((share: any) => ({
+                  ...share,
+                  movie: share.movie || null,
+                  content: share.content || share.movie || null,
+                  sender: usersData[share.sender_id],
+                }))
+              );
+            } catch (error) {
+              console.error("Error loading share senders:", error);
+              setShares(sharesList);
+            } finally {
+              setLoading(false);
+            }
+          },
+          (error) => {
+            if (isPermissionDeniedError(error)) {
+              console.warn("All-movies shares listener is unavailable with the current Firebase permissions.");
+              setShares([]);
+              setLoading(false);
+              return;
+            }
+
+            console.error("All-movies shares listener failed:", error);
             setShares([]);
             setLoading(false);
-            return;
           }
-
-          const sharesList = Object.entries(snapshot.val())
-            .map(([id, data]: any) => ({ id, ...data }))
-            .filter((share: any) => share.receiver_id === currentUser.id)
-            .sort(
-              (a: any, b: any) =>
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            );
-
-          try {
-            const usersData = await getUsersByIds(sharesList.map((share: any) => share.sender_id));
-            setShares(
-              sharesList.map((share: any) => ({
-                ...share,
-                movie: share.movie || null,
-                content: share.content || share.movie || null,
-                sender: usersData[share.sender_id],
-              }))
-            );
-          } catch (error) {
-            console.error("Error loading share senders:", error);
-            setShares(sharesList);
-          } finally {
-            setLoading(false);
-          }
-        });
+        );
 
         return () => unsubscribeShares();
       } catch (error) {

@@ -8,6 +8,7 @@ import SearchBar from "@/components/SearchBar";
 import CinematicLoading from "@/components/CinematicLoading";
 import { User, FollowWithUser } from "@/types";
 import { auth, db } from "@/lib/firebase";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   ref,
@@ -96,68 +97,85 @@ export default function FriendsPage() {
       // Real-time listener for follows
       const unsubscribe = onValue(followsRef, async (snapshot) => {
         if (!snapshot.exists()) {
+          setFollowing([]);
+          setFollowers([]);
+          setPendingRequests([]);
+          setSentRequests(new Set());
+          return;
+        }
+
+        const allFollows = snapshot.val();
+        const followsList = Object.entries(allFollows).map(([id, data]: any) => ({
+          id,
+          ...data,
+        }));
+
+        const acceptedFollowing = followsList.filter(
+          (f: any) => f.follower_id === currentUser.id && f.status === "accepted"
+        );
+        const acceptedFollowers = followsList.filter(
+          (f: any) => f.following_id === currentUser.id && f.status === "accepted"
+        );
+        const pendingReceived = followsList.filter(
+          (f: any) => f.following_id === currentUser.id && f.status === "pending"
+        );
+        const pendingSent = followsList.filter(
+          (f: any) => f.follower_id === currentUser.id && f.status === "pending"
+        );
+
+        try {
+          const userIds = Array.from(
+            new Set([
+              ...acceptedFollowing.map((f: any) => f.following_id),
+              ...acceptedFollowers.map((f: any) => f.follower_id),
+              ...pendingReceived.map((f: any) => f.follower_id),
+            ])
+          );
+          const usersData = await getUsersByIds(userIds);
+
+          setFollowing(
+            acceptedFollowing.map((f: any) => ({
+              ...f,
+              following: usersData[f.following_id],
+            }))
+          );
+
+          setFollowers(
+            acceptedFollowers.map((f: any) => ({
+              ...f,
+              follower: usersData[f.follower_id],
+            }))
+          );
+
+          setPendingRequests(
+            pendingReceived.map((f: any) => ({
+              ...f,
+              follower: usersData[f.follower_id],
+            }))
+          );
+
+          setSentRequests(new Set(pendingSent.map((f: any) => f.following_id)));
+        } catch (error) {
+          console.error("Error mapping follows:", error);
+        }
+      }, (error) => {
+        if (isPermissionDeniedError(error)) {
+          console.warn("Friends listener is unavailable with the current Firebase permissions.");
+          setFollowing([]);
+          setFollowers([]);
+          setPendingRequests([]);
+          setSentRequests(new Set());
+          setLoading(false);
+          return;
+        }
+
+        console.error("Friends listener failed:", error);
         setFollowing([]);
         setFollowers([]);
         setPendingRequests([]);
         setSentRequests(new Set());
-        return;
-      }
-
-      const allFollows = snapshot.val();
-      const followsList = Object.entries(allFollows).map(([id, data]: any) => ({
-        id,
-        ...data,
-      }));
-
-      const acceptedFollowing = followsList.filter(
-        (f: any) => f.follower_id === currentUser.id && f.status === "accepted"
-      );
-      const acceptedFollowers = followsList.filter(
-        (f: any) => f.following_id === currentUser.id && f.status === "accepted"
-      );
-      const pendingReceived = followsList.filter(
-        (f: any) => f.following_id === currentUser.id && f.status === "pending"
-      );
-      const pendingSent = followsList.filter(
-        (f: any) => f.follower_id === currentUser.id && f.status === "pending"
-      );
-
-      try {
-        const userIds = Array.from(
-          new Set([
-            ...acceptedFollowing.map((f: any) => f.following_id),
-            ...acceptedFollowers.map((f: any) => f.follower_id),
-            ...pendingReceived.map((f: any) => f.follower_id),
-          ])
-        );
-        const usersData = await getUsersByIds(userIds);
-
-        setFollowing(
-          acceptedFollowing.map((f: any) => ({
-            ...f,
-            following: usersData[f.following_id],
-          }))
-        );
-
-        setFollowers(
-          acceptedFollowers.map((f: any) => ({
-            ...f,
-            follower: usersData[f.follower_id],
-          }))
-        );
-
-        setPendingRequests(
-          pendingReceived.map((f: any) => ({
-            ...f,
-            follower: usersData[f.follower_id],
-          }))
-        );
-
-        setSentRequests(new Set(pendingSent.map((f: any) => f.following_id)));
-      } catch (error) {
-        console.error("Error mapping follows:", error);
-      }
-    });
+        setLoading(false);
+      });
 
     return unsubscribe;
   };
