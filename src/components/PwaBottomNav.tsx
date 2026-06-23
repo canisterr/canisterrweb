@@ -37,11 +37,11 @@ export default function PwaBottomNav() {
 
   return (
     <nav
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] sm:px-4 lg:hidden"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+1.1rem)] z-40 px-3 sm:px-4 lg:hidden"
       aria-label="Bottom navigation"
     >
       <div className="pointer-events-auto mx-auto w-full max-w-md">
-        <div className="grid min-h-[5.4rem] grid-cols-5 items-stretch rounded-[32px] border border-[#ff7a1a]/35 bg-[linear-gradient(180deg,rgba(20,20,20,0.88),rgba(8,8,8,0.92))] px-1.5 py-1.5 shadow-[0_20px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,122,26,0.06),0_0_24px_rgba(255,122,26,0.14)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[linear-gradient(180deg,rgba(22,22,22,0.74),rgba(8,8,8,0.82))]">
+        <div className="grid min-h-[4.7rem] grid-cols-5 items-stretch rounded-[32px] border border-[#ff7a1a]/35 bg-[linear-gradient(180deg,rgba(20,20,20,0.88),rgba(8,8,8,0.92))] px-1.5 py-1 shadow-[0_20px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,122,26,0.06),0_0_24px_rgba(255,122,26,0.14)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[linear-gradient(180deg,rgba(22,22,22,0.74),rgba(8,8,8,0.82))]">
           {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
             const active = isActivePath(pathname, href, exact);
 
@@ -51,7 +51,7 @@ export default function PwaBottomNav() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 aria-label={label}
-                className="group relative flex min-h-[4.65rem] flex-col items-center justify-center gap-1.5 rounded-[26px] px-1 pt-2 pb-2 text-center transition-transform duration-200 active:scale-[0.97]"
+                className="group relative flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-[26px] px-1 pt-1.5 pb-1.5 text-center transition-transform duration-200 active:scale-[0.97]"
               >
                 <span
                   className={`absolute inset-x-2 top-1 h-px rounded-full transition-opacity duration-200 ${
@@ -59,13 +59,13 @@ export default function PwaBottomNav() {
                   }`}
                 />
                 <Icon
-                  className={`h-[19px] w-[19px] transition-colors duration-200 ${
+                  className={`h-[18px] w-[18px] transition-colors duration-200 ${
                     active ? "text-[#ff7a1a]" : "text-white/55 group-hover:text-white/72"
                   }`}
                   strokeWidth={1.8}
                 />
                 <span
-                  className={`text-[11px] leading-none tracking-[0.01em] transition-colors duration-200 ${
+                  className={`text-[10px] leading-none tracking-[0.01em] transition-colors duration-200 ${
                     active ? "font-medium text-[#ff7a1a]" : "font-normal text-white/58 group-hover:text-white/74"
                   }`}
                 >
