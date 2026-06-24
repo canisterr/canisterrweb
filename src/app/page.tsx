@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { baseMetadata, canonical } from "@/lib/seo";
-import Hero from "@/components/home/Hero";
-import Footer from "@/components/home/Footer";
+import HomeGate from "@/components/home/HomeGate";
 import { getHomepagePosters } from "@/lib/posters";
 
 export const metadata: Metadata = baseMetadata({
@@ -31,10 +30,5 @@ export const metadata: Metadata = baseMetadata({
 export default async function HomePage() {
   const posters = await getHomepagePosters();
 
-  return (
-    <main className="min-h-screen overflow-hidden bg-[#020202] text-[#fff5e8]">
-      <Hero posters={posters} />
-      <Footer />
-    </main>
-  );
+  return <HomeGate posters={posters} />;
 }
