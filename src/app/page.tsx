@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import DashboardPage from "./dashboard/page";
 import { baseMetadata, canonical } from "@/lib/seo";
+import Hero from "@/components/home/Hero";
+import Footer from "@/components/home/Footer";
+import { getHomepagePosters } from "@/lib/posters";
 
 export const metadata: Metadata = baseMetadata({
   title: "Canisterr - Your Cinema Identity",
@@ -26,4 +28,13 @@ export const metadata: Metadata = baseMetadata({
   },
 });
 
-export default DashboardPage;
+export default async function HomePage() {
+  const posters = await getHomepagePosters();
+
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#020202] text-[#fff5e8]">
+      <Hero posters={posters} />
+      <Footer />
+    </main>
+  );
+}

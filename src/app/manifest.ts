@@ -2,12 +2,13 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: "Canisterr",
     short_name: "Canisterr",
     description: "Share movies with people who matter",
     start_url: "/",
     scope: "/",
-    display: "standalone",
+    display: "fullscreen",
     background_color: "#090909",
     theme_color: "#ff7a1a",
     orientation: "portrait",

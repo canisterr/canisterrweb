@@ -23,7 +23,7 @@ export const metadata: Metadata = baseMetadata({
   appleWebApp: {
     capable: true,
     title: "Canisterr",
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "black",
   },
 });
 
