@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
@@ -26,11 +26,13 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Ticket,
   Trash2,
   X,
 } from "lucide-react";
 
 type ListMode = "month" | "all";
+type LogsViewMode = "diary" | "ticket";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -107,6 +109,34 @@ function formatWatchedDate(dateStr: string): string {
   }).format(date);
 }
 
+function formatTicketDate(dateStr: string): string {
+  const date = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("en-GB", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+}
+
+function colorFromSeed(seed: string): { background: string; foreground: string; border: string } {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const hue = Math.abs(hash) % 360;
+  const background = `hsl(${hue} 18% 34%)`;
+  const foreground = hue > 35 && hue < 220 ? "#f8f4ea" : "#fffaf0";
+  const border = `hsl(${hue} 16% 24%)`;
+  return { background, foreground, border };
+}
+
+function usePosterAccent(posterUrl: string | null | undefined, seed: string) {
+  void posterUrl;
+  return useMemo(() => colorFromSeed(seed), [seed]);
+}
+
 function monthStart(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
@@ -176,6 +206,11 @@ function LogCard({
 }) {
   const hasReview = Boolean(log.notes && log.notes.trim().length > 0);
   const hasTicketImage = Boolean(log.ticket_image_url);
+  const watchedDate = new Date(`${log.watched_date}T00:00:00`);
+  const watchedMonth = watchedDate.toLocaleDateString("en-US", { month: "short" });
+  const watchedYear = watchedDate.toLocaleDateString("en-US", { year: "numeric" });
+  const seasonLabel = log.content_type === "tv" && "season_number" in log ? log.season_number : null;
+
   return (
     <div
       role="button"
@@ -187,84 +222,233 @@ function LogCard({
           onOpen(log);
         }
       }}
-      className="group grid w-full cursor-pointer grid-cols-[3rem_minmax(0,1fr)] items-stretch gap-2.5 text-left sm:grid-cols-[4rem_minmax(0,1fr)] sm:gap-4"
+      className="group w-full cursor-pointer text-left"
     >
-      <div className="relative flex self-stretch flex-col items-center justify-center text-[#ff7a1a]">
-        <span className="text-2xl font-black leading-none tracking-tight sm:text-3xl">
-          {getDayDD(log.watched_date)}
-        </span>
-        <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#ffb36b]/75 sm:text-xs">
-          {new Date(`${log.watched_date}T00:00:00`).toLocaleDateString("en-US", { month: "short" })}
-        </span>
-      </div>
-
-      <div className="rounded-[1.35rem] border border-white/10 bg-[#111111] p-2.5 shadow-[0_16px_35px_rgba(0,0,0,0.22)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_20px_45px_rgba(0,0,0,0.28)] sm:rounded-[1.5rem] sm:p-3">
-        <div className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[3.5rem_minmax(0,1fr)]">
-          <div className="relative h-[4.3rem] w-[3rem] overflow-hidden rounded-lg border border-white/10 bg-white/5 shadow-sm sm:h-[5rem] sm:w-[3.5rem]">
+      <div className="relative overflow-hidden rounded-[1.4rem] border border-white/10 bg-black shadow-[0_16px_35px_rgba(0,0,0,0.22)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_20px_45px_rgba(0,0,0,0.28)]">
+        <div className="grid min-h-[7.1rem] grid-cols-[5.1rem_0.8rem_minmax(0,1fr)_3.6rem] items-stretch sm:min-h-[8.6rem] sm:grid-cols-[6.4rem_1rem_minmax(0,1fr)_4.75rem]">
+          <div className="relative m-2 sm:m-3">
+            <div className="relative h-full min-h-[5.9rem] w-full overflow-hidden rounded-[1rem] border border-white/10 bg-black sm:min-h-[6.9rem]">
             {log.content.poster_url ? (
               <Image
                 src={log.content.poster_url}
                 alt={log.content.title}
                 fill
-                sizes="64px"
+                sizes="120px"
                 className="object-cover"
                 placeholder="blur"
                 blurDataURL={getBlurDataUrl()}
               />
             ) : (
-              <div className="flex h-[4.3rem] w-full items-center justify-center px-1 text-center text-[9px] text-white/45 sm:h-[5rem]">
+                <div className="flex h-full w-full items-center justify-center px-2 text-center text-[9px] text-white/45 sm:text-[10px]">
                 No image
               </div>
             )}
           </div>
+          </div>
 
-          <div className="flex min-w-0 items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold leading-tight text-[#f5f0de] sm:text-sm">
-                {log.content.title}
-              </p>
-              <p className="mt-0.5 truncate text-[10px] font-medium text-white/60 sm:text-xs">
-                Watched {formatWatchedDate(log.watched_date)}
-              </p>
-              {isUnavailableContent(log) && (
-                <span className="mt-2 inline-flex items-center rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-200">
-                  Details unavailable
-                </span>
-              )}
+          <div className="relative flex items-stretch justify-center py-3">
+            <div className="w-px border-l border-dotted border-white/20" />
+            <div className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1f1f1f]" />
+            <div className="absolute left-1/2 bottom-0 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full bg-[#1f1f1f]" />
+          </div>
 
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold sm:text-xs ${getReactionClasses(log)}`}>
-                  {getReactionLabel(log)}
-                </span>
-                {isRewatch && (
+          <div className="flex min-w-0 flex-col justify-center py-3 pr-2 sm:py-4 sm:pr-4">
+            <p className="truncate text-[0.95rem] font-semibold leading-tight text-[#f5f0de] sm:text-[1.15rem]">
+              {log.content.title}
+            </p>
+
+            <div className="mt-2 space-y-1.5 text-[11px] text-white/72 sm:text-[13px]">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold sm:text-[11px] ${getReactionClasses(log)}`}>
+                    {getReactionLabel(log)}
+                  </span>
+                </div>
+
+                {seasonLabel ? (
+                  <div className="flex items-center gap-1.5 text-white/60">
+                    <span className="truncate">Season {String(seasonLabel)}</span>
+                  </div>
+                ) : null}
+
+                {isRewatch ? (
                   <span
-                    className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-1 text-[#f5f0de]/80 transition group-hover:text-[#f5f0de]"
+                    className="inline-flex items-center justify-center text-white/60"
                     aria-label="Rewatch"
                     title="Rewatch"
                   >
-                    <RotateCcw className="h-3.5 w-3.5" />
+                    <RotateCcw className="h-4 w-4 flex-shrink-0" />
                   </span>
-                )}
-                {hasTicketImage && (
+                ) : null}
+
+                {hasTicketImage ? (
                   <span
-                    className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-1 text-[#f5f0de]/80 transition group-hover:text-[#ffb36b]"
+                    className="inline-flex items-center justify-center text-white/60"
                     aria-label="Ticket image"
                     title="Ticket image"
                   >
-                    <ImageIcon className="h-3.5 w-3.5" />
+                    <ImageIcon className="h-4 w-4 flex-shrink-0" />
                   </span>
-                )}
-                {hasReview && (
-                  <span className="text-[10px] font-semibold text-white/45 transition group-hover:text-[#ffb36b] sm:hidden">
-                    Review
+                ) : null}
+
+                {hasReview ? (
+                  <span
+                    className="inline-flex items-center justify-center text-white/60"
+                    aria-label="Review"
+                    title="Review"
+                  >
+                    <Pencil className="h-4 w-4 flex-shrink-0" />
                   </span>
-                )}
+                ) : null}
               </div>
+
+              {isUnavailableContent(log) ? (
+                <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/38 sm:text-[11px]">
+                  Details unavailable
+                </p>
+              ) : null}
             </div>
+          </div>
+
+          <div className="flex flex-col items-center justify-center border-l border-white/8 px-2 text-[#f5f0de] sm:px-3">
+            <span className="text-[0.72rem] font-light italic leading-none text-white/72 sm:text-[0.88rem]">
+              {watchedMonth}
+            </span>
+            <span className="mt-1 text-[2rem] font-light leading-none tracking-[-0.04em] sm:text-[2.6rem]">
+              {getDayDD(log.watched_date)}
+            </span>
+            <span className="mt-1 text-[0.66rem] font-medium leading-none text-white/65 sm:text-[0.74rem]">
+              {watchedYear}
+            </span>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function TicketLogCard({
+  log,
+  onOpen,
+  isRewatch,
+}: {
+  log: MovieLogWithContent;
+  onOpen: (log: MovieLogWithContent) => void;
+  isRewatch: boolean;
+}) {
+  const hasReview = Boolean(log.notes && log.notes.trim().length > 0);
+  const hasTicketImage = Boolean(log.ticket_image_url);
+  const seasonLabel = log.content_type === "tv" && "season_number" in log ? log.season_number : null;
+  const accent = usePosterAccent(log.content.poster_url, `${log.content.title}-${log.id}`);
+  const detailPanelStyle: CSSProperties = {
+    backgroundColor: accent.background,
+    color: accent.foreground,
+    borderTopColor: accent.border,
+  };
+  const metaChipStyle: CSSProperties = {
+    borderColor: accent.foreground === "#101010" ? "rgba(16,16,16,0.14)" : "rgba(248,244,234,0.16)",
+    backgroundColor: accent.foreground === "#101010" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.08)",
+    color: accent.foreground,
+  };
+  const subTextStyle: CSSProperties = {
+    color: accent.foreground === "#101010" ? "rgba(16,16,16,0.72)" : "rgba(248,244,234,0.78)",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(log)}
+      className="group relative aspect-[0.44] w-full overflow-hidden rounded-[1.35rem] bg-black text-left transition duration-200 hover:-translate-y-1 sm:aspect-[0.54] sm:rounded-[1.7rem] lg:aspect-[0.48] lg:rounded-[1.8rem]"
+    >
+      <div className="absolute left-0 top-1/2 z-20 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#020202] sm:h-7 sm:w-7" />
+      <div className="absolute right-0 top-1/2 z-20 h-5 w-5 translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#020202] sm:h-7 sm:w-7" />
+
+      <div className="relative h-1/2 overflow-hidden border-b border-dashed border-white/12 bg-[#050505]">
+        {log.content.poster_url ? (
+          <Image
+            src={log.content.poster_url}
+            alt={log.content.title}
+            fill
+            sizes="(max-width: 768px) 33vw, 260px"
+            className="object-cover transition duration-300 group-hover:scale-[1.02]"
+            placeholder="blur"
+            blurDataURL={getBlurDataUrl()}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center px-3 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-white/35">
+            No poster
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black via-black/60 to-transparent" />
+      </div>
+
+      <div className="flex h-1/2 flex-col border-t px-2.5 pb-2.5 pt-2 sm:px-3.5 sm:pb-3.5 sm:pt-3.5 lg:px-4 lg:pb-4" style={detailPanelStyle}>
+        <div>
+          <p className="line-clamp-2 text-[1rem] font-semibold leading-tight sm:text-[1.08rem] lg:text-[1.32rem]">
+            {log.content.title}
+          </p>
+          {seasonLabel ? (
+            <p className="mt-1 text-[10px] uppercase tracking-[0.18em] sm:text-[11px]" style={subTextStyle}>
+              Season {String(seasonLabel)}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-2 flex flex-nowrap items-center gap-1.5 overflow-hidden sm:mt-2.5 sm:gap-1.5 lg:mt-3 lg:gap-2">
+          {log.reaction != null ? (
+            <span
+              className="inline-flex min-w-0 flex-shrink rounded-full border px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap sm:px-2 sm:text-[9px] lg:px-2.5 lg:text-[11px]"
+              style={metaChipStyle}
+              title={getReactionLabel(log)}
+            >
+              {getReactionLabel(log)}
+            </span>
+          ) : null}
+          {hasReview ? (
+            <span
+              className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border sm:h-7 sm:w-7 lg:h-8 lg:w-8"
+              style={metaChipStyle}
+              title="Review written"
+            >
+              <Pencil className="h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-3.5 lg:w-3.5" />
+            </span>
+          ) : null}
+          {hasTicketImage ? (
+            <span
+              className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border sm:h-7 sm:w-7 lg:h-8 lg:w-8"
+              style={metaChipStyle}
+              title="Ticket image"
+            >
+              <ImageIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-3.5 lg:w-3.5" />
+            </span>
+          ) : null}
+          {isRewatch ? (
+            <span
+              className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border sm:h-7 sm:w-7 lg:h-8 lg:w-8"
+              style={metaChipStyle}
+              title="Rewatch"
+            >
+              <RotateCcw className="h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-3.5 lg:w-3.5" />
+            </span>
+          ) : null}
+        </div>
+
+        <div className="mt-auto min-h-[1.25rem] pt-1.5 sm:min-h-[3.2rem] sm:pt-2.5 lg:min-h-[3.6rem] lg:pt-3">
+          {hasReview ? (
+            <p className="hidden sm:line-clamp-3 sm:block sm:text-[10px] sm:leading-4 lg:text-[12px] lg:leading-5" style={subTextStyle}>
+              {log.notes}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-1.5 flex items-center justify-between border-t pt-1.5 text-[10px] font-medium tracking-[0.01em] sm:mt-2.5 sm:pt-2.5 sm:text-[9px] lg:mt-3 lg:pt-3 lg:text-[11px]" style={{ borderTopColor: accent.foreground === "#101010" ? "rgba(16,16,16,0.14)" : "rgba(248,244,234,0.16)" }}>
+          <span className="inline-flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 sm:h-3 sm:w-3 lg:h-3.5 lg:w-3.5" />
+            {formatTicketDate(log.watched_date)}
+          </span>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -288,6 +472,7 @@ export default function LogsPage() {
   const [currentMonth, setCurrentMonth] = useState<Date>(monthStart(new Date()));
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [listMode, setListMode] = useState<ListMode>("month");
+  const [viewMode, setViewMode] = useState<LogsViewMode>("diary");
 
   const [activeLog, setActiveLog] = useState<MovieLogWithContent | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -421,6 +606,20 @@ export default function LogsPage() {
       return title.includes(normalized) || notes.includes(normalized) || type.includes(normalized);
     });
   }, [displayLogs, logSearchQuery]);
+
+  const visibleTicketLogs = useMemo(() => {
+    const normalized = logSearchQuery.trim().toLowerCase();
+    const baseLogs = monthLogs.slice().sort(compareLogsDesc);
+
+    if (!normalized) return baseLogs;
+
+    return baseLogs.filter((log) => {
+      const title = log.content.title.toLowerCase();
+      const notes = (log.notes || "").toLowerCase();
+      const type = log.content_type === "tv" ? "tv show" : "movie";
+      return title.includes(normalized) || notes.includes(normalized) || type.includes(normalized);
+    });
+  }, [logSearchQuery, monthLogs]);
 
   const calendarCells = useMemo(() => {
     const { start, end } = getMonthRange(currentMonth);
@@ -607,17 +806,26 @@ export default function LogsPage() {
         </div>
 
         <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(22rem,0.88fr)] lg:items-start lg:gap-5 lg:space-y-0">
-          <div className="space-y-0 lg:sticky lg:top-24">
-            <div className="flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3">
-              <button
-                onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
+          <div className="space-y-4 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.6rem] border border-white/10 bg-[#0d0d0d] px-3 py-3 sm:px-5">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+                <button
+                  onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
+                  aria-label="Next month"
+                >
+                  <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
 
-              <div className="min-w-0 text-center">
+              <div className="min-w-0 flex-1 text-center">
                 <h2 className="text-2xl font-black uppercase leading-none tracking-normal text-[#f5f0de] sm:text-4xl">
                   {formatMonthName(currentMonth)}
                 </h2>
@@ -626,111 +834,131 @@ export default function LogsPage() {
                 </p>
               </div>
 
-              <button
-                onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
-                aria-label="Next month"
-              >
-                <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1">
+                <button
+                  onClick={() => setViewMode("diary")}
+                  className={`rounded-full px-3 py-1.5 text-xs font-black transition sm:text-sm ${
+                    viewMode === "diary" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de] hover:bg-white/8"
+                  }`}
+                  aria-label="Diary view"
+                >
+                  {viewMode === "diary" ? <Calendar className="h-4 w-4" /> : "Diary"}
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode("ticket");
+                    setSelectedDay(null);
+                    setListMode("month");
+                  }}
+                  className={`rounded-full px-3 py-1.5 text-xs font-black transition sm:text-sm ${
+                    viewMode === "ticket" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de] hover:bg-white/8"
+                  }`}
+                  aria-label="Ticket view"
+                >
+                  {viewMode === "ticket" ? <Ticket className="h-4 w-4" /> : "Ticket"}
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-7 border-y border-white/10 bg-white/[0.02]">
-              {WEEKDAYS.map((day) => (
-                <div key={day} className="border-r border-white/10 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] text-[#ffb36b]/80 last:border-r-0 sm:text-xs">
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 bg-[#111111]">
-              {calendarCells.map((cell) => {
-                if (!cell.inMonth || !cell.date) {
-                  return <div key={cell.key} className="min-h-[6.25rem] border-b border-r border-white/10 bg-white/[0.02] sm:min-h-[9rem]" />;
-                }
-
-                const day = cell.date.getDate();
-                const dayKey = cell.key;
-                const dayLogsInCell = (logsByDate.get(dayKey) || []).slice().sort(compareLogsDesc);
-                const isSelected = selectedDay === dayKey;
-                const visibleStackCount = Math.min(dayLogsInCell.length, 3);
-                const stackOffsetPx = dayLogsInCell.length > 1 ? 6 : 0;
-                const stackHeightOffsetPx = (visibleStackCount - 1) * stackOffsetPx;
-
-                return (
-                  <button
-                    key={cell.key}
-                    onClick={() => {
-                      setListMode("month");
-                      setSelectedDay((prev) => (prev === dayKey ? null : dayKey));
-                      scrollToListSection();
-                    }}
-                    className={`group relative min-h-[6.25rem] overflow-hidden border-b border-r border-white/10 text-left transition sm:min-h-[9rem] ${
-                      isSelected
-                        ? "bg-orange-500/10 shadow-[inset_0_0_0_2px_rgba(255,122,26,0.55)]"
-                        : dayLogsInCell.length > 0
-                        ? "bg-[#101010] hover:bg-white/[0.03]"
-                        : "bg-[#0f0f0f] hover:bg-white/[0.03]"
-                    }`}
-                  >
-                    {dayLogsInCell.length > 0 ? (
-                      <div className="absolute inset-0">
-                        <div className="relative flex h-full w-full items-center justify-center">
-                          {dayLogsInCell.slice(0, 3).map((log, idx) => (
-                            log.content.poster_url ? (
-                              <Image
-                                key={log.id}
-                                src={log.content.poster_url}
-                                alt={log.content.title}
-                                width={120}
-                                height={180}
-                                className={`absolute h-full w-full object-cover shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition duration-200 group-hover:-translate-y-0.5 ${getPosterStackClass(idx)}`}
-                                style={{
-                                  height: `calc(100% - ${stackHeightOffsetPx}px)`,
-                                  left: 0,
-                                  top: idx * stackOffsetPx,
-                                  width: "100%",
-                                  zIndex: 10 + idx,
-                                }}
-                                placeholder="blur"
-                                blurDataURL={getBlurDataUrl("#e2e8f0")}
-                              />
-                            ) : (
-                              <div
-                                key={log.id}
-                                className={`absolute flex h-full w-full items-center justify-center bg-slate-100 px-1 text-center text-[8px] font-bold text-slate-400 shadow-[0_8px_18px_rgba(15,23,42,0.16)] sm:text-[10px] ${getPosterStackClass(idx)}`}
-                                style={{
-                                  height: `calc(100% - ${stackHeightOffsetPx}px)`,
-                                  left: 0,
-                                  top: idx * stackOffsetPx,
-                                  width: "100%",
-                                  zIndex: 10 + idx,
-                                }}
-                              >
-                                No poster
-                              </div>
-                            )
-                          ))}
-                        </div>
+            {viewMode === "diary" ? (
+              <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(22rem,0.88fr)] lg:items-start lg:gap-5 lg:space-y-0">
+                <div className="space-y-0 lg:sticky lg:top-24">
+                  <div className="grid grid-cols-7 border-y border-white/10 bg-white/[0.02]">
+                    {WEEKDAYS.map((day) => (
+                      <div key={day} className="border-r border-white/10 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] text-[#ffb36b]/80 last:border-r-0 sm:text-xs">
+                        {day}
                       </div>
-                    ) : (
-                      <>
-                        <span className={`absolute left-1.5 top-1.5 z-20 text-[11px] font-black sm:left-2.5 sm:top-2.5 sm:text-sm ${isSelected ? "text-[#ffb36b]" : "text-[#ff7a1a]"}`}>
-                          {day}
-                        </span>
-                        <div className="pointer-events-none absolute inset-x-3 bottom-3 hidden h-px bg-white/10 sm:block" />
-                      </>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                    ))}
+                  </div>
 
-          <div
-            ref={listSectionRef}
-            className="relative -mx-1 scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-b from-[#2a2a2a]/95 via-[#1f1f1f]/95 to-[#141414]/95 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_50px_rgba(0,0,0,0.24)] sm:-mx-2 sm:p-4 lg:mx-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
-          >
+                  <div className="grid grid-cols-7 bg-[#111111]">
+                    {calendarCells.map((cell) => {
+                      if (!cell.inMonth || !cell.date) {
+                        return <div key={cell.key} className="min-h-[6.25rem] border-b border-r border-white/10 bg-white/[0.02] sm:min-h-[9rem]" />;
+                      }
+
+                      const day = cell.date.getDate();
+                      const dayKey = cell.key;
+                      const dayLogsInCell = (logsByDate.get(dayKey) || []).slice().sort(compareLogsDesc);
+                      const isSelected = selectedDay === dayKey;
+                      const visibleStackCount = Math.min(dayLogsInCell.length, 3);
+                      const stackOffsetPx = dayLogsInCell.length > 1 ? 6 : 0;
+                      const stackHeightOffsetPx = (visibleStackCount - 1) * stackOffsetPx;
+
+                      return (
+                        <button
+                          key={cell.key}
+                          onClick={() => {
+                            setListMode("month");
+                            setSelectedDay((prev) => (prev === dayKey ? null : dayKey));
+                            scrollToListSection();
+                          }}
+                          className={`group relative min-h-[6.25rem] overflow-hidden border-b border-r border-white/10 text-left transition sm:min-h-[9rem] ${
+                            isSelected
+                              ? "bg-orange-500/10 shadow-[inset_0_0_0_2px_rgba(255,122,26,0.55)]"
+                              : dayLogsInCell.length > 0
+                              ? "bg-[#101010] hover:bg-white/[0.03]"
+                              : "bg-[#0f0f0f] hover:bg-white/[0.03]"
+                          }`}
+                        >
+                          {dayLogsInCell.length > 0 ? (
+                            <div className="absolute inset-0">
+                              <div className="relative flex h-full w-full items-center justify-center">
+                                {dayLogsInCell.slice(0, 3).map((log, idx) => (
+                                  log.content.poster_url ? (
+                                    <Image
+                                      key={log.id}
+                                      src={log.content.poster_url}
+                                      alt={log.content.title}
+                                      width={120}
+                                      height={180}
+                                      className={`absolute h-full w-full object-cover shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition duration-200 group-hover:-translate-y-0.5 ${getPosterStackClass(idx)}`}
+                                      style={{
+                                        height: `calc(100% - ${stackHeightOffsetPx}px)`,
+                                        left: 0,
+                                        top: idx * stackOffsetPx,
+                                        width: "100%",
+                                        zIndex: 10 + idx,
+                                      }}
+                                      placeholder="blur"
+                                      blurDataURL={getBlurDataUrl("#e2e8f0")}
+                                    />
+                                  ) : (
+                                    <div
+                                      key={log.id}
+                                      className={`absolute flex h-full w-full items-center justify-center bg-slate-100 px-1 text-center text-[8px] font-bold text-slate-400 shadow-[0_8px_18px_rgba(15,23,42,0.16)] sm:text-[10px] ${getPosterStackClass(idx)}`}
+                                      style={{
+                                        height: `calc(100% - ${stackHeightOffsetPx}px)`,
+                                        left: 0,
+                                        top: idx * stackOffsetPx,
+                                        width: "100%",
+                                        zIndex: 10 + idx,
+                                      }}
+                                    >
+                                      No poster
+                                    </div>
+                                  )
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <span className={`absolute left-1.5 top-1.5 z-20 text-[11px] font-black sm:left-2.5 sm:top-2.5 sm:text-sm ${isSelected ? "text-[#ffb36b]" : "text-[#ff7a1a]"}`}>
+                                {day}
+                              </span>
+                              <div className="pointer-events-none absolute inset-x-3 bottom-3 hidden h-px bg-white/10 sm:block" />
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div
+                  ref={listSectionRef}
+                  className="relative -mx-1 scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-b from-[#2a2a2a]/95 via-[#1f1f1f]/95 to-[#141414]/95 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_50px_rgba(0,0,0,0.24)] sm:-mx-2 sm:p-4 lg:mx-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
+                >
           <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-white/5 blur-3xl" />
           <div className="pointer-events-none absolute -right-16 top-56 h-48 w-48 rounded-full bg-white/4 blur-3xl" />
           <div className="relative mb-3 flex flex-col items-center gap-2.5 text-center">
@@ -813,6 +1041,30 @@ export default function LogsPage() {
                 : "No logs for this selection."}
             </div>
           )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-[#050505] p-1 sm:p-2">
+                {visibleTicketLogs.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3.5 md:grid-cols-3 md:gap-4 xl:grid-cols-4">
+                    {visibleTicketLogs.map((log) => (
+                      <TicketLogCard
+                        key={log.id}
+                        log={log}
+                        onOpen={handleOpenLogDetails}
+                        isRewatch={rewatchKeys.has(logKey(log))}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-16 text-center text-white/45">
+                    {logSearchQuery.trim()
+                      ? "No ticket logs match your search this month."
+                      : "No logs in this month for ticket view."}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
