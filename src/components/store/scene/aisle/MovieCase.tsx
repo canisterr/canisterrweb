@@ -5,7 +5,14 @@ import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { usePosterTexture } from "./usePosterTexture";
-import { CASE_DEPTH, CASE_GEOMETRY, CASE_WIDTH } from "./shared-resources";
+import {
+  CASE_DEPTH,
+  CASE_GEOMETRY,
+  CASE_WIDTH,
+  STACK_COPY_DEPTH,
+  STACK_COPY_GEOMETRY,
+  STACK_COPY_MATERIAL,
+} from "./shared-resources";
 import { getShelfPosterUrl } from "@/lib/store/discover";
 import { useStoreScene } from "@/lib/store/store-state";
 import { QUALITY_PRESETS } from "@/lib/store/quality";
@@ -39,6 +46,13 @@ export default function MovieCase({ movie, position }: MovieCaseProps) {
   const isSelected = useStoreScene((s) => s.selectedMovieId === movie.id);
   const nearSize = useStoreScene((s) => QUALITY_PRESETS[s.qualityTier].nearPosterSize);
   const farSize = useStoreScene((s) => QUALITY_PRESETS[s.qualityTier].farPosterSize);
+
+  // Small deterministic per-title jitter so a shelf of stacks doesn't look perfectly machine-aligned.
+  const stackJitter = useMemo(() => {
+    const jx = (((movie.id * 928371) % 1000) / 1000 - 0.5) * 0.05;
+    const jy = (((movie.id * 552383) % 1000) / 1000 - 0.5) * 0.03;
+    return { jx, jy };
+  }, [movie.id]);
 
   const hasPoster = Boolean(movie.posterPath || movie.posterUrl);
   const posterUrl = hasPoster ? getShelfPosterUrl(movie, distanceTier === "near" ? nearSize : farSize) : null;
@@ -96,8 +110,32 @@ export default function MovieCase({ movie, position }: MovieCaseProps) {
     }
   });
 
+  const selectThisMovie = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    selectMovie(movie.id);
+    trackStoreEvent("movie_selected_from_store", { movie_id: movie.id });
+  };
+
   return (
     <group ref={baseGroupRef} position={position}>
+      {/* Extra copies stacked behind the front case — stay put on the shelf when the front one pulls forward on hover. */}
+      <mesh
+        geometry={STACK_COPY_GEOMETRY}
+        material={STACK_COPY_MATERIAL}
+        position={[stackJitter.jx * 0.6, stackJitter.jy * 0.6, -CASE_DEPTH / 2 - STACK_COPY_DEPTH / 2 - 0.008]}
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onClick={selectThisMovie}
+      />
+      <mesh
+        geometry={STACK_COPY_GEOMETRY}
+        material={STACK_COPY_MATERIAL}
+        position={[stackJitter.jx, stackJitter.jy, -CASE_DEPTH / 2 - STACK_COPY_DEPTH * 1.5 - 0.024]}
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onClick={selectThisMovie}
+      />
+
       <group ref={animatedGroupRef}>
         <mesh
           geometry={CASE_GEOMETRY}
@@ -114,11 +152,7 @@ export default function MovieCase({ movie, position }: MovieCaseProps) {
           }}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            selectMovie(movie.id);
-            trackStoreEvent("movie_selected_from_store", { movie_id: movie.id });
-          }}
+          onClick={selectThisMovie}
         />
         {(!hasPoster || status === "error") && (
           <Text
