@@ -17,6 +17,11 @@ const ACCEL = 8;
 const ARRIVE_DIST = 0.35;
 const TELEPORT_DURATION_MS = 900;
 const POSITION_SYNC_THRESHOLD_SQ = 0.25;
+const MAX_PITCH = 0.5;
+// How fast the rendered look direction chases the input-accumulated target. High enough to
+// feel responsive to a continuous drag, but smooths out uneven/bursty touch-event timing
+// (mobile swipes were snapping the camera one event-batch at a time without this).
+const LOOK_SMOOTHING = 22;
 
 function collidesAt(x: number, z: number, colliders: AabbCollider[], radius: number): boolean {
   for (const collider of colliders) {
@@ -42,6 +47,8 @@ export default function PlayerRig({ inputRef, initialPosition = [0, 12] }: Playe
   const velocity = useRef(new THREE.Vector3());
   const yaw = useRef(0); // 0 faces -Z, which is "into the store" per the layout engine
   const pitch = useRef(0);
+  const targetYaw = useRef(0); // accumulates raw input instantly; yaw/pitch above ease toward these each frame
+  const targetPitch = useRef(0);
   const teleport = useRef<{ from: THREE.Vector3; to: THREE.Vector3; startedAt: number } | null>(null);
   const lastSynced = useRef(new THREE.Vector3(Infinity, Infinity, Infinity));
 
@@ -68,9 +75,13 @@ export default function PlayerRig({ inputRef, initialPosition = [0, 12] }: Playe
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 20);
 
-    yaw.current += inputRef.current.yawDelta;
+    targetYaw.current += inputRef.current.yawDelta;
     inputRef.current.yawDelta = 0;
-    pitch.current = inputRef.current.pitchDelta;
+    targetPitch.current = THREE.MathUtils.clamp(targetPitch.current + inputRef.current.pitchDelta, -MAX_PITCH, MAX_PITCH);
+    inputRef.current.pitchDelta = 0;
+
+    yaw.current = THREE.MathUtils.damp(yaw.current, targetYaw.current, LOOK_SMOOTHING, delta);
+    pitch.current = THREE.MathUtils.damp(pitch.current, targetPitch.current, LOOK_SMOOTHING, delta);
 
     if (teleport.current) {
       const { from, to, startedAt } = teleport.current;

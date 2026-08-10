@@ -2,11 +2,9 @@
 
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useThree } from "@react-three/fiber";
-import { MathUtils } from "three";
 import type { MovementInputState } from "./movement-input";
 
 const LOOK_SENSITIVITY = 0.0035;
-const MAX_PITCH = 0.5;
 
 /**
  * Click/touch-and-drag look, unified via the Pointer Events API (covers
@@ -34,12 +32,10 @@ export function usePointerLook(inputRef: MutableRefObject<MovementInputState>) {
       state.lastX = event.clientX;
       state.lastY = event.clientY;
       // Dragging/swiping right turns the view right (natural "grab and turn" feel).
+      // Both are pure per-event deltas — PlayerRig accumulates + clamps + smooths them,
+      // so a burst of touch events doesn't snap the camera instantly.
       inputRef.current.yawDelta += dx * LOOK_SENSITIVITY;
-      inputRef.current.pitchDelta = MathUtils.clamp(
-        inputRef.current.pitchDelta + dy * LOOK_SENSITIVITY,
-        -MAX_PITCH,
-        MAX_PITCH
-      );
+      inputRef.current.pitchDelta += dy * LOOK_SENSITIVITY;
     }
 
     function onPointerUp(event: PointerEvent) {
