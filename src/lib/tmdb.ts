@@ -5,8 +5,8 @@ import { getTmdbBackdropUrl, getTmdbImageUrl, getTmdbPosterUrl } from "./perform
 import { readBrowserCache, readBrowserCacheEntry, writeBrowserCache } from "./browser-cache";
 import { searchMovieCatalog, upsertMovieCatalog } from "./movie-catalog";
 
-// Genre ID mappings for TMDB discover API
-const GENRE_MAP: Record<string, number> = {
+// Genre ID mappings for TMDB discover API (also the canonical genre list for the 3D store's genre hall)
+export const GENRE_MAP: Record<string, number> = {
   action: 28,
   adventure: 12,
   animation: 16,
@@ -93,6 +93,15 @@ interface TMDBDetailedMovie {
   vote_average: number;
   vote_count: number;
   popularity: number;
+  videos?: {
+    results: Array<{
+      id: string;
+      key: string;
+      site: string;
+      type: string;
+      official?: boolean;
+    }>;
+  };
   credits?: {
     cast: Array<{
       id: number;
@@ -505,6 +514,11 @@ function normalizeMovieDetails(data: TMDBDetailedMovie) {
       .map((person) => person.name);
   }
 
+  const trailer =
+    data.videos?.results?.find(
+      (video) => video.site === "YouTube" && video.type === "Trailer" && video.official
+    ) || data.videos?.results?.find((video) => video.site === "YouTube" && video.type === "Trailer");
+
   return {
     id: data.id,
     title: data.title,
@@ -528,6 +542,7 @@ function normalizeMovieDetails(data: TMDBDetailedMovie) {
     platforms: [],
     cast_details: castDetails,
     crew_details: crewDetails,
+    trailer_key: trailer?.key || null,
   };
 }
 
@@ -946,7 +961,7 @@ export async function getMovieDetails(movieId: number) {
   const request = (async () => {
   try {
     const response = await fetchTmdb(`movie/${movieId}`, {
-      append_to_response: "credits",
+      append_to_response: "credits,videos",
     });
 
     if (!response.ok) {

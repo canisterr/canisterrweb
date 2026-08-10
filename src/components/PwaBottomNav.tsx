@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clapperboard, Home, LibraryBig, Share2, Sparkles } from "lucide-react";
+import { Clapperboard, Home, LibraryBig, Share2, ShoppingBag, Sparkles } from "lucide-react";
 import { useIsPwa } from "@/lib/pwa";
 
 type NavItem = {
@@ -14,6 +14,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard",     label: "Home",    icon: Home,        exact: false },
+  { href: "/store",         label: "Store",   icon: ShoppingBag, exact: false },
   { href: "/share",         label: "Share",   icon: Share2,      exact: false },
   { href: "/logs",          label: "Log",     icon: Clapperboard, exact: false },
   { href: "/lists",         label: "Lists",   icon: LibraryBig,  exact: false },
@@ -30,8 +31,10 @@ export default function PwaBottomNav() {
   const isPwa = useIsPwa();
   const isAuthRoute = pathname.startsWith("/auth");
   const isScanRoute = pathname.startsWith("/scan");
+  // The store is a full-viewport immersive takeover with its own minimal chrome.
+  const isStoreRoute = pathname.startsWith("/store");
 
-  if (!isPwa || isAuthRoute || isScanRoute) {
+  if (!isPwa || isAuthRoute || isScanRoute || isStoreRoute) {
     return null;
   }
 
@@ -41,7 +44,7 @@ export default function PwaBottomNav() {
       aria-label="Bottom navigation"
     >
       <div className="pointer-events-auto mx-auto w-full max-w-md">
-        <div className="grid min-h-[4.7rem] grid-cols-5 items-stretch rounded-[32px] border border-[#ff7a1a]/35 bg-[linear-gradient(180deg,rgba(20,20,20,0.88),rgba(8,8,8,0.92))] px-1.5 py-1 shadow-[0_20px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,122,26,0.06),0_0_24px_rgba(255,122,26,0.14)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[linear-gradient(180deg,rgba(22,22,22,0.74),rgba(8,8,8,0.82))]">
+        <div className="grid min-h-[4.7rem] grid-cols-6 items-stretch rounded-[32px] border border-[#ff7a1a]/35 bg-[linear-gradient(180deg,rgba(20,20,20,0.88),rgba(8,8,8,0.92))] px-1.5 py-1 shadow-[0_20px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,122,26,0.06),0_0_24px_rgba(255,122,26,0.14)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[linear-gradient(180deg,rgba(22,22,22,0.74),rgba(8,8,8,0.82))]">
           {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
             const active = isActivePath(pathname, href, exact);
 
