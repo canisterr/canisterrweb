@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { CollisionProvider } from "./collision-registry";
+import ResponsiveCamera from "./ResponsiveCamera";
 import Lighting from "./Lighting";
 import StoreEnvironment from "./StoreEnvironment";
 import StoreEntrance from "./StoreEntrance";
@@ -28,6 +29,7 @@ export default function MovieStoreScene({ userId, isTouchPrimary }: MovieStoreSc
 
   return (
     <CollisionProvider>
+      <ResponsiveCamera />
       <fog attach="fog" args={["#050403", 30, 145]} />
       <color attach="background" args={["#050403"]} />
 

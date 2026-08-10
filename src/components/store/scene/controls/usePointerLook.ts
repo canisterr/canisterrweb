@@ -33,9 +33,10 @@ export function usePointerLook(inputRef: MutableRefObject<MovementInputState>) {
       const dy = event.clientY - state.lastY;
       state.lastX = event.clientX;
       state.lastY = event.clientY;
-      inputRef.current.yawDelta -= dx * LOOK_SENSITIVITY;
+      // Dragging/swiping right turns the view right (natural "grab and turn" feel).
+      inputRef.current.yawDelta += dx * LOOK_SENSITIVITY;
       inputRef.current.pitchDelta = MathUtils.clamp(
-        inputRef.current.pitchDelta - dy * LOOK_SENSITIVITY,
+        inputRef.current.pitchDelta + dy * LOOK_SENSITIVITY,
         -MAX_PITCH,
         MAX_PITCH
       );

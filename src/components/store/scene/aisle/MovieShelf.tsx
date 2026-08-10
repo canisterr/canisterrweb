@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import MovieCase from "./MovieCase";
 import {
+  CASE_HEIGHT,
   SHELF_PLANK_GEOMETRY,
   SHELF_PLANK_MATERIAL,
   SHELF_UPRIGHT_GEOMETRY,
@@ -14,6 +15,13 @@ const ITEMS_PER_ROW = 8;
 const CASE_SPACING = 0.82;
 const ROW_HEIGHT = 1.18;
 const BASE_Y = 0.72;
+
+/** Y of the topmost case's top edge for a shelf with this many items — use to clear signage above it. */
+export function getShelfTopY(itemCount: number): number {
+  if (itemCount <= 0) return BASE_Y;
+  const rowCount = Math.ceil(itemCount / ITEMS_PER_ROW);
+  return BASE_Y + (rowCount - 1) * ROW_HEIGHT + CASE_HEIGHT / 2;
+}
 
 interface MovieShelfProps {
   movies: StoreMovieSummary[];
