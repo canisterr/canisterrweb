@@ -38,11 +38,12 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  * Whitelists + coerces a shelf's declarative query into safe TMDB /discover/movie
  * params. Nothing outside this known key set is ever forwarded upstream.
  */
-function buildDiscoverParams(query: DiscoverShelfQuery): Record<string, string | number | boolean> {
+function buildDiscoverParams(query: DiscoverShelfQuery, page: number): Record<string, string | number | boolean> {
+  const resolvedPage = Number.isInteger(page) && page >= 1 && page <= 20 ? page : 1;
   const params: Record<string, string | number | boolean> = {
     sort_by: query.sort_by || "popularity.desc",
     include_adult: false,
-    page: Number.isInteger(query.page) && (query.page as number) >= 1 && (query.page as number) <= 20 ? (query.page as number) : 1,
+    page: resolvedPage,
   };
 
   const genreIds = query.with_genres?.filter((id) => Number.isInteger(id) && id > 0);
@@ -76,8 +77,8 @@ function buildDiscoverParams(query: DiscoverShelfQuery): Record<string, string |
   return params;
 }
 
-async function fetchDiscoverShelf(query: DiscoverShelfQuery, limit: number): Promise<StoreMovieSummary[]> {
-  const params = buildDiscoverParams(query);
+async function fetchDiscoverShelf(query: DiscoverShelfQuery, limit: number, page: number): Promise<StoreMovieSummary[]> {
+  const params = buildDiscoverParams(query, page);
   const response = await fetchTmdb("discover/movie", params);
   if (!response.ok) {
     throw new Error(`discover/movie failed with status ${response.status}`);
@@ -92,8 +93,9 @@ const CATALOG_PATHS: Record<CatalogShelfQuery["source"], string> = {
   popular: "movie/popular",
 };
 
-async function fetchCatalogShelf(query: CatalogShelfQuery, limit: number): Promise<StoreMovieSummary[]> {
-  const response = await fetchTmdb(CATALOG_PATHS[query.source], { page: 1 });
+async function fetchCatalogShelf(query: CatalogShelfQuery, limit: number, page: number): Promise<StoreMovieSummary[]> {
+  const resolvedPage = Number.isInteger(page) && page >= 1 && page <= 20 ? page : 1;
+  const response = await fetchTmdb(CATALOG_PATHS[query.source], { page: resolvedPage });
   if (!response.ok) {
     throw new Error(`${CATALOG_PATHS[query.source]} failed with status ${response.status}`);
   }
@@ -141,13 +143,26 @@ export function getShelfBackdropUrl(movie: StoreMovieSummary, size: Parameters<t
   return getTmdbBackdropUrl(movie.backdropPath ?? null, size);
 }
 
+const MAX_REFRESH_PAGE = 5;
+
+/** Deterministically maps a "refresh" click count to a different (but still good-quality) TMDB page. */
+export function pageForRefreshSeed(seed: number): number {
+  return (seed % MAX_REFRESH_PAGE) + 1;
+}
+
 /**
  * Fetches (and caches) the movies for a single shelf. Safe to call repeatedly —
  * in-memory TTL cache + in-flight de-dupe mean re-entering an aisle never
- * re-hits TMDB.
+ * re-hits TMDB. Pass a different `page` (see pageForRefreshSeed) to surface a
+ * different set of titles instead of the same page-1 results every time.
  */
-export async function fetchShelfMovies(shelfId: string, query: ShelfQuery, limit = 24): Promise<StoreMovieSummary[]> {
-  const cacheKey = `${shelfId}:${JSON.stringify(query)}:${limit}`;
+export async function fetchShelfMovies(
+  shelfId: string,
+  query: ShelfQuery,
+  limit = 24,
+  page = 1
+): Promise<StoreMovieSummary[]> {
+  const cacheKey = `${shelfId}:${JSON.stringify(query)}:${limit}:${page}`;
   const cached = shelfCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.movies;
@@ -162,8 +177,8 @@ export async function fetchShelfMovies(shelfId: string, query: ShelfQuery, limit
         query.kind === "static"
           ? await fetchStaticShelf(query.ids, limit)
           : query.kind === "catalog"
-            ? await fetchCatalogShelf(query, limit)
-            : await fetchDiscoverShelf(query, limit);
+            ? await fetchCatalogShelf(query, limit, page)
+            : await fetchDiscoverShelf(query, limit, page);
       shelfCache.set(cacheKey, {
         expiresAt: Date.now() + (query.kind === "static" ? STATIC_CACHE_TTL_MS : DISCOVER_CACHE_TTL_MS),
         movies,

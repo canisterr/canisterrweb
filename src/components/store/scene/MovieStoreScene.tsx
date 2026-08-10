@@ -30,7 +30,7 @@ export default function MovieStoreScene({ userId, isTouchPrimary }: MovieStoreSc
   return (
     <CollisionProvider>
       <ResponsiveCamera />
-      <fog attach="fog" args={["#050403", 30, 145]} />
+      <fog attach="fog" args={["#050403", 30, 190]} />
       <color attach="background" args={["#050403"]} />
 
       <Lighting />

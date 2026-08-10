@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchShelfMovies } from "@/lib/store/discover";
+import { fetchShelfMovies, pageForRefreshSeed } from "@/lib/store/discover";
 import { useStoreScene } from "@/lib/store/store-state";
 import { QUALITY_PRESETS } from "@/lib/store/quality";
 import type { PersonalizedSectionConfig, StoreMovieSummary, StoreSectionConfig } from "@/types/store";
@@ -39,6 +39,7 @@ export function useStoreSectionMovies(
 ): ResolvedSection {
   const [state, setState] = useState<ResolvedSection>(EMPTY);
   const maxShelfItems = useStoreScene((s) => QUALITY_PRESETS[s.qualityTier].maxShelfItems);
+  const refreshSeed = useStoreScene((s) => s.shelfRefreshSeed);
 
   useEffect(() => {
     if (!active) return;
@@ -67,12 +68,13 @@ export function useStoreSectionMovies(
     }
 
     let cancelled = false;
+    const page = pageForRefreshSeed(refreshSeed);
     setState((prev) => ({ ...prev, loading: true, requiresSignIn: false }));
     Promise.all(
       section.shelves.map(async (shelf) => ({
         id: shelf.id,
         label: shelf.label,
-        movies: await fetchShelfMovies(`${section.id}:${shelf.id}`, shelf.query, maxShelfItems),
+        movies: await fetchShelfMovies(`${section.id}:${shelf.id}`, shelf.query, maxShelfItems, page),
       }))
     )
       .then((shelves) => {
@@ -86,7 +88,7 @@ export function useStoreSectionMovies(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section.id, userId, active]);
+  }, [section.id, userId, active, refreshSeed]);
 
   return state;
 }

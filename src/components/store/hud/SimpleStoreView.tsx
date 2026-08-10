@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Box } from "lucide-react";
+import { ArrowLeft, Box, RefreshCw } from "lucide-react";
 import { getShelfPosterUrl } from "@/lib/store/discover";
 import { useStoreSectionMovies } from "@/hooks/store/useStoreSectionMovies";
+import { useStoreScene } from "@/lib/store/store-state";
 import { GENRE_SECTIONS, COLLECTION_SECTIONS } from "@/lib/store/shelf-config";
 import { PERSONALIZED_SECTIONS } from "@/lib/store/personalized-config";
 import { trackStoreEvent } from "@/lib/store/analytics";
@@ -101,6 +102,8 @@ interface SimpleStoreViewProps {
 
 /** Non-3D fallback: the same sections/shelves as flat, lazily-loaded scrollable rows. */
 export default function SimpleStoreView({ user, onSelectMovie, onSwitchTo3D }: SimpleStoreViewProps) {
+  const refreshShelves = useStoreScene((s) => s.refreshShelves);
+
   useEffect(() => {
     trackStoreEvent("store_simple_view_opened");
   }, []);
@@ -112,15 +115,28 @@ export default function SimpleStoreView({ user, onSelectMovie, onSwitchTo3D }: S
           <Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold text-[#f5f0de]/70 transition hover:text-[#f5f0de]">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Canisterr
           </Link>
-          {onSwitchTo3D && (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onSwitchTo3D}
+              onClick={() => {
+                refreshShelves();
+                trackStoreEvent("store_shelves_refreshed");
+              }}
               className="flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/50"
+              aria-label="Refresh shelves to see other movies"
             >
-              <Box className="h-4 w-4" aria-hidden="true" /> Enter 3D Store
+              <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
             </button>
-          )}
+            {onSwitchTo3D && (
+              <button
+                type="button"
+                onClick={onSwitchTo3D}
+                className="flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/50"
+              >
+                <Box className="h-4 w-4" aria-hidden="true" /> Enter 3D Store
+              </button>
+            )}
+          </div>
         </div>
         <h1 className="mb-8 text-3xl font-black tracking-tight text-[#f5f0de]">The Canisterr Store</h1>
         {ALL_SECTIONS.map((section) => (

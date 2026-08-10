@@ -11,12 +11,16 @@ import type { StoreSectionAnchor } from "@/types/store";
  */
 const AISLE_WIDTH = 7;
 const AISLE_DEPTH = 9;
-const GENRE_ROW_SPACING = 10;
+// Wide enough that even a wrapped multi-row shelf layout (see AisleSection's layoutShelves)
+// never spills into the next row/alcove — shelves used to overlap and z-fight at tighter spacing.
+const GENRE_ROW_SPACING = 15;
 const GENRE_COL_OFFSET = 9;
 const GENRE_HALL_START_Z = -22;
 
-const SIDE_ROOM_SPACING = 8;
+const SIDE_ROOM_SPACING = 20;
 const SIDE_ROOM_START_Z = -7;
+/** How far a wrapped (multi-row) collection/personalized shelf stack can extend beyond its anchor. */
+const SIDE_ROOM_MAX_DEPTH_EXTENT = 12;
 
 export const ENTRANCE_ANCHOR: StoreSectionAnchor = {
   sectionId: "entrance",
@@ -95,7 +99,9 @@ export function getStoreBounds() {
   const maxRow = Math.ceil(GENRE_SECTIONS.length / 2) - 1;
   const backZ = GENRE_HALL_START_Z - maxRow * GENRE_ROW_SPACING - AISLE_DEPTH;
   const frontZ = ENTRANCE_ANCHOR.position[2] + ENTRANCE_ANCHOR.depth / 2;
-  const halfWidth = GENRE_COL_OFFSET + AISLE_DEPTH;
+  const genreHalfWidth = GENRE_COL_OFFSET + AISLE_DEPTH;
+  const sideRoomHalfWidth = 18 + SIDE_ROOM_MAX_DEPTH_EXTENT;
+  const halfWidth = Math.max(genreHalfWidth, sideRoomHalfWidth);
   return {
     minX: -halfWidth,
     maxX: halfWidth,

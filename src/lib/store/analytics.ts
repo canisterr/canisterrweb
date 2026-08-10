@@ -5,7 +5,8 @@ type StoreEventName =
   | "store_search"
   | "store_map_used"
   | "store_watchlist_added"
-  | "store_simple_view_opened";
+  | "store_simple_view_opened"
+  | "store_shelves_refreshed";
 
 declare global {
   interface Window {

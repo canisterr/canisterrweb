@@ -11,16 +11,25 @@ import {
 } from "./shared-resources";
 import type { StoreMovieSummary } from "@/types/store";
 
-const ITEMS_PER_ROW = 8;
-const CASE_SPACING = 0.82;
+const ITEMS_PER_ROW = 6;
+const CASE_SPACING = 0.78;
 const ROW_HEIGHT = 1.18;
 const BASE_Y = 0.72;
+const SHELF_EDGE_MARGIN = 0.3;
 
 /** Y of the topmost case's top edge for a shelf with this many items — use to clear signage above it. */
 export function getShelfTopY(itemCount: number): number {
   if (itemCount <= 0) return BASE_Y;
   const rowCount = Math.ceil(itemCount / ITEMS_PER_ROW);
   return BASE_Y + (rowCount - 1) * ROW_HEIGHT + CASE_HEIGHT / 2;
+}
+
+/** Physical width a shelf with this many items will occupy — use to lay out shelves without overlapping. */
+export function getShelfWidth(itemCount: number): number {
+  if (itemCount <= 0) return 0;
+  const rowCount = Math.ceil(itemCount / ITEMS_PER_ROW);
+  const widestRow = rowCount > 1 ? ITEMS_PER_ROW : itemCount;
+  return widestRow * CASE_SPACING + SHELF_EDGE_MARGIN;
 }
 
 interface MovieShelfProps {
@@ -41,7 +50,7 @@ export default function MovieShelf({ movies, position }: MovieShelfProps) {
 
   if (rows.length === 0) return null;
 
-  const shelfWidth = Math.max(...rows.map((row) => row.length)) * CASE_SPACING + 0.3;
+  const shelfWidth = getShelfWidth(movies.length);
   const totalHeight = rows.length * ROW_HEIGHT + 0.4;
 
   return (

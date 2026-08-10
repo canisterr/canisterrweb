@@ -37,6 +37,8 @@ const CURRENT_YEAR = new Date().getFullYear();
 const RECENT_QUALITY_VOTE_COUNT = 150;
 
 function buildGenreShelves(genreId: number): ShelfDefinition[] {
+  // Kept to two shelves per genre wall — decade/classics browsing already lives in the
+  // Collections "Through the Decades" area, so genre aisles stay a fast, non-overlapping sampler.
   return [
     {
       id: `popular`,
@@ -56,28 +58,6 @@ function buildGenreShelves(genreId: number): ShelfDefinition[] {
         with_genres: [genreId],
         sort_by: "vote_average.desc",
         voteCountGte: 800,
-      } satisfies DiscoverShelfQuery,
-    },
-    {
-      id: `recent`,
-      label: `${CURRENT_YEAR - 5}s Onward`,
-      query: {
-        kind: "discover",
-        with_genres: [genreId],
-        sort_by: "popularity.desc",
-        releaseDateGte: `${CURRENT_YEAR - 5}-01-01`,
-        voteCountGte: 40,
-      } satisfies DiscoverShelfQuery,
-    },
-    {
-      id: `classics`,
-      label: "Classics",
-      query: {
-        kind: "discover",
-        with_genres: [genreId],
-        sort_by: "vote_average.desc",
-        releaseDateLte: "1999-12-31",
-        voteCountGte: 300,
       } satisfies DiscoverShelfQuery,
     },
   ];

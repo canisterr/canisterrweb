@@ -1,17 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, LayoutGrid, Map as MapIcon, Search } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, LayoutGrid, Map as MapIcon, RefreshCw, Search } from "lucide-react";
 import { useStoreScene } from "@/lib/store/store-state";
+import { trackStoreEvent } from "@/lib/store/analytics";
 
 interface StoreHUDProps {
   onOpenSimpleView: () => void;
 }
 
-/** Minimal always-visible chrome: exit, search, map, simple-view toggle. */
+/** Minimal always-visible chrome: exit, search, map, refresh, simple-view toggle. */
 export default function StoreHUD({ onOpenSimpleView }: StoreHUDProps) {
   const openMap = useStoreScene((s) => s.openMap);
   const openSearch = useStoreScene((s) => s.openSearch);
+  const refreshShelves = useStoreScene((s) => s.refreshShelves);
+  const [spinning, setSpinning] = useState(false);
+
+  const handleRefresh = () => {
+    refreshShelves();
+    trackStoreEvent("store_shelves_refreshed");
+    setSpinning(true);
+    setTimeout(() => setSpinning(false), 600);
+  };
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex items-center justify-between gap-2 p-3 sm:p-4">
@@ -40,6 +51,15 @@ export default function StoreHUD({ onOpenSimpleView }: StoreHUDProps) {
           aria-label="Open store map"
         >
           <MapIcon className="h-[18px] w-[18px]" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/55 text-[#f5f0de] backdrop-blur-xl transition hover:border-[#ff7a1a]/50 active:scale-95"
+          aria-label="Refresh shelves to see other movies"
+          title="Refresh shelves"
+        >
+          <RefreshCw className={`h-[18px] w-[18px] ${spinning ? "animate-spin" : ""}`} aria-hidden="true" />
         </button>
         <button
           type="button"

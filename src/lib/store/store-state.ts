@@ -18,6 +18,8 @@ interface StoreSceneState {
   isSearchOpen: boolean;
   webglSupported: boolean | null; // null = not checked yet
   teleportRequest: TeleportRequest | null;
+  /** Bumped by "Refresh Shelves" — shelves read this to fetch a different TMDB page instead of the same titles. */
+  shelfRefreshSeed: number;
 
   setQualityTier: (tier: QualityTier) => void;
   setViewMode: (mode: StoreViewMode) => void;
@@ -31,6 +33,7 @@ interface StoreSceneState {
   setWebglSupported: (supported: boolean) => void;
   requestTeleport: (position: [number, number, number], sectionId: string | null, immediate: boolean) => void;
   clearTeleport: () => void;
+  refreshShelves: () => void;
 }
 
 export const useStoreScene = create<StoreSceneState>((set) => ({
@@ -43,6 +46,7 @@ export const useStoreScene = create<StoreSceneState>((set) => ({
   isSearchOpen: false,
   webglSupported: null,
   teleportRequest: null,
+  shelfRefreshSeed: 0,
 
   setQualityTier: (tier) => set({ qualityTier: tier }),
   setViewMode: (mode) => set({ viewMode: mode }),
@@ -57,6 +61,7 @@ export const useStoreScene = create<StoreSceneState>((set) => ({
   requestTeleport: (position, sectionId, immediate) =>
     set({ teleportRequest: { position, targetSectionId: sectionId, immediate }, isMapOpen: false, isSearchOpen: false }),
   clearTeleport: () => set({ teleportRequest: null }),
+  refreshShelves: () => set((state) => ({ shelfRefreshSeed: state.shelfRefreshSeed + 1 })),
 }));
 
 /** True whenever a DOM overlay is capturing input — movement should pause. */
