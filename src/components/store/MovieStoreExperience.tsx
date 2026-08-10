@@ -9,6 +9,7 @@ import StoreSearch from "./hud/StoreSearch";
 import MoviePreview from "./hud/MoviePreview";
 import SimpleStoreView from "./hud/SimpleStoreView";
 import LoadingOverlay from "./hud/LoadingOverlay";
+import ControlsHint from "./hud/ControlsHint";
 import { SceneErrorBoundary } from "./SceneErrorBoundary";
 import { useWebGLSupport } from "@/hooks/store/useWebGLSupport";
 import { useReducedMotion } from "@/hooks/store/useReducedMotion";
@@ -18,6 +19,7 @@ import { trackStoreEvent } from "@/lib/store/analytics";
 import type { User } from "@/types";
 
 const VIEW_MODE_STORAGE_KEY = "canisterr_store_view_mode";
+const CONTROLS_HINT_STORAGE_KEY = "canisterr_store_seen_controls";
 
 interface MovieStoreExperienceProps {
   user: User | null;
@@ -35,6 +37,7 @@ export default function MovieStoreExperience({ user, initialSectionId, initialMo
 
   const [isTouchPrimary, setIsTouchPrimary] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [showControlsHint, setShowControlsHint] = useState(false);
 
   useEffect(() => {
     setIsTouchPrimary(window.matchMedia("(pointer: coarse)").matches);
@@ -54,6 +57,14 @@ export default function MovieStoreExperience({ user, initialSectionId, initialMo
     }
     if (reducedMotion) mode = "simple";
     setViewMode(mode);
+
+    try {
+      if (window.localStorage.getItem(CONTROLS_HINT_STORAGE_KEY) !== "true" && mode === "3d") {
+        setShowControlsHint(true);
+      }
+    } catch {
+      setShowControlsHint(mode === "3d");
+    }
 
     if (initialSectionId) {
       const anchor = getSectionAnchor(initialSectionId);
@@ -81,6 +92,15 @@ export default function MovieStoreExperience({ user, initialSectionId, initialMo
 
   const effectiveMode = webglSupported ? viewMode : "simple";
 
+  const dismissControlsHint = () => {
+    setShowControlsHint(false);
+    try {
+      window.localStorage.setItem(CONTROLS_HINT_STORAGE_KEY, "true");
+    } catch {
+      // Ignore — persistence is a nicety, not a requirement.
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-[#050403]">
       {effectiveMode === "simple" ? (
@@ -102,13 +122,16 @@ export default function MovieStoreExperience({ user, initialSectionId, initialMo
               <MovieStoreScene userId={user?.id ?? null} isTouchPrimary={isTouchPrimary} />
             </Canvas>
           </Suspense>
-          <StoreHUD onOpenSimpleView={() => setViewMode("simple")} />
+          <StoreHUD onOpenSimpleView={() => setViewMode("simple")} onOpenControlsHint={() => setShowControlsHint(true)} />
         </SceneErrorBoundary>
       )}
 
       <StoreMap userSignedIn={Boolean(user)} />
       <StoreSearch />
       <MoviePreview user={user} />
+      {showControlsHint && effectiveMode === "3d" && (
+        <ControlsHint isTouchPrimary={isTouchPrimary} onDismiss={dismissControlsHint} />
+      )}
     </div>
   );
 }

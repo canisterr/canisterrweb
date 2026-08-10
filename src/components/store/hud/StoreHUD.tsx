@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, LayoutGrid, Map as MapIcon, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, HelpCircle, LayoutGrid, Map as MapIcon, RefreshCw, Search } from "lucide-react";
 import { useStoreScene } from "@/lib/store/store-state";
 import { trackStoreEvent } from "@/lib/store/analytics";
 
 interface StoreHUDProps {
   onOpenSimpleView: () => void;
+  onOpenControlsHint: () => void;
 }
 
-/** Minimal always-visible chrome: exit, search, map, refresh, simple-view toggle. */
-export default function StoreHUD({ onOpenSimpleView }: StoreHUDProps) {
+/** Minimal always-visible chrome: exit, search, map, refresh, controls help, simple-view toggle. */
+export default function StoreHUD({ onOpenSimpleView, onOpenControlsHint }: StoreHUDProps) {
   const openMap = useStoreScene((s) => s.openMap);
   const openSearch = useStoreScene((s) => s.openSearch);
   const refreshShelves = useStoreScene((s) => s.refreshShelves);
@@ -60,6 +61,15 @@ export default function StoreHUD({ onOpenSimpleView }: StoreHUDProps) {
           title="Refresh shelves"
         >
           <RefreshCw className={`h-[18px] w-[18px] ${spinning ? "animate-spin" : ""}`} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenControlsHint}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/55 text-[#f5f0de] backdrop-blur-xl transition hover:border-[#ff7a1a]/50 active:scale-95"
+          aria-label="Show controls"
+          title="Controls"
+        >
+          <HelpCircle className="h-[18px] w-[18px]" aria-hidden="true" />
         </button>
         <button
           type="button"
