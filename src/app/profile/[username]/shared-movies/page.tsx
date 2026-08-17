@@ -204,7 +204,7 @@ export default function SharedMoviesPage() {
         <p className="py-6 text-sm text-[#f5f0de]/45">No shared titles here yet.</p>
       ) : (
         <div className="scrollbar-hide -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-2">
-          {items.map((item) => (
+          {items.filter((item) => Boolean(item.content)).map((item) => (
             <article
               key={item.key}
               className="group shrink-0 snap-start basis-[44%] sm:basis-[30%] md:basis-[24%] lg:basis-[19%] xl:basis-[18%]"

@@ -11,6 +11,10 @@ function buildFrames(text: string): string[] {
   const cleanText = text.trim().replace(/\s+/g, " ");
   if (!cleanText) return ["Loading"];
 
+  if (cleanText.toLowerCase() === "canisterr") {
+    return ["CANISTERR", "CANISTERRR", "CANISTERRRR", "CANISTERRRRR"];
+  }
+
   const words = cleanText.split(" ");
   if (words.length === 1) {
     return Array.from({ length: cleanText.length }, (_, index) => cleanText.slice(0, index + 1));

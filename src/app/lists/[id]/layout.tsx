@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     });
   }
 
-  const heroImage = list.cover_image_url || list.items[0]?.content.poster_url || null;
+  const heroImage = list.cover_image_url || list.items[0]?.content?.poster_url || null;
   const description =
     list.description || `Explore ${list.name} on Canisterr.`;
 

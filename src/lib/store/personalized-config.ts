@@ -3,6 +3,7 @@ import { getUserWatchlist, getUserMovieLogs } from "@/lib/logs";
 import { getFriendLogs } from "@/lib/friend-logs";
 import { getFullTasteProfile } from "@/lib/friends-match";
 import { calculateMatchScore, generateMatchAnalysis } from "@/lib/match-score";
+import { computeTasteSignature } from "@/lib/taste-signature";
 import { getFollowingIds } from "@/lib/store/social";
 import type { Content, MovieLogWithContent } from "@/types";
 import type { PersonalizedSectionConfig, StoreMovieSummary } from "@/types/store";
@@ -44,13 +45,14 @@ async function getTasteMatchShelf(userId: string): Promise<StoreMovieSummary[]> 
   const myTastes = await getFullTasteProfile(userId);
   if (myTastes.length === 0) return [];
 
+  const mySignature = computeTasteSignature(myTastes);
   const candidates = followingIds.slice(0, MAX_TASTE_MATCH_CANDIDATES);
   const scored = await Promise.all(
     candidates.map(async (friendId) => {
       try {
         const friendTastes = await getFullTasteProfile(friendId);
         if (friendTastes.length === 0) return null;
-        const { totalScore } = calculateMatchScore(myTastes, friendTastes);
+        const { totalScore } = calculateMatchScore(mySignature, computeTasteSignature(friendTastes));
         return { friendId, totalScore, friendTastes };
       } catch {
         return null;

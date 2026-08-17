@@ -84,6 +84,13 @@ interface TMDBDetailedMovie {
     iso_3166_1?: string;
     name?: string;
   }>;
+  production_companies?: Array<{
+    id: number;
+    name: string;
+  }>;
+  keywords?: {
+    keywords?: Array<{ id: number; name: string }>;
+  };
   origin_country?: string[];
   original_language?: string | null;
   director?: string;
@@ -117,6 +124,9 @@ interface TMDBDetailedMovie {
       department?: string;
       profile_path?: string | null;
     }>;
+  };
+  images?: {
+    backdrops?: Array<{ file_path: string; vote_average?: number }>;
   };
 }
 
@@ -519,11 +529,17 @@ function normalizeMovieDetails(data: TMDBDetailedMovie) {
       (video) => video.site === "YouTube" && video.type === "Trailer" && video.official
     ) || data.videos?.results?.find((video) => video.site === "YouTube" && video.type === "Trailer");
 
+  const backdropGalleryUrls = (data.images?.backdrops || [])
+    .slice(0, 6)
+    .map((backdrop) => getTmdbImageUrl(backdrop.file_path, "w780"))
+    .filter((url): url is string => Boolean(url));
+
   return {
     id: data.id,
     title: data.title,
     poster_url: getTmdbPosterUrl(data.poster_path, "w500"),
     backdrop_url: getTmdbBackdropUrl(data.backdrop_path, "w780"),
+    backdrop_gallery_urls: backdropGalleryUrls,
     genres: data.genres.map((g) => g.name),
     director,
     actors,
@@ -533,6 +549,10 @@ function normalizeMovieDetails(data: TMDBDetailedMovie) {
       data.production_countries
         ?.map((country) => country.name || "")
         .filter((country) => country.trim().length > 0) || null,
+    keywords:
+      data.keywords?.keywords?.map((keyword) => keyword.name).filter(Boolean) || null,
+    studios:
+      data.production_companies?.map((company) => company.name).filter(Boolean) || null,
     release_date: data.release_date,
     overview: data.overview,
     runtime: data.runtime,
@@ -961,7 +981,7 @@ export async function getMovieDetails(movieId: number) {
   const request = (async () => {
   try {
     const response = await fetchTmdb(`movie/${movieId}`, {
-      append_to_response: "credits,videos",
+      append_to_response: "credits,videos,keywords,images",
     });
 
     if (!response.ok) {

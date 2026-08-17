@@ -1,6 +1,6 @@
 "use client";
 
-import type { MovieLog, MovieReviewWithUser, User } from "@/types";
+import type { MovieLog, User } from "@/types";
 
 export type ContentActivityLog = MovieLog & {
   user: User;
@@ -8,7 +8,6 @@ export type ContentActivityLog = MovieLog & {
 
 export type ContentActivityPayload = {
   logs: ContentActivityLog[];
-  reviews: MovieReviewWithUser[];
   stats: {
     bad: number;
     average: number;

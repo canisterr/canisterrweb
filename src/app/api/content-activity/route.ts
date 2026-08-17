@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { getFirebaseAdminDatabase } from "@/lib/firebase-admin";
-import type { MovieLog, MovieReviewWithUser, User } from "@/types";
+import type { MovieLog, User } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -52,14 +52,6 @@ async function getAdminUsersByIds(userIds: string[]): Promise<Record<string, Use
   return Object.fromEntries(users);
 }
 
-function mapReactionToRating(reaction: 0 | 1 | 1.5 | 2 | null | undefined): 1 | 2 | 3 | 4 | 5 {
-  if (reaction == null) return 3;
-  if (reaction === 2) return 5;
-  if (reaction === 1) return 4;
-  if (reaction === 1.5) return 3;
-  return 2;
-}
-
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -70,7 +62,6 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           logs: [],
-          reviews: [],
           stats: {
             bad: 0,
             average: 0,
@@ -92,7 +83,6 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           logs: [],
-          reviews: [],
           stats: {
             bad: 0,
             average: 0,
@@ -128,21 +118,6 @@ export async function GET(request: Request) {
       user: usersById[log.user_id] || createFallbackUser(log.user_id),
     }));
 
-    const reviews: MovieReviewWithUser[] = contentLogs
-      .filter((log) => typeof log.notes === "string" && log.notes.trim().length > 0)
-      .map((log) => ({
-        id: `log-${log.id}`,
-        user_id: log.user_id,
-        content_id: contentId,
-        content_type: contentType,
-        rating: mapReactionToRating(log.reaction),
-        text: log.notes,
-        likes_count: 0,
-        created_at: log.created_at || new Date().toISOString(),
-        updated_at: log.updated_at || log.created_at || new Date().toISOString(),
-        user: usersById[log.user_id] || createFallbackUser(log.user_id),
-      }));
-
     const bad = contentLogs.filter((log) => log.reaction === 0).length;
     const average = contentLogs.filter((log) => log.reaction === 1.5).length;
     const good = contentLogs.filter((log) => log.reaction === 1).length;
@@ -153,7 +128,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       logs,
-      reviews,
       stats: {
         bad,
         average,
@@ -169,7 +143,6 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         logs: [],
-        reviews: [],
         stats: {
           bad: 0,
           average: 0,

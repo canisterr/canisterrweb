@@ -27,6 +27,7 @@ type CreateCinePostInput = {
   tags?: string[];
   content?: Content | null;
   posterUrl?: string | null;
+  backdropUrls?: string[] | null;
   personId?: number;
   personName?: string;
   personProfileUrl?: string | null;
@@ -400,6 +401,8 @@ export async function createCinePost(input: CreateCinePostInput): Promise<CinePo
     (input.content as any)?.name ||
     input.anchorLabel;
   post.poster_url = input.posterUrl ?? input.listCoverUrl ?? input.personProfileUrl ?? input.content?.poster_url ?? null;
+  post.backdrop_gallery_urls =
+    input.backdropUrls?.map((url) => url.trim()).filter(Boolean).slice(0, 2) || undefined;
 
   if (contentType === "movie" && input.content) {
     const normalizedMovieId = normalizeCinePostContentId(input.content.id);
@@ -504,6 +507,7 @@ export async function getCinePosts(
       return {
         ...post,
         tags: Array.isArray(post.tags) ? post.tags : [],
+        backdrop_gallery_urls: Array.isArray(post.backdrop_gallery_urls) ? post.backdrop_gallery_urls : undefined,
         list_items: listDetailsByPostId.get(post.id)?.items,
         list_cover_images:
           listDetailsByPostId.get(post.id)?.items
@@ -604,6 +608,7 @@ export async function getCinePost(
   return {
     ...post,
     tags: Array.isArray(post.tags) ? post.tags : [],
+    backdrop_gallery_urls: Array.isArray(post.backdrop_gallery_urls) ? post.backdrop_gallery_urls : undefined,
     list_cover_images: listCoverImages.length > 0 ? listCoverImages : undefined,
     list_items: listDetails?.items,
     user: usersById[post.user_id] || fallbackUser(post.user_id),

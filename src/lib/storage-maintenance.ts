@@ -2,7 +2,7 @@ const STORAGE_PROBE_KEY = "__cineparte_storage_probe__";
 
 const CACHE_PREFIXES = ["cp_", "tmdb-search:", "tv-search:", "tv-browse:"];
 const CACHE_EXACT_KEYS = ["cineparte.search.recent", "cine_search_history", "canisterr_seen_push_notifications"];
-const CACHE_FALLBACK_PREFIXES = ["cinepost-feed-seen:", "share-recipient-priority:", "notif_seen_"];
+const CACHE_FALLBACK_PREFIXES = ["share-recipient-priority:", "notif_seen_"];
 const LAST_RESORT_PREFIXES = ["canisterr_current_user:"];
 
 let nativeStorageGetItem: Storage["getItem"] | null = null;

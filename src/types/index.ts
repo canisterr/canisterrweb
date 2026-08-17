@@ -19,6 +19,7 @@ export interface Movie {
   title: string;
   poster_url: string | null;
   backdrop_url?: string | null;
+  backdrop_gallery_urls?: string[] | null;
   genres: string[] | null;
   platforms: string[] | null;
   director: string | null;
@@ -27,6 +28,8 @@ export interface Movie {
   language?: string | null; // For match scoring
   country?: string | null;
   countries?: string[] | null;
+  keywords?: string[] | null; // For match scoring (taste-signature keyword affinity)
+  studios?: string[] | null; // For match scoring (taste-signature studio affinity)
   release_date: string | null;
   overview: string | null;
   runtime: number | null;
@@ -43,11 +46,14 @@ export interface TVShow {
   title: string;
   name?: string;
   poster_url: string | null;
+  backdrop_gallery_urls?: string[] | null;
   genres: string[] | null;
   director?: string | null;
   actors?: string[] | null; // For match scoring
   cast?: string[] | null;
   language?: string | null; // For match scoring
+  keywords?: string[] | null; // For match scoring (taste-signature keyword affinity)
+  studios?: string[] | null; // For match scoring (taste-signature studio affinity)
   status: string | null;
   country?: string | null;
   release_date: string | null;
@@ -187,23 +193,6 @@ export interface MovieReaction {
   goodCount: number; // Reaction = 1
   averageCount: number; // Reaction = 1.5
   masterpieceCount: number; // Reaction = 2
-}
-
-// Review Types
-export interface MovieReview {
-  id: string;
-  user_id: string;
-  content_id: number;
-  content_type: "movie" | "tv";
-  rating: 1 | 2 | 3 | 4 | 5;
-  text: string;
-  likes_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface MovieReviewWithUser extends MovieReview {
-  user: User;
 }
 
 // List Types
@@ -348,6 +337,7 @@ export interface CinePost {
   content_type?: "movie" | "tv" | "list";
   content_title?: string;
   poster_url?: string | null;
+  backdrop_gallery_urls?: string[] | null;
   list_cover_images?: string[];
   person_name?: string;
   person_profile_url?: string | null;

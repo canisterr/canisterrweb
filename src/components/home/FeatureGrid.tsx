@@ -14,9 +14,9 @@ type FeatureCard = {
 const features: FeatureCard[] = [
   {
     title: "Home Page",
-    eyebrow: "Cineposts + Friend Activity",
+    eyebrow: "Friend Activity, At A Glance",
     description:
-      "Your home feed keeps cineposts, fresh logs, and friend activity in one place so the app always feels alive the second you open it.",
+      "Your home feed keeps fresh logs, shares, and friend activity in one place so the app always feels alive the second you open it.",
     image: "/home_cinepost.png",
   },
   {

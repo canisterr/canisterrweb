@@ -138,6 +138,7 @@ function SharePageContent() {
   const typeParam = searchParams.get("type");
   const shareIdParam = searchParams.get("share_id");
   const panelParam = searchParams.get("panel");
+  const noteParam = searchParams.get("note");
 
   const [sharedSearchQuery, setSharedSearchQuery] = useState("");
   const [user, setUser] = useState<User | null>(null);
@@ -166,6 +167,11 @@ function SharePageContent() {
     () => (user ? readRecipientPriority(user.id) : {}),
     [user]
   );
+
+  useEffect(() => {
+    if (!noteParam) return;
+    setShareNote((current) => current || noteParam);
+  }, [noteParam]);
 
   useEffect(() => {
     let unsubscribeFollowers = () => {};

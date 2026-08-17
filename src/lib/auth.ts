@@ -132,6 +132,52 @@ export async function signOut() {
   await firebaseSignOut(auth);
 }
 
+type FirebaseUserLike = {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  getIdToken: () => Promise<string>;
+};
+
+export async function ensureCurrentUserProfile(firebaseUser: FirebaseUserLike): Promise<DBUser> {
+  const idToken = await firebaseUser.getIdToken();
+  const response = await fetch("/api/auth/ensure-profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      idToken,
+      name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || undefined,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error || "Profile repair failed");
+  }
+
+  const payload = (await response.json()) as {
+    user?: {
+      id?: string;
+      username?: string;
+      name?: string;
+      avatar_url?: string | null;
+      created_at?: string;
+    };
+  };
+
+  const user = payload.user;
+  return normalizeUserRecord(firebaseUser.uid, {
+    id: user?.id || firebaseUser.uid,
+    username: user?.username,
+    name: user?.name,
+    avatar_url: user?.avatar_url || firebaseUser.photoURL || null,
+    created_at: user?.created_at || new Date().toISOString(),
+  }) as DBUser;
+}
+
 export async function getCurrentUser(): Promise<DBUser | null> {
   return new Promise((resolve) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -149,6 +195,26 @@ export async function getCurrentUser(): Promise<DBUser | null> {
 
         if (snapshot.exists()) {
           const userData = snapshot.val();
+          const hasStoredUsername =
+            typeof userData?.username === "string"
+            && !getUsernameValidationError(userData.username);
+
+          if (!hasStoredUsername) {
+            try {
+              const repairedUser = await ensureCurrentUserProfile({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL,
+                getIdToken: () => firebaseUser.getIdToken(),
+              });
+              resolve(repairedUser);
+              return;
+            } catch (repairError) {
+              console.warn("Profile repair failed, using stored data:", repairError);
+            }
+          }
+
           resolve(
             normalizeUserRecord(firebaseUser.uid, {
               id: userData.id || firebaseUser.uid,
@@ -161,7 +227,20 @@ export async function getCurrentUser(): Promise<DBUser | null> {
           return;
         }
 
-        // Fallback: create user object from auth data if profile doesn't exist
+        try {
+          const repairedUser = await ensureCurrentUserProfile({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            getIdToken: () => firebaseUser.getIdToken(),
+          });
+          resolve(repairedUser);
+          return;
+        } catch (repairError) {
+          console.warn("Profile repair failed, using auth fallback:", repairError);
+        }
+
         resolve(
           normalizeUserRecord(firebaseUser.uid, {
             id: firebaseUser.uid,
@@ -173,7 +252,20 @@ export async function getCurrentUser(): Promise<DBUser | null> {
         );
       } catch (err) {
         console.warn("Database query failed, using auth data:", err);
-        // Fallback to auth data if query fails
+        try {
+          const repairedUser = await ensureCurrentUserProfile({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            getIdToken: () => firebaseUser.getIdToken(),
+          });
+          resolve(repairedUser);
+          return;
+        } catch (repairError) {
+          console.warn("Profile repair failed after DB read issue, using auth fallback:", repairError);
+        }
+
         resolve(
           normalizeUserRecord(firebaseUser.uid, {
             id: firebaseUser.uid,

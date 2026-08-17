@@ -1,216 +1,48 @@
-import { UserTasteWithContent } from "@/types";
 import { getUserMovieLogs } from "@/lib/logs";
+import type { MovieLogWithContent } from "@/types";
+import {
+  computeTasteSignature,
+  type MatchTaste,
+  type TasteSignature,
+} from "@/lib/taste-signature";
+import { getMatchScoreHistory, recordMatchScorePoint, type MatchScorePoint } from "@/lib/match-history";
 
-type MatchTaste = UserTasteWithContent & {
-  notes?: string | null;
-  source?: "taste" | "log";
-};
+export type { MatchTaste };
 
-function getContentGenres(taste: MatchTaste): string[] {
-  if (!taste.content || !Array.isArray((taste.content as any).genres)) return [];
-  return Array.from(
-    new Set(
-      (taste.content as any).genres
-        .map((genre: string) => String(genre).trim().toLowerCase())
-        .filter(Boolean)
-    )
-  );
-}
-
-function getReactionWeight(reaction?: 0 | 1 | 1.5 | 2): number {
-  if (reaction === 2) return 1.7;
-  if (reaction === 1) return 0.85;
-  if (reaction === 1.5) return 0.3;
-  if (reaction === 0) return -1.15;
-  return 0.55;
-}
-
-function getSourceWeight(taste: MatchTaste): number {
-  return taste.source === "log" ? 1.15 : 0.95;
-}
-
-function getRecencyWeight(addedAt?: string): number {
-  if (!addedAt) return 1;
-  const timestamp = new Date(addedAt).getTime();
-  if (Number.isNaN(timestamp)) return 1;
-  const ageDays = Math.max(0, (Date.now() - timestamp) / 86400000);
-  return 1 / (1 + ageDays / 90);
-}
-
-function getReviewSentiment(notes?: string | null): number {
-  if (!notes) return 0;
-
-  const positiveTerms = [
-    "love",
-    "loved",
-    "amazing",
-    "awesome",
-    "beautiful",
-    "brilliant",
-    "excellent",
-    "favorite",
-    "favourite",
-    "great",
-    "good",
-    "incredible",
-    "masterpiece",
-    "perfect",
-    "wonderful",
-    "fantastic",
-    "solid",
-    "nice",
-    "enjoyed",
-  ];
-
-  const negativeTerms = [
-    "bad",
-    "boring",
-    "awful",
-    "terrible",
-    "hate",
-    "hated",
-    "weak",
-    "messy",
-    "slow",
-    "dull",
-    "mid",
-    "mess",
-    "poor",
-    "worse",
-    "worst",
-    "disappointing",
-    "forgettable",
-  ];
-
-  const text = notes.toLowerCase();
-  let score = 0;
-  positiveTerms.forEach((term) => {
-    if (text.includes(term)) score += 1;
-  });
-  negativeTerms.forEach((term) => {
-    if (text.includes(term)) score -= 1;
-  });
-
-  return Math.max(-1, Math.min(1, score / 4));
-}
-
-function getTastePolarity(taste: MatchTaste): number {
-  const reaction = getReactionWeight(taste.reaction);
-  const sentiment = getReviewSentiment(taste.notes);
-  return reaction + sentiment * 0.85;
-}
-
-function getTasteInfluence(taste: MatchTaste): number {
-  const polarity = getTastePolarity(taste);
-  const recency = getRecencyWeight(taste.added_at);
-  const source = getSourceWeight(taste);
-  return polarity * recency * source;
-}
-
-function buildWeightedGenreAffinities(tastes: MatchTaste[]): Map<string, number> {
-  const genreWeights = new Map<string, number>();
-
-  tastes.forEach((taste) => {
-    const genres = getContentGenres(taste);
-    if (genres.length === 0) return;
-
-    const itemWeight = getTasteInfluence(taste);
-    const spread = genres.length > 0 ? itemWeight / Math.sqrt(genres.length) : itemWeight;
-
-    genres.forEach((genre) => {
-      genreWeights.set(genre, (genreWeights.get(genre) || 0) + spread);
-    });
-  });
-
-  const affinities = new Map<string, number>();
-  genreWeights.forEach((value, genre) => {
-    const stabilized = value / 2.4;
-    const affinity = 1 / (1 + Math.exp(-stabilized));
-    affinities.set(genre, affinity);
-  });
-
-  return affinities;
-}
-
-function averageRecentTasteMood(tastes: MatchTaste[], limit = 5): number | null {
-  const recent = [...tastes]
-    .filter((taste) => taste.added_at || taste.reaction !== undefined || taste.notes)
-    .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime())
-    .slice(0, limit);
-
-  if (recent.length === 0) return null;
-
-  let total = 0;
-  let totalWeight = 0;
-
-  recent.forEach((taste, index) => {
-    const polarity = getTastePolarity(taste);
-    const recency = getRecencyWeight(taste.added_at);
-    const decay = Math.max(0.5, 1 - index * 0.08);
-    const weight = Math.max(0.2, recency * decay);
-    total += polarity * weight;
-    totalWeight += weight;
-  });
-
-  return totalWeight > 0 ? total / totalWeight : null;
-}
-
-function averageTastePolarity(tastes: MatchTaste[]): number {
-  if (tastes.length === 0) return 0;
-
-  let total = 0;
-  let totalWeight = 0;
-
-  tastes.forEach((taste) => {
-    const weight = Math.max(0.25, getRecencyWeight(taste.added_at) * getSourceWeight(taste));
-    total += getTastePolarity(taste) * weight;
-    totalWeight += weight;
-  });
-
-  return totalWeight > 0 ? total / totalWeight : 0;
-}
-
-function calculateProfileConfidence(userATastes: MatchTaste[], userBTastes: MatchTaste[]): number {
-  const minCount = Math.min(userATastes.length, userBTastes.length);
+function calculateProfileConfidence(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const minCount = Math.min(signatureA.tasteCount, signatureB.tasteCount);
   return 0.9 + 0.1 * (1 - Math.exp(-minCount / 12));
 }
 
-function calculateExactOverlap(userATastes: MatchTaste[], userBTastes: MatchTaste[]): number {
-  if (userATastes.length === 0 || userBTastes.length === 0) return 0;
+function calculateExactOverlap(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  if (signatureA.contentIds.length === 0 || signatureB.contentIds.length === 0) return 0;
 
-  const idsA = new Set(userATastes.map((taste) => `${taste.content_type}-${taste.content_id}`));
+  const idsA = new Set(signatureA.contentIds);
   let shared = 0;
-
-  userBTastes.forEach((taste) => {
-    if (idsA.has(`${taste.content_type}-${taste.content_id}`)) {
-      shared += 1;
-    }
+  signatureB.contentIds.forEach((id) => {
+    if (idsA.has(id)) shared += 1;
   });
 
-  const denominator = Math.max(1, Math.min(userATastes.length, userBTastes.length));
+  const denominator = Math.max(1, Math.min(signatureA.contentIds.length, signatureB.contentIds.length));
   return Math.min(1, shared / denominator);
 }
 
 /**
  * Calculate GenreSim (0-1)
- * Weighted genre affinity similarity. Genres are influenced by
- * explicit taste, log reaction, review sentiment, and recency.
+ * Weighted genre affinity similarity between two precomputed signatures.
  */
-export function calculateGenreSim(
-  userATastes: MatchTaste[],
-  userBTastes: MatchTaste[]
-): number {
-  const profileA = buildWeightedGenreAffinities(userATastes);
-  const profileB = buildWeightedGenreAffinities(userBTastes);
+export function calculateGenreSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const profileA = signatureA.genreAffinities;
+  const profileB = signatureB.genreAffinities;
 
-  const allGenres = new Set([...profileA.keys(), ...profileB.keys()]);
+  const allGenres = new Set([...Object.keys(profileA), ...Object.keys(profileB)]);
   if (allGenres.size === 0) return 0;
 
   let similarity = 0;
   let totalWeight = 0;
   allGenres.forEach((genre) => {
-    const affinityA = profileA.get(genre) ?? 0.5;
-    const affinityB = profileB.get(genre) ?? 0.5;
+    const affinityA = profileA[genre] ?? 0.5;
+    const affinityB = profileB[genre] ?? 0.5;
     const diff = Math.min(1, Math.abs(affinityA - affinityB));
     const strength = Math.max(Math.abs(affinityA - 0.5), Math.abs(affinityB - 0.5));
     const weight = 0.35 + strength;
@@ -223,42 +55,37 @@ export function calculateGenreSim(
 
 /**
  * Calculate RatingSim (0-1)
- * Based on how similar the users' review/reaction polarity is.
+ * Blends two things: how similar the users' average reaction polarity is
+ * (do you like the same movies), and how similar their rating *style* is —
+ * polarityVariance distinguishes a "picky" rater (reserves strong reactions
+ * for a few titles) from a "generous" one (rates everything strongly) even
+ * when their average polarity happens to land in the same place.
  */
-export function calculateRatingSim(
-  userATastes: MatchTaste[],
-  userBTastes: MatchTaste[]
-): number {
-  if (userATastes.length === 0 || userBTastes.length === 0) return 0;
+export function calculateRatingSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  if (signatureA.tasteCount === 0 || signatureB.tasteCount === 0) return 0;
 
-  const avgA = averageTastePolarity(userATastes);
-  const avgB = averageTastePolarity(userBTastes);
+  const normalizedDiff = Math.min(3, Math.abs(signatureA.avgPolarity - signatureB.avgPolarity));
+  const polarityMatch = Math.max(0, 1 - normalizedDiff / 3);
 
-  // Same reaction style = closer to 1, very different reaction style = closer to 0.
-  const normalizedDiff = Math.min(3, Math.abs(avgA - avgB));
-  return Math.max(0, 1 - normalizedDiff / 3);
+  const varianceDiff = Math.min(4, Math.abs(signatureA.polarityVariance - signatureB.polarityVariance));
+  const styleMatch = Math.max(0, 1 - varianceDiff / 4);
+
+  return polarityMatch * 0.75 + styleMatch * 0.25;
 }
 
 /**
  * Calculate VibeSim (0-1)
- * Based on mood tags and genre diversity
- * Estimates compatibility from genre distribution
+ * Based on recent taste mood, falling back to genre diversity overlap.
  */
-export function calculateVibeSim(
-  userATastes: MatchTaste[],
-  userBTastes: MatchTaste[]
-): number {
-  const vibeA = averageRecentTasteMood(userATastes);
-  const vibeB = averageRecentTasteMood(userBTastes);
+export function calculateVibeSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const vibeA = signatureA.recentMoodPolarity;
+  const vibeB = signatureB.recentMoodPolarity;
 
   if (vibeA === null || vibeB === null) {
-    const genresA = new Set(buildWeightedGenreAffinities(userATastes).keys());
-    const genresB = new Set(buildWeightedGenreAffinities(userBTastes).keys());
+    if (signatureA.genreDiversityCount === 0 || signatureB.genreDiversityCount === 0) return 0;
 
-    if (genresA.size === 0 || genresB.size === 0) return 0;
-
-    const diversityA = Math.min(genresA.size, 10) / 10;
-    const diversityB = Math.min(genresB.size, 10) / 10;
+    const diversityA = signatureA.genreDiversityCount / 10;
+    const diversityB = signatureB.genreDiversityCount / 10;
     return ((diversityA + diversityB) / 2) * 0.7 + 0.3;
   }
 
@@ -267,180 +94,143 @@ export function calculateVibeSim(
 }
 
 /**
- * Extract creators (actors + directors) from taste
- */
-function getUserCreators(tastes: UserTasteWithContent[]): Set<string> {
-  const creators = new Set<string>();
-
-  tastes.forEach((taste) => {
-    if (taste.content && typeof taste.content === "object") {
-      const content = taste.content as any;
-
-      // Add director
-      if (content.director) {
-        creators.add(`dir:${content.director.toLowerCase()}`);
-      }
-
-      // Add actors (when available)
-      if (Array.isArray(content.actors)) {
-        content.actors.forEach((actor: string) => {
-          creators.add(`act:${actor.toLowerCase()}`);
-        });
-      }
-    }
-  });
-
-  return creators;
-}
-
-/**
  * Calculate CreatorSim (0-1)
- * Jaccard similarity of actors + directors
- * Boosted because shared creators are very meaningful
+ * Jaccard similarity of actors + directors. Boosted because shared creators
+ * are very meaningful.
  */
-export function calculateCreatorSim(
-  userATastes: MatchTaste[],
-  userBTastes: MatchTaste[]
-): number {
-  const creatorsA = getUserCreators(userATastes);
-  const creatorsB = getUserCreators(userBTastes);
+export function calculateCreatorSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const creatorsA = new Set(signatureA.creators);
+  const creatorsB = new Set(signatureB.creators);
 
   if (creatorsA.size === 0 || creatorsB.size === 0) return 0;
 
-  // Intersection
   const intersection = Array.from(creatorsA).filter((c) => creatorsB.has(c));
-
-  // Union
   const union = new Set([...creatorsA, ...creatorsB]);
-
-  // Jaccard similarity = intersection / union
   const jaccard = intersection.length / union.size;
-  
-  // Boost significantly - shared creators are very meaningful
+
   return Math.min(1, jaccard * 2.5);
 }
 
 /**
- * Extract average year from taste
- */
-function getAverageYear(tastes: UserTasteWithContent[]): number {
-  if (tastes.length === 0) return 2020;
-
-  let totalYear = 0;
-  let count = 0;
-
-  tastes.forEach((taste) => {
-    if (taste.content && typeof taste.content === "object") {
-      const content = taste.content as any;
-      if (content.release_date) {
-        const year = new Date(content.release_date).getFullYear();
-        if (!isNaN(year)) {
-          totalYear += year;
-          count++;
-        }
-      }
-    }
-  });
-
-  return count > 0 ? totalYear / count : 2020;
-}
-
-/**
  * Calculate EraSim (0-1)
- * Based on average release year difference
- * More lenient - people within ~20 years are similar
+ * Based on average release year difference. Within 20 years = 100% match,
+ * at 40 years = 50% match.
  */
-export function calculateEraSim(
-  userATastes: MatchTaste[],
-  userBTastes: MatchTaste[]
-): number {
-  const avgYearA = getAverageYear(userATastes);
-  const avgYearB = getAverageYear(userBTastes);
-
-  const yearDiff = Math.abs(avgYearA - avgYearB);
-  // Within 20 years = 100% match, at 40 years = 50% match
+export function calculateEraSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const yearDiff = Math.abs(signatureA.avgYear - signatureB.avgYear);
   return Math.max(0, 1 - yearDiff / 40);
 }
 
 /**
- * Extract languages from taste
- */
-function getUserLanguages(tastes: UserTasteWithContent[]): Set<string> {
-  const languages = new Set<string>();
-
-  tastes.forEach((taste) => {
-    if (taste.content && typeof taste.content === "object") {
-      const content = taste.content as any;
-      if (content.language) {
-        languages.add(content.language.toLowerCase());
-      }
-    }
-  });
-
-  return languages;
-}
-
-/**
  * Calculate LanguageSim (0-1)
- * Jaccard similarity of languages
- * Boosted because shared language preference is meaningful
+ * Jaccard similarity of languages, boosted because a shared language
+ * preference is meaningful.
  */
-export function calculateLanguageSim(
-  userATastes: MatchTaste[],
-  userBTastes: MatchTaste[]
-): number {
-  const languagesA = getUserLanguages(userATastes);
-  const languagesB = getUserLanguages(userBTastes);
+export function calculateLanguageSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const languagesA = new Set(signatureA.languages);
+  const languagesB = new Set(signatureB.languages);
 
   if (languagesA.size === 0 || languagesB.size === 0) return 0;
 
-  // Intersection
   const intersection = Array.from(languagesA).filter((l) => languagesB.has(l));
-
-  // Union
   const union = new Set([...languagesA, ...languagesB]);
-
-  // Jaccard similarity
   const jaccard = intersection.length / union.size;
-  
-  // Boost significantly
+
   return Math.min(1, jaccard * 2.0);
 }
 
 /**
- * Calculate overall match score (0-100)
- * Formula:
- * Score = 100 × (
- *   0.35 × GenreSim +
- *   0.20 × RatingSim +
- *   0.15 × VibeSim +
- *   0.15 × CreatorSim +
- *   0.10 × EraSim +
- *   0.05 × LanguageSim
- * )
+ * Keys where a user's affinity is meaningfully positive (not just "present
+ * because it defaulted to neutral"). Keywords and studios are large, sparse
+ * vocabularies compared to the ~19-value genre taxonomy, so comparing them
+ * as a Jaccard overlap of genuinely-liked tags (like creators/languages)
+ * makes more sense than the affinity-diff shape used for GenreSim.
  */
-export interface MatchScoreBreakdown {
-  genreSim: number;
-  ratingSim: number;
-  vibeSim: number;
-  creatorSim: number;
-  eraSim: number;
-  languageSim: number;
-  totalScore: number;
+function strongAffinityKeys(affinities: Record<string, number>, threshold = 0.55): Set<string> {
+  return new Set(Object.keys(affinities).filter((key) => affinities[key] >= threshold));
 }
 
 /**
- * Comprehensive match analysis with detailed breakdown
+ * Calculate KeywordSim (0-1)
+ * Jaccard similarity of theme/plot keywords both users gravitate toward —
+ * catches "vibe" matches genre alone misses (e.g. both love slow-burn heist
+ * films, even across different genres).
  */
+export function calculateKeywordSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const keysA = strongAffinityKeys(signatureA.keywordAffinities);
+  const keysB = strongAffinityKeys(signatureB.keywordAffinities);
+
+  if (keysA.size === 0 || keysB.size === 0) return 0;
+
+  const intersection = Array.from(keysA).filter((k) => keysB.has(k));
+  const union = new Set([...keysA, ...keysB]);
+  const jaccard = intersection.length / union.size;
+
+  return Math.min(1, jaccard * 2.2);
+}
+
+/**
+ * Calculate StudioSim (0-1)
+ * Jaccard similarity of production studios both users gravitate toward
+ * (A24, Ghibli, Marvel, ...) — often a stronger identity signal than genre.
+ */
+export function calculateStudioSim(signatureA: TasteSignature, signatureB: TasteSignature): number {
+  const studiosA = strongAffinityKeys(signatureA.studioAffinities);
+  const studiosB = strongAffinityKeys(signatureB.studioAffinities);
+
+  if (studiosA.size === 0 || studiosB.size === 0) return 0;
+
+  const intersection = Array.from(studiosA).filter((s) => studiosB.has(s));
+  const union = new Set([...studiosA, ...studiosB]);
+  const jaccard = intersection.length / union.size;
+
+  return Math.min(1, jaccard * 2.2);
+}
+
+export type MatchConfidence = "low" | "medium" | "high";
+
+/**
+ * Qualitative confidence label surfaced directly to the UI so a 62% built
+ * from 8 movies doesn't read the same as a 62% built from 80 — previously
+ * profile size only nudged the score itself (calculateProfileConfidence)
+ * with no visible signal of how much to trust it.
+ */
+function getConfidenceLabel(signatureA: TasteSignature, signatureB: TasteSignature): MatchConfidence {
+  const minCount = Math.min(signatureA.tasteCount, signatureB.tasteCount);
+  if (minCount < 10) return "low";
+  if (minCount < 30) return "medium";
+  return "high";
+}
+
+/**
+ * Calculate overall match score (0-100) from two precomputed taste
+ * signatures. Pure math — no fetching, no enrichment — so it's cheap enough
+ * to run for every friend in a leaderboard, not just one pair at a time.
+ *
+ * Weights: GenreSim 32% + KeywordSim 16% + CreatorSim 16% + RatingSim 14% +
+ * VibeSim 8% + StudioSim 6% + EraSim 6% + LanguageSim 2%, scaled by profile
+ * confidence, plus a direct exact-overlap boost for movies both users
+ * actually share.
+ */
+export interface MatchScoreBreakdown {
+  genreSim: number;
+  keywordSim: number;
+  ratingSim: number;
+  vibeSim: number;
+  creatorSim: number;
+  studioSim: number;
+  eraSim: number;
+  languageSim: number;
+  totalScore: number;
+  confidence: MatchConfidence;
+}
+
 export interface MatchAnalysis extends MatchScoreBreakdown {
-  // Personality & Overview
   blendPersonality: string;
 
-  // Taste Similarity
   sharedGenres: string[];
   genreMismatch: string | null;
 
-  // Shared Watching - Two types of common movies
   commonTasteMovies: Array<{
     id: number;
     title: string;
@@ -448,7 +238,7 @@ export interface MatchAnalysis extends MatchScoreBreakdown {
     type: "movie" | "tv";
   }>;
   commonTasteMovieCount: number;
-  
+
   commonMasterpieceMovies: Array<{
     id: number;
     title: string;
@@ -457,80 +247,97 @@ export interface MatchAnalysis extends MatchScoreBreakdown {
   }>;
   commonMasterpieceMovieCount: number;
 
-  // Creators
   commonActors: string[];
   commonDirectors: string[];
   topSharedCreator: string | null;
 
-  // Taste DNA
   genreDistributionA: { genre: string; count: number }[];
   genreDistributionB: { genre: string; count: number }[];
   dominantGenreA: string | null;
   dominantGenreB: string | null;
 
-  // Preferences
   avgYearA: number;
   avgYearB: number;
   languagesA: string[];
   languagesB: string[];
   sharedLanguages: string[];
 
-  // Fun Stats
+  contrarianMovies: ContrarianMovie[];
+  contrarianBadge: boolean;
+
+  watchTimeMinutesA: number;
+  watchTimeMinutesB: number;
+  totalLoggedA: number;
+  totalLoggedB: number;
+
+  recommendationsForA: CrossRecommendation[];
+  recommendationsForB: CrossRecommendation[];
+
+  scoreHistory: MatchScorePoint[];
+
   tasteInsight: string;
 }
 
 export function calculateMatchScore(
-  userATastes: MatchTaste[],
-  userBTastes: MatchTaste[]
+  signatureA: TasteSignature,
+  signatureB: TasteSignature
 ): MatchScoreBreakdown {
-  if (userATastes.length === 0 || userBTastes.length === 0) {
+  if (signatureA.tasteCount === 0 || signatureB.tasteCount === 0) {
     return {
       genreSim: 0,
+      keywordSim: 0,
       ratingSim: 0,
       vibeSim: 0,
       creatorSim: 0,
+      studioSim: 0,
       eraSim: 0,
       languageSim: 0,
       totalScore: 0,
+      confidence: "low",
     };
   }
 
-  const genreSim = calculateGenreSim(userATastes, userBTastes);
-  const ratingSim = calculateRatingSim(userATastes, userBTastes);
-  const vibeSim = calculateVibeSim(userATastes, userBTastes);
-  const creatorSim = calculateCreatorSim(userATastes, userBTastes);
-  const eraSim = calculateEraSim(userATastes, userBTastes);
-  const languageSim = calculateLanguageSim(userATastes, userBTastes);
+  const genreSim = calculateGenreSim(signatureA, signatureB);
+  const keywordSim = calculateKeywordSim(signatureA, signatureB);
+  const ratingSim = calculateRatingSim(signatureA, signatureB);
+  const vibeSim = calculateVibeSim(signatureA, signatureB);
+  const creatorSim = calculateCreatorSim(signatureA, signatureB);
+  const studioSim = calculateStudioSim(signatureA, signatureB);
+  const eraSim = calculateEraSim(signatureA, signatureB);
+  const languageSim = calculateLanguageSim(signatureA, signatureB);
 
-  const exactOverlap = calculateExactOverlap(userATastes, userBTastes);
-  const confidence = calculateProfileConfidence(userATastes, userBTastes);
+  const exactOverlap = calculateExactOverlap(signatureA, signatureB);
+  const confidenceMultiplier = calculateProfileConfidence(signatureA, signatureB);
   const weightedScore =
-    0.42 * genreSim +
-    0.18 * creatorSim +
+    0.32 * genreSim +
+    0.16 * keywordSim +
+    0.16 * creatorSim +
     0.14 * ratingSim +
-    0.10 * vibeSim +
-    0.10 * eraSim +
-    0.06 * languageSim;
+    0.08 * vibeSim +
+    0.06 * studioSim +
+    0.06 * eraSim +
+    0.02 * languageSim;
   const overlapBoost = exactOverlap * 0.28;
-  const totalScore = 100 * Math.min(1, weightedScore * confidence + overlapBoost);
+  const totalScore = 100 * Math.min(1, weightedScore * confidenceMultiplier + overlapBoost);
 
   return {
     genreSim: Math.round(genreSim * 100),
+    keywordSim: Math.round(keywordSim * 100),
     ratingSim: Math.round(ratingSim * 100),
     vibeSim: Math.round(vibeSim * 100),
     creatorSim: Math.round(creatorSim * 100),
+    studioSim: Math.round(studioSim * 100),
     eraSim: Math.round(eraSim * 100),
     languageSim: Math.round(languageSim * 100),
     totalScore: Math.round(totalScore),
+    confidence: getConfidenceLabel(signatureA, signatureB),
   };
 }
 
 /**
- * Get genre distribution from tastes
+ * Get genre distribution from tastes (for display, not scoring)
  */
-function getGenreDistribution(
-  tastes: MatchTaste[]
-): { genre: string; count: number }[] {
+function getGenreDistribution(tastes: MatchTaste[]): { genre: string; count: number }[] {
   const genreCounts = new Map<string, number>();
 
   tastes.forEach((taste) => {
@@ -551,7 +358,10 @@ function getGenreDistribution(
 /**
  * Generate personality tag based on dominant genres
  */
-function generateBlendPersonality(distributionA: { genre: string; count: number }[], distributionB: { genre: string; count: number }[]): string {
+function generateBlendPersonality(
+  distributionA: { genre: string; count: number }[],
+  distributionB: { genre: string; count: number }[]
+): string {
   if (distributionA.length === 0 || distributionB.length === 0) return "Movie Enthusiasts";
 
   const topA = distributionA[0]?.genre || "";
@@ -565,54 +375,63 @@ function generateBlendPersonality(distributionA: { genre: string; count: number 
 }
 
 /**
- * Get common masterpiece movies between two users (from their logs)
- * Filters to only show movies both users have rated as masterpiece (reaction === 2)
+ * Get common masterpiece movies between two users from their already-fetched
+ * logs. Filters to only show movies both users have rated as masterpiece
+ * (reaction === 2). Takes logs rather than userIds so generateMatchAnalysis
+ * can fetch each user's logs once and reuse them for this and the watch-time
+ * summary below, instead of fetching twice.
  */
-export async function getCommonMasterpieceMovies(
-  userAId: string,
-  userBId: string
-): Promise<
-  Array<{
-    id: number;
-    title: string;
-    poster_url: string | null;
-    type: "movie" | "tv";
-  }>
-> {
-  try {
-    // Fetch logs for both users
-    const logsA = await getUserMovieLogs(userAId, 500);
-    const logsB = await getUserMovieLogs(userBId, 500);
+function getCommonMasterpieceMovies(
+  logsA: MovieLogWithContent[],
+  logsB: MovieLogWithContent[]
+): Array<{
+  id: number;
+  title: string;
+  poster_url: string | null;
+  type: "movie" | "tv";
+}> {
+  const masterpieceA = logsA.filter((log) => log.reaction === 2);
+  const masterpieceB = logsB.filter((log) => log.reaction === 2);
 
-    // Filter to only masterpiece ratings
-    const masterpieceA = logsA.filter((log) => log.reaction === 2);
-    const masterpieceB = logsB.filter((log) => log.reaction === 2);
+  const idsA = new Set(masterpieceA.map((log) => `${log.content_type}-${log.content_id}`));
+  const commonIds = new Set(
+    masterpieceB
+      .filter((log) => idsA.has(`${log.content_type}-${log.content_id}`))
+      .map((log) => `${log.content_type}-${log.content_id}`)
+  );
 
-    // Find common content_ids
-    const idsA = new Set(masterpieceA.map((log) => `${log.content_type}-${log.content_id}`));
-    const commonIds = new Set(
-      masterpieceB
-        .filter((log) => idsA.has(`${log.content_type}-${log.content_id}`))
-        .map((log) => `${log.content_type}-${log.content_id}`)
-    );
+  return masterpieceA
+    .filter((log) => commonIds.has(`${log.content_type}-${log.content_id}`))
+    .map((log) => ({
+      id: log.content_id,
+      title: (log.content as any)?.title || (log.content as any)?.name || "Unknown",
+      poster_url: (log.content as any)?.poster_url || null,
+      type: (log.content_type as "movie" | "tv") || "movie",
+    }))
+    .filter((movie, index, self) => index === self.findIndex((m) => m.id === movie.id && m.type === movie.type));
+}
 
-    // Get full content for common masterpiece movies
-    const commonMovies = masterpieceA
-      .filter((log) => commonIds.has(`${log.content_type}-${log.content_id}`))
-      .map((log) => ({
-        id: log.content_id,
-        title: (log.content as any)?.title || (log.content as any)?.name || "Unknown",
-        poster_url: (log.content as any)?.poster_url || null,
-        type: (log.content_type as "movie" | "tv") || "movie",
-      }))
-      // Remove duplicates
-      .filter((movie, index, self) => index === self.findIndex((m) => m.id === movie.id && m.type === movie.type));
+/**
+ * Total logs and estimated watch time, mirroring the same formula the
+ * profile Stats page uses (estimatedWatchTimeMinutes in getDetailedUserStats,
+ * profile.ts) — sum of content runtime across watched, non-watchlist logs —
+ * but computed from logs already fetched here instead of a second full pass.
+ */
+function summarizeWatchTime(logs: MovieLogWithContent[]): {
+  totalLogged: number;
+  estimatedWatchTimeMinutes: number;
+} {
+  let estimatedWatchTimeMinutes = 0;
 
-    return commonMovies;
-  } catch (error) {
-    console.error("Error fetching common masterpiece movies:", error);
-    return [];
-  }
+  logs.forEach((log) => {
+    if (log.watch_later || !log.watched_date) return;
+    const runtime = Number((log.content as any)?.runtime);
+    if (Number.isFinite(runtime) && runtime > 0) {
+      estimatedWatchTimeMinutes += runtime;
+    }
+  });
+
+  return { totalLogged: logs.length, estimatedWatchTimeMinutes };
 }
 
 /**
@@ -630,13 +449,10 @@ export function getCommonTasteMovies(
 }> {
   const idsA = new Set(userATastes.map((t) => t.content_id));
   const commonIds = new Set(
-    userBTastes
-      .filter((t) => idsA.has(t.content_id))
-      .map((t) => t.content_id)
+    userBTastes.filter((t) => idsA.has(t.content_id)).map((t) => t.content_id)
   );
 
-  // Get full content for common movies
-  const commonMovies = userATastes
+  return userATastes
     .filter((t) => commonIds.has(t.content_id))
     .map((taste) => ({
       id: taste.content_id,
@@ -644,44 +460,151 @@ export function getCommonTasteMovies(
       poster_url: (taste.content as any)?.poster_url || null,
       type: (taste.content_type as "movie" | "tv") || "movie",
     }));
-
-  return commonMovies;
 }
 
 /**
- * Get common movies with full details
+ * "Contrarian Buddies": movies both users rated highly (good/average/
+ * masterpiece) that TMDB's crowd rated poorly (< 5). Reads straight off the
+ * already-fetched taste content instead of a fresh TMDB call per shared
+ * movie, unlike the original version of this feature.
  */
-function getCommonMoviesWithDetails(
+export interface ContrarianMovie {
+  id: number;
+  title: string;
+  poster_url: string | null;
+  tmdbRating: number;
+  type: "movie" | "tv";
+}
+
+function getContrarianMovies(
   userATastes: MatchTaste[],
   userBTastes: MatchTaste[]
-): Array<{
+): ContrarianMovie[] {
+  const highReactions = new Set([2, 1, 1.5]);
+  const highA = userATastes.filter((t) => highReactions.has(t.reaction as number));
+  const highIdsB = new Set(
+    userBTastes
+      .filter((t) => highReactions.has(t.reaction as number))
+      .map((t) => `${t.content_type}-${t.content_id}`)
+  );
+
+  const contrarian: ContrarianMovie[] = [];
+  const seen = new Set<number>();
+
+  highA.forEach((taste) => {
+    if (seen.has(taste.content_id)) return;
+    if (!highIdsB.has(`${taste.content_type}-${taste.content_id}`)) return;
+
+    const content = taste.content as any;
+    const rating = Number(content?.rating);
+    if (!content || !Number.isFinite(rating) || rating >= 5) return;
+
+    seen.add(taste.content_id);
+    contrarian.push({
+      id: taste.content_id,
+      title: content.title || content.name || "Unknown",
+      poster_url: content.poster_url || null,
+      tmdbRating: rating,
+      type: (taste.content_type as "movie" | "tv") || "movie",
+    });
+  });
+
+  return contrarian;
+}
+
+export interface CrossRecommendation {
   id: number;
   title: string;
   poster_url: string | null;
   type: "movie" | "tv";
-}> {
-  const idsA = new Set(userATastes.map((t) => t.content_id));
-  const commonIds = new Set(
-    userBTastes
-      .filter((t) => idsA.has(t.content_id))
-      .map((t) => t.content_id)
-  );
-
-  // Get full content for common movies
-  const commonMovies = userATastes
-    .filter((t) => commonIds.has(t.content_id))
-    .map((taste) => ({
-      id: taste.content_id,
-      title: (taste.content as any)?.title || (taste.content as any)?.name || "Unknown",
-      poster_url: (taste.content as any)?.poster_url || null,
-      type: (taste.content_type as "movie" | "tv") || "movie",
-    }));
-
-  return commonMovies;
+  reason: string;
 }
 
 /**
- * Generate comprehensive match analysis
+ * Score a single piece of content against a signature's genre/keyword/
+ * creator affinities. Same building blocks as the *Sim functions above, just
+ * applied to one candidate instead of comparing two full profiles.
+ */
+function scoreContentAgainstSignature(content: any, signature: TasteSignature): number {
+  if (!content) return 0;
+  let score = 0;
+
+  const genres: string[] = Array.isArray(content.genres)
+    ? content.genres.map((g: string) => String(g).toLowerCase())
+    : [];
+  genres.forEach((genre) => {
+    const affinity = signature.genreAffinities[genre];
+    if (affinity !== undefined) score += (affinity - 0.5) * 40;
+  });
+
+  const keywords: string[] = Array.isArray(content.keywords)
+    ? content.keywords.slice(0, 8).map((k: string) => String(k).toLowerCase())
+    : [];
+  keywords.forEach((keyword) => {
+    const affinity = signature.keywordAffinities[keyword];
+    if (affinity !== undefined) score += (affinity - 0.5) * 30;
+  });
+
+  if (content.director && signature.creators.includes(`dir:${String(content.director).toLowerCase()}`)) {
+    score += 25;
+  }
+
+  if (Array.isArray(content.actors)) {
+    content.actors.forEach((actor: string) => {
+      if (signature.creators.includes(`act:${String(actor).toLowerCase()}`)) {
+        score += 10;
+      }
+    });
+  }
+
+  return score;
+}
+
+/**
+ * "You might love" — the other user's masterpiece/good-rated titles that
+ * aren't already in my taste profile, ranked by how well they fit *my*
+ * signature. Cross-recommendation, not overlap: the existing common-movies
+ * rails only surface titles both users already share.
+ */
+function getCrossRecommendations(
+  targetSignature: TasteSignature,
+  targetTastes: MatchTaste[],
+  sourceTastes: MatchTaste[],
+  limit = 8
+): CrossRecommendation[] {
+  const targetIds = new Set(targetTastes.map((t) => `${t.content_type}-${t.content_id}`));
+  const seen = new Set<number>();
+
+  const candidates = sourceTastes.filter((taste) => {
+    if (taste.reaction !== 2 && taste.reaction !== 1) return false;
+    if (targetIds.has(`${taste.content_type}-${taste.content_id}`)) return false;
+    if (seen.has(taste.content_id)) return false;
+    if (!taste.content) return false;
+    seen.add(taste.content_id);
+    return true;
+  });
+
+  return candidates
+    .map((taste) => ({ taste, score: scoreContentAgainstSignature(taste.content, targetSignature) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ taste, score }) => {
+      const content = taste.content as any;
+      return {
+        id: taste.content_id,
+        title: content.title || content.name || "Unknown",
+        poster_url: content.poster_url || null,
+        type: (taste.content_type as "movie" | "tv") || "movie",
+        reason: score > 15 ? "Matches your taste" : taste.reaction === 2 ? "Their masterpiece pick" : "Worth a shot",
+      };
+    });
+}
+
+/**
+ * Generate comprehensive match analysis. Still takes raw taste arrays (not
+ * signatures) because the report needs actual movie titles/posters/creator
+ * names for display, not just aggregates — the signatures used for the score
+ * itself are derived from these same arrays via computeTasteSignature.
  */
 export async function generateMatchAnalysis(
   userATastes: MatchTaste[],
@@ -691,61 +614,79 @@ export async function generateMatchAnalysis(
 ): Promise<MatchAnalysis> {
   const hasInsufficientTasteData = userATastes.length === 0 || userBTastes.length === 0;
 
-  // Basic score
-  const score = calculateMatchScore(userATastes, userBTastes);
+  const signatureA = computeTasteSignature(userATastes);
+  const signatureB = computeTasteSignature(userBTastes);
+  const score = calculateMatchScore(signatureA, signatureB);
 
-  // Genre analysis
   const genreDistA = getGenreDistribution(userATastes);
   const genreDistB = getGenreDistribution(userBTastes);
 
-  // Shared genres
   const genresA = new Set(genreDistA.map((g) => g.genre));
   const genresB = new Set(genreDistB.map((g) => g.genre));
   const sharedGenres = Array.from(genresA).filter((g) => genresB.has(g));
   const uniqueA = Array.from(genresA).filter((g) => !genresB.has(g));
   const genreMismatch = uniqueA.length > 0 ? uniqueA[0] : null;
 
-  // Creators
-  const creatorsA = getUserCreators(userATastes);
-  const creatorsB = getUserCreators(userBTastes);
+  const creatorsA = new Set(signatureA.creators);
+  const creatorsB = new Set(signatureB.creators);
   const commonCreators = Array.from(creatorsA).filter((c) => creatorsB.has(c));
   const commonActors = commonCreators.filter((c) => c.startsWith("act:")).map((c) => c.slice(4));
   const commonDirectors = commonCreators.filter((c) => c.startsWith("dir:")).map((c) => c.slice(4));
   const topSharedCreator = commonCreators.length > 0 ? commonCreators[0] : null;
 
-  // Common taste profile movies
   const commonTasteMovies = getCommonTasteMovies(userATastes, userBTastes);
-  
-  // Common masterpiece movies (both users rated as masterpiece)
-  const commonMasterpieceMovies = await getCommonMasterpieceMovies(userAId, userBId);
 
-  // Years
-  const avgYearA = getAverageYear(userATastes);
-  const avgYearB = getAverageYear(userBTastes);
+  let commonMasterpieceMovies: ReturnType<typeof getCommonMasterpieceMovies> = [];
+  let watchTimeMinutesA = 0;
+  let watchTimeMinutesB = 0;
+  let totalLoggedA = 0;
+  let totalLoggedB = 0;
 
-  // Languages
-  const langsA = Array.from(getUserLanguages(userATastes));
-  const langsB = Array.from(getUserLanguages(userBTastes));
-  const sharedLangs = langsA.filter((l) => langsB.includes(l));
+  try {
+    const [logsA, logsB] = await Promise.all([
+      getUserMovieLogs(userAId, 500),
+      getUserMovieLogs(userBId, 500),
+    ]);
 
-  // Insight
-  const tasteInsight =
-    hasInsufficientTasteData
-      ? "Not enough taste data yet"
-      : score.totalScore >= 75
-      ? "You're cinematic soulmates!"
-      : score.totalScore >= 50
-      ? "Great taste overlap with some unique differences"
-      : "Interesting contrast - learn from each other!";
+    commonMasterpieceMovies = getCommonMasterpieceMovies(logsA, logsB);
+
+    const watchTimeA = summarizeWatchTime(logsA);
+    const watchTimeB = summarizeWatchTime(logsB);
+    watchTimeMinutesA = watchTimeA.estimatedWatchTimeMinutes;
+    watchTimeMinutesB = watchTimeB.estimatedWatchTimeMinutes;
+    totalLoggedA = watchTimeA.totalLogged;
+    totalLoggedB = watchTimeB.totalLogged;
+  } catch (error) {
+    console.error("generateMatchAnalysis: failed to load logs for both users:", error);
+  }
+
+  const sharedLangs = signatureA.languages.filter((l) => signatureB.languages.includes(l));
+  const contrarianMovies = getContrarianMovies(userATastes, userBTastes);
+  const recommendationsForA = getCrossRecommendations(signatureA, userATastes, userBTastes);
+  const recommendationsForB = getCrossRecommendations(signatureB, userBTastes, userATastes);
+
+  let scoreHistory: MatchScorePoint[] = [];
+  if (!hasInsufficientTasteData) {
+    await recordMatchScorePoint(userAId, userBId, score.totalScore);
+    scoreHistory = await getMatchScoreHistory(userAId, userBId);
+  }
+
+  const tasteInsight = hasInsufficientTasteData
+    ? "Not enough taste data yet"
+    : score.totalScore >= 75
+    ? "You're cinematic soulmates!"
+    : score.totalScore >= 50
+    ? "Great taste overlap with some unique differences"
+    : "Interesting contrast - learn from each other!";
 
   return {
     ...score,
     blendPersonality: generateBlendPersonality(genreDistA, genreDistB),
     sharedGenres,
     genreMismatch,
-    commonTasteMovies: commonTasteMovies,
+    commonTasteMovies,
     commonTasteMovieCount: commonTasteMovies.length,
-    commonMasterpieceMovies: commonMasterpieceMovies,
+    commonMasterpieceMovies,
     commonMasterpieceMovieCount: commonMasterpieceMovies.length,
     commonActors,
     commonDirectors,
@@ -754,11 +695,20 @@ export async function generateMatchAnalysis(
     genreDistributionB: genreDistB,
     dominantGenreA: genreDistA[0]?.genre || null,
     dominantGenreB: genreDistB[0]?.genre || null,
-    avgYearA: Math.round(avgYearA),
-    avgYearB: Math.round(avgYearB),
-    languagesA: langsA,
-    languagesB: langsB,
+    avgYearA: Math.round(signatureA.avgYear),
+    avgYearB: Math.round(signatureB.avgYear),
+    languagesA: signatureA.languages,
+    languagesB: signatureB.languages,
     sharedLanguages: sharedLangs,
+    contrarianMovies,
+    contrarianBadge: contrarianMovies.length > 0,
+    watchTimeMinutesA,
+    watchTimeMinutesB,
+    totalLoggedA,
+    totalLoggedB,
+    recommendationsForA,
+    recommendationsForB,
+    scoreHistory,
     tasteInsight,
   };
 }

@@ -2,23 +2,12 @@
 
 import ReactionDistributionBar from "./ReactionDistributionBar";
 import { getReactionAverageLabel, type DetailedUserStats, type StatDistributionItem } from "@/lib/profile";
+import { formatWatchDuration as formatDuration } from "@/lib/format";
 
 interface StatsInsightsProps {
   stats: DetailedUserStats;
   onStatClick?: (type: "all" | "movie" | "tv" | "masterpiece" | "good" | "average" | "bad") => void;
   onTasteClick?: (type: "genre" | "actor" | "director" | "language", value: string) => void;
-}
-
-function formatDuration(minutes: number): string {
-  if (!Number.isFinite(minutes) || minutes <= 0) return "0m";
-
-  const totalHours = Math.floor(minutes / 60);
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-
-  if (days === 0) return `${totalHours}h`;
-  if (hours === 0) return `${days}d`;
-  return `${days}d ${hours}h`;
 }
 
 function SectionHeader({ title }: { title: string }) {

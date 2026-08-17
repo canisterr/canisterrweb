@@ -56,6 +56,8 @@ export interface ShowDetails extends TVMazeShow {
   title?: string;
   poster_url?: string;
   poster_path?: string;
+  backdrop_url?: string;
+  backdrop_gallery_urls?: string[];
   overview?: string;
   release_date?: string;
   language?: string;
@@ -117,6 +119,9 @@ interface TMDBTVDetails {
   original_language?: string;
   number_of_seasons?: number;
   number_of_episodes?: number;
+  images?: {
+    backdrops?: Array<{ file_path: string }>;
+  };
 }
 
 type ShowLike = Pick<ShowDetails, "id" | "name" | "title" | "premiered" | "release_date" | "source" | "tmdb_id" | "tvmaze_id">;
@@ -235,6 +240,9 @@ function mergeShowDetails(primary: ShowDetails, secondary: ShowDetails | null): 
     network: primary.network?.name ? primary.network : secondary.network,
     poster_url: primary.poster_url || secondary.poster_url,
     poster_path: primary.poster_path || secondary.poster_path,
+    backdrop_gallery_urls: primary.backdrop_gallery_urls?.length
+      ? primary.backdrop_gallery_urls
+      : secondary.backdrop_gallery_urls,
     overview: primary.overview || secondary.overview || primary.summary || secondary.summary,
     release_date: primary.release_date || secondary.release_date || primary.premiered || secondary.premiered,
     language: primary.language || secondary.language,
@@ -336,6 +344,10 @@ function mapTMDBShowDetails(show: TMDBTVDetails): ShowDetails {
       ? `https://image.tmdb.org/t/p/w500${show.backdrop_path}`
       : null;
 
+  const backdropGalleryUrls = (show.images?.backdrops || [])
+    .slice(0, 6)
+    .map((backdrop) => `https://image.tmdb.org/t/p/w780${backdrop.file_path}`);
+
   return {
     id: TMDB_TV_ID_OFFSET + show.id,
     name: show.name,
@@ -351,6 +363,7 @@ function mapTMDBShowDetails(show: TMDBTVDetails): ShowDetails {
     type: "tv" as const,
     poster_url: poster || undefined,
     poster_path: poster || undefined,
+    backdrop_gallery_urls: backdropGalleryUrls,
     overview: show.overview || "",
     release_date: show.first_air_date,
     language: show.original_language || "en",
@@ -598,7 +611,7 @@ async function fetchTVMazeShowDetailsById(showId: number): Promise<ShowDetails |
 }
 
 async function fetchTMDBShowDetailsById(tmdbId: number): Promise<ShowDetails | null> {
-  const tmdbResponse = await fetchTmdb(`tv/${tmdbId}`);
+  const tmdbResponse = await fetchTmdb(`tv/${tmdbId}`, { append_to_response: "images" });
   if (!tmdbResponse.ok) return null;
 
   const tmdbData: TMDBTVDetails = await tmdbResponse.json();

@@ -1,6 +1,7 @@
 const TMDB_SERVER_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_PROXY_BASE_URL = "/api/tmdb";
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+const TMDB_UPSTREAM_TIMEOUT_MS = 10_000;
 const TMDB_RESPONSE_CACHE = new Map<
   string,
   {
@@ -52,6 +53,43 @@ function getCacheTtlMs(path: string) {
   return 10 * 60 * 1000;
 }
 
+function buildCachedResponse(entry: {
+  body: string;
+  status: number;
+  statusText: string;
+  headers: [string, string][];
+}, extraHeaders?: Record<string, string>) {
+  const headers = new Headers(entry.headers);
+  Object.entries(extraHeaders || {}).forEach(([key, value]) => {
+    headers.set(key, value);
+  });
+
+  return new Response(entry.body, {
+    status: entry.status,
+    statusText: entry.statusText,
+    headers,
+  });
+}
+
+function buildUpstreamErrorResponse(path: string, error: unknown) {
+  const message = error instanceof Error ? error.message : "TMDB request failed";
+  return new Response(
+    JSON.stringify({
+      error: "TMDB upstream unavailable",
+      message,
+      path: normalizePath(path),
+    }),
+    {
+      status: 504,
+      statusText: "Gateway Timeout",
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    }
+  );
+}
+
 export function buildTmdbUrl(path: string, params?: QueryParams) {
   const normalizedPath = normalizePath(path);
   const searchParams = buildSearchParams(params, !isClientRuntime());
@@ -78,29 +116,39 @@ export async function fetchTmdb(
   const now = Date.now();
 
   if (cached && cached.expiresAt > now) {
-    return new Response(cached.body, {
-      status: cached.status,
-      statusText: cached.statusText,
-      headers: cached.headers,
-    });
+    return buildCachedResponse(cached, { "x-tmdb-cache": "hit" });
   }
 
-  const response = await fetch(url, init);
-  const body = await response.text();
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: init?.signal || AbortSignal.timeout(TMDB_UPSTREAM_TIMEOUT_MS),
+    });
+    const body = await response.text();
 
-  if (response.ok) {
-    TMDB_RESPONSE_CACHE.set(cacheKey, {
-      expiresAt: now + getCacheTtlMs(normalizePath(path)),
-      body,
+    if (response.ok) {
+      TMDB_RESPONSE_CACHE.set(cacheKey, {
+        expiresAt: now + getCacheTtlMs(normalizePath(path)),
+        body,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Array.from(response.headers.entries()),
+      });
+    }
+
+    return new Response(body, {
       status: response.status,
       statusText: response.statusText,
-      headers: Array.from(response.headers.entries()),
+      headers: response.headers,
     });
-  }
+  } catch (error) {
+    if (cached) {
+      return buildCachedResponse(cached, {
+        "x-tmdb-cache": "stale",
+        "x-tmdb-stale-reason": "upstream-error",
+      });
+    }
 
-  return new Response(body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
+    return buildUpstreamErrorResponse(path, error);
+  }
 }

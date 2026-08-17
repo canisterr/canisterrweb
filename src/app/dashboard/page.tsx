@@ -9,7 +9,7 @@ import CrewSearchCard from "@/components/CrewSearchCard";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TopActionBanner from "@/components/TopActionBanner";
 import CinematicLoading from "@/components/CinematicLoading";
-import { User, ShareWithDetails, Content, MovieLogWithContent, TMDBPersonSearchResult } from "@/types";
+import { User, ShareWithDetails, Content, MovieLogWithContent, CinePostWithDetails, TMDBPersonSearchResult } from "@/types";
 import { db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { equalTo, onValue, orderByChild, query, ref } from "firebase/database";
@@ -19,21 +19,18 @@ import { searchShows } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getFriendLogs } from "@/lib/friend-logs";
+import { getCinePosts } from "@/lib/cineposts";
 import { reportAppError } from "@/lib/report-error";
 import { getDisplayUserName, getUsersByIds, searchUsersCached } from "@/lib/users";
 import { getBlurDataUrl } from "@/lib/performance";
 import { getTmdbPosterUrl } from "@/lib/performance";
 import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
 import Link from "next/link";
-import { ArrowRight, Clapperboard, Film, Loader2, MessageCircle, MessageSquareText, Plus, RotateCcw, Search, Share2, X } from "lucide-react";
+import PostFeedCard from "@/components/PostFeedCard";
+import { ArrowRight, Clapperboard, Clock, Film, Loader2, MessageCircle, MessageSquareText, Plus, RotateCcw, Search, Share2, X } from "lucide-react";
 
 const SEARCH_HISTORY_STORAGE_KEY = "cine_search_history";
 const MAX_SEARCH_HISTORY = 8;
-
-const CinePostsFeed = dynamic(() => import("@/components/CinePostsFeed"), {
-  ssr: false,
-  loading: () => <div className="min-h-[60vh] animate-pulse rounded-[2rem] border border-white/10 bg-white/5" />,
-});
 
 const ShareModal = dynamic(() => import("@/components/ShareModal"), { ssr: false });
 const LogMovieModal = dynamic(() => import("@/components/LogMovieModal"), { ssr: false });
@@ -134,6 +131,8 @@ export default function DashboardPage() {
   const [shares, setShares] = useState<ShareWithDetails[]>([]);
   const [selectedShare, setSelectedShare] = useState<ShareWithDetails | null>(null);
   const [friendLogs, setFriendLogs] = useState<(MovieLogWithContent & { friend: User })[]>([]);
+  const [postsFeed, setPostsFeed] = useState<CinePostWithDetails[]>([]);
+  const [postsFeedLoading, setPostsFeedLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
@@ -143,10 +142,9 @@ export default function DashboardPage() {
   const [searchFilter, setSearchFilter] = useState<"all" | "movie" | "tv" | "crew" | "accounts">("all");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
-  // CinePost modal state
-  const [showCinePostModal, setShowCinePostModal] = useState(false);
-  const [cinePostRefreshKey, setCinePostRefreshKey] = useState(0);
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [showCinePostModal, setShowCinePostModal] = useState(false);
+  const [postsFeedRefreshKey, setPostsFeedRefreshKey] = useState(0);
   const [showQuickLogSearch, setShowQuickLogSearch] = useState(false);
   const [showQuickLogModal, setShowQuickLogModal] = useState(false);
   const [quickLogContent, setQuickLogContent] = useState<Content | null>(null);
@@ -311,6 +309,10 @@ export default function DashboardPage() {
 
   const clearSearchHistory = () => {
     setSearchHistory([]);
+  };
+
+  const removeSearchHistoryItem = (item: string) => {
+    setSearchHistory((current) => current.filter((entry) => entry !== item));
   };
 
   const handleSearch = (query: string) => {
@@ -539,6 +541,36 @@ export default function DashboardPage() {
     }
   };
 
+  useEffect(() => {
+    if (!user) {
+      setPostsFeed([]);
+      setPostsFeedLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setPostsFeedLoading(true);
+        const posts = await getCinePosts(user.id, 20, { sort: "smart" });
+        if (!cancelled) setPostsFeed(posts);
+      } catch (error) {
+        reportAppError({
+          title: "Posts feed failed",
+          message: "We could not load the posts feed.",
+          details: error instanceof Error ? error.stack || error.message : String(error),
+        });
+      } finally {
+        if (!cancelled) setPostsFeedLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, postsFeedRefreshKey]);
+
   if (loading) {
     return <CinematicLoading message="Your home is loading" />;
   }
@@ -598,7 +630,7 @@ export default function DashboardPage() {
     }),
   ]
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-    .slice(0, 10);
+    .slice(0, 8);
   const filteredQuickLogResults = quickLogResults.filter(
     (result) => quickLogFilter === "all" || result.type === quickLogFilter
   );
@@ -611,16 +643,26 @@ export default function DashboardPage() {
         {/* Search Bar */}
         <div className="mb-7 sm:mb-8">
           <div className="relative w-full">
-            <Search className="absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transform text-white/50" strokeWidth={2} />
+            <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-[18px] w-[18px] -translate-y-1/2 text-white/40" strokeWidth={2.25} />
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search movies, shows, film people, and usernames..."
+              placeholder="Search movies, shows, people, and usernames"
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               onFocus={() => setShowSearchModal(true)}
-              className="w-full rounded-2xl border border-white/20 bg-[#0d0d0d] py-3.5 pl-12 pr-4 text-sm text-[#f5f0de] outline-none placeholder:text-white/40 focus:border-[#ff7a1a] focus:ring-2 focus:ring-[#ff7a1a]/15 sm:text-base"
+              className="w-full rounded-full border border-white/10 bg-white/[0.06] py-3 pl-11 pr-11 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/35 focus:border-[#ff7a1a]/50 focus:bg-white/[0.08] sm:text-[15px]"
             />
+            {searchQuery.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleSearch("")}
+                className="absolute right-3.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white/70 transition hover:bg-white/25 hover:text-white"
+                aria-label="Clear search"
+              >
+                <X className="h-3 w-3" strokeWidth={2.5} />
+              </button>
+            )}
 
             {/* Dropdown Results */}
             {showSearchModal &&
@@ -630,31 +672,42 @@ export default function DashboardPage() {
                 searchHistory.length > 0 ||
                 searching ||
                 searchFilter === "accounts") && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-3 max-h-[min(70dvh,600px)] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#111318] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
+              <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(70dvh,600px)] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#111318] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
                 {searchQuery.trim().length === 0 && searchHistory.length > 0 && (
-                  <div className="border-b border-white/10 p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-xs font-black uppercase tracking-[0.24em] text-white/45">
-                        Recent Searches
-                      </p>
+                  <div className="border-b border-white/10 p-2">
+                    <div className="flex items-center justify-between px-2.5 py-2">
+                      <p className="text-xs font-bold text-white/40">Recent</p>
                       <button
                         type="button"
                         onClick={clearSearchHistory}
-                        className="text-xs font-semibold text-[#ffb36b] hover:text-[#ff7a1a]"
+                        className="text-xs font-semibold text-[#ff8d3b] hover:text-[#ff7a1a]"
                       >
-                        Clear
+                        Clear all
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div>
                       {searchHistory.map((item) => (
-                        <button
+                        <div
                           key={item}
-                          type="button"
-                          onClick={() => handleSearch(item)}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-[#f5f0de] transition hover:border-[#ff7a1a]/40 hover:bg-white/10"
+                          className="group flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition hover:bg-white/5"
                         >
-                          {item}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSearch(item)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          >
+                            <Clock className="h-4 w-4 flex-shrink-0 text-white/35" />
+                            <span className="truncate text-sm text-[#f5f0de]">{item}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeSearchHistoryItem(item)}
+                            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-white/30 opacity-0 transition hover:bg-white/10 hover:text-white/70 group-hover:opacity-100"
+                            aria-label={`Remove ${item} from recent searches`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -667,53 +720,53 @@ export default function DashboardPage() {
                 )}
 
                 {/* Filter Buttons */}
-                <div className="sticky top-0 flex gap-2 overflow-x-auto border-b border-white/10 bg-[#111111] p-3">
+                <div className="sticky top-0 flex gap-2 overflow-x-auto border-b border-white/10 bg-[#111318] p-2.5">
                   <button
                     onClick={() => setSearchFilter("all")}
-                    className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                    className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
                       searchFilter === "all"
-                        ? "bg-[#f5f0de] text-[#0a0a0a]"
-                        : "bg-white/5 text-[#f5f0de]/75 hover:bg-white/10"
+                        ? "bg-[#ff7a1a] text-[#0a0a0a]"
+                        : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     All
                   </button>
                   <button
                     onClick={() => setSearchFilter("movie")}
-                    className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                    className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
                       searchFilter === "movie"
-                        ? "bg-[#f5f0de] text-[#0a0a0a]"
-                        : "bg-white/5 text-[#f5f0de]/75 hover:bg-white/10"
+                        ? "bg-[#ff7a1a] text-[#0a0a0a]"
+                        : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     Movies
                   </button>
                   <button
                     onClick={() => setSearchFilter("tv")}
-                    className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                    className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
                       searchFilter === "tv"
-                        ? "bg-[#f5f0de] text-[#0a0a0a]"
-                        : "bg-white/5 text-[#f5f0de]/75 hover:bg-white/10"
+                        ? "bg-[#ff7a1a] text-[#0a0a0a]"
+                        : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     TV Shows
                   </button>
                   <button
                     onClick={() => setSearchFilter("crew")}
-                    className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                    className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
                       searchFilter === "crew"
-                        ? "bg-[#f5f0de] text-[#0a0a0a]"
-                        : "bg-white/5 text-[#f5f0de]/75 hover:bg-white/10"
+                        ? "bg-[#ff7a1a] text-[#0a0a0a]"
+                        : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     People
                   </button>
                   <button
                     onClick={() => setSearchFilter("accounts")}
-                    className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                    className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
                       searchFilter === "accounts"
-                        ? "bg-[#f5f0de] text-[#0a0a0a]"
-                        : "bg-white/5 text-[#f5f0de]/75 hover:bg-white/10"
+                        ? "bg-[#ff7a1a] text-[#0a0a0a]"
+                        : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     Accounts
@@ -721,7 +774,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* List Results */}
-                <div className="space-y-1">
+                <div className="p-2">
                   {searchResults
                     .filter((result): result is Content => {
                       if (!isContentSearchResult(result)) return false;
@@ -735,9 +788,9 @@ export default function DashboardPage() {
                         key={`${result.type}-${result.id}`}
                         href={result.type === "tv" ? `/tv/${result.id}` : `/movie/${result.id}`}
                       >
-                        <div className="flex items-center gap-3 border-b border-white/10 p-3 transition-colors last:border-b-0 hover:bg-white/5">
+                        <div className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-white/5">
                           {/* Poster thumbnail */}
-                          <div className="relative h-16 w-12 flex-shrink-0 overflow-hidden border border-white/10 bg-[#1a1a1a]">
+                          <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded-lg bg-[#1a1a1a]">
                             {result.poster_url ? (
                               <Image
                                 src={result.poster_url}
@@ -760,7 +813,7 @@ export default function DashboardPage() {
                               <p className="text-xs text-white/50">
                                 {result.release_date ? result.release_date.split("-")[0] : "N/A"}
                                 {result.type === "tv" && (
-                                  <span className="ml-2 inline-block bg-[#ff7a1a]/15 px-2 py-0.5 text-xs font-medium text-[#ffb36b]">
+                                  <span className="ml-2 inline-block rounded-full bg-[#ff7a1a]/15 px-2 py-0.5 text-xs font-medium text-[#ffb36b]">
                                     TV
                                   </span>
                                 )}
@@ -772,7 +825,7 @@ export default function DashboardPage() {
                                 e.preventDefault();
                                 handleSearchShare(result.id);
                               }}
-                              className="flex-shrink-0 bg-[#ff7a1a] px-3 py-1.5 text-xs font-medium text-[#0a0a0a] transition-colors hover:bg-[#ff8d3b]"
+                              className="flex-shrink-0 rounded-full bg-[#ff7a1a] px-3 py-1.5 text-xs font-semibold text-[#0a0a0a] transition-colors hover:bg-[#ff8d3b]"
                             >
                               Share
                             </button>
@@ -790,8 +843,8 @@ export default function DashboardPage() {
 
                   {(searchFilter === "all" || searchFilter === "accounts") && accountResults.map((account) => (
                     <Link key={`account-${account.id || account.username}`} href={`/profile/${account.username}`}>
-                      <div className="flex cursor-pointer items-center gap-3 border-b border-white/10 p-3 transition-colors last:border-b-0 hover:bg-white/5">
-                        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-[#1a1a1a]">
+                      <div className="flex cursor-pointer items-center gap-3 rounded-xl p-2 transition-colors hover:bg-white/5">
+                        <div className="h-11 w-11 flex-shrink-0 overflow-hidden rounded-full bg-[#1a1a1a]">
                           {account.avatar_url ? (
                             <img
                               src={account.avatar_url}
@@ -861,10 +914,10 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setShowQuickActions(true)}
-                  className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a] text-[#08090b] shadow-[0_8px_24px_rgba(255,122,26,0.25)] transition hover:-translate-y-0.5 hover:bg-[#ff8d3b] sm:h-12 sm:w-12"
+                  className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a] text-[#08090b] shadow-[0_8px_24px_rgba(255,122,26,0.25)] transition hover:-translate-y-0.5 hover:bg-[#ff8d3b] sm:h-10 sm:w-10"
                   aria-label="Open quick actions"
                 >
-                  <Plus className="h-6 w-6" strokeWidth={2} />
+                  <Plus className="h-5 w-5" strokeWidth={2} />
                 </button>
               </div>
 
@@ -931,15 +984,20 @@ export default function DashboardPage() {
                           </div>
                         </button>
                       ))}
+                      <Link
+                        href="/all-movies"
+                        className="flex w-[calc(28.571%_-_0.857rem)] min-w-[calc(28.571%_-_0.857rem)] flex-shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-[#ff7a1a]/40 bg-[#ff7a1a]/[0.06] text-center text-[#ff8d3b] transition hover:border-[#ff7a1a]/70 hover:bg-[#ff7a1a]/10 sm:w-[calc(22.222%_-_0.666rem)] sm:min-w-[calc(22.222%_-_0.666rem)] sm:rounded-xl"
+                      >
+                        <span className="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 p-2">
+                          <ArrowRight className="h-5 w-5" />
+                          <span className="text-[9px] font-bold uppercase leading-tight tracking-wide sm:text-xs">
+                            View All
+                          </span>
+                        </span>
+                      </Link>
                     </div>
                   </div>
                   <div className="mb-4 ml-1 h-0.5 w-[36%] min-w-32 rounded-full bg-white/35" />
-                  <Link
-                    href="/all-movies"
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#ff7a1a]/70 px-4 text-sm font-bold text-[#ff8d3b] transition-colors hover:bg-[#ff7a1a]/10"
-                  >
-                    View All Activity <ArrowRight className="h-4 w-4" />
-                  </Link>
                 </>
               ) : (
                 <div className="mx-auto flex max-w-sm flex-col items-center justify-center border border-white/10 bg-[#111111] px-4 py-8 text-center sm:py-10">
@@ -961,7 +1019,7 @@ export default function DashboardPage() {
               <Clapperboard className="mx-auto mb-3 h-10 w-10 text-white/20" />
               <p className="font-medium text-[#f5f0de]">Get started</p>
               <p className="mt-1 text-sm text-white/55">
-                Sign in to log titles, build lists, and post about what you&apos;re watching.
+                Sign in to log titles, build lists, and share what you&apos;re watching.
               </p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
                 <Link
@@ -981,41 +1039,53 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Posts Section */}
-        <section className="relative mb-8 min-h-[100dvh] px-0 py-0">
-          <div className="relative">
-            <div className="mx-auto w-full max-w-none">
-              <CinePostsFeed currentUser={user} refreshKey={cinePostRefreshKey} theme="brutalist" variant="home" />
+        <div className="mb-8">
+          {postsFeedLoading && postsFeed.length === 0 ? (
+            <div className="border border-white/10 bg-[#111111] p-6 text-center text-sm text-white/55">
+              Loading posts...
             </div>
-          </div>
-        </section>
+          ) : postsFeed.length > 0 ? (
+            <div className="space-y-4">
+              {postsFeed.map((post) => (
+                <PostFeedCard
+                  key={post.id}
+                  post={post}
+                  currentUser={user}
+                  onDeleted={(postId) => setPostsFeed((current) => current.filter((entry) => entry.id !== postId))}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="mx-auto flex max-w-sm flex-col items-center justify-center border border-white/10 bg-[#111111] px-4 py-8 text-center">
+              <MessageSquareText className="mx-auto mb-3 h-10 w-10 text-white/20" />
+              <p className="font-medium text-[#f5f0de]">No posts yet</p>
+              <p className="mt-1 text-sm text-white/55">Be the first to post about a movie, show, or crew member.</p>
+            </div>
+          )}
+        </div>
 
-        {/* CinePost Modal */}
         <CinePostModal
           isOpen={showCinePostModal}
           onClose={() => setShowCinePostModal(false)}
           user={user}
           onCreated={(message) => {
             setBannerMessage(message);
-            setCinePostRefreshKey((key) => key + 1);
+            setPostsFeedRefreshKey((key) => key + 1);
           }}
           theme="brutalist"
         />
 
         {showQuickActions && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm">
             <button
               type="button"
               className="absolute inset-0 cursor-default"
               onClick={() => setShowQuickActions(false)}
               aria-label="Close quick actions"
             />
-            <div className="relative w-full max-w-md border border-white/10 bg-[#111111] p-4 text-[#f5f0de] shadow-[0_24px_80px_rgba(0,0,0,0.7)] sm:mb-6 sm:rounded-[2rem]">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-black text-[#f5f0de]">Create</h3>
-                  <p className="text-sm text-white/55">Pick what you want to do next.</p>
-                </div>
+            <div className="relative w-full max-w-md border border-white/10 bg-[#111111] p-5 text-[#f5f0de] shadow-[0_24px_80px_rgba(0,0,0,0.7)]">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-lg font-black text-[#f5f0de]">Create</h3>
                 <button
                   type="button"
                   onClick={() => setShowQuickActions(false)}
@@ -1026,7 +1096,7 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              <div className="space-y-2">
+              <div className="divide-y divide-white/[0.06]">
                 <button
                   type="button"
                   onClick={() => {
@@ -1036,15 +1106,13 @@ export default function DashboardPage() {
                     setQuickLogFilter("all");
                     setShowQuickLogSearch(true);
                   }}
-                  className="flex w-full items-center gap-3 border border-white/10 bg-[#0d0d0d] p-3 text-left transition hover:border-[#ff7a1a]/40 hover:bg-white/[0.04]"
+                  className="group flex w-full items-center gap-3.5 rounded-xl px-1.5 py-3 text-left transition hover:bg-white/[0.05]"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center bg-[#f5f0de] text-[#0a0a0a]">
-                    <Film className="h-5 w-5" />
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-[#f5f0de]">
+                    <Clapperboard className="h-5 w-5" strokeWidth={1.75} />
                   </span>
-                  <span className="min-w-0">
-                    <span className="block font-black text-[#f5f0de]">Log Title</span>
-                    <span className="block text-sm text-white/55">Add a movie or TV show you watched.</span>
-                  </span>
+                  <span className="min-w-0 flex-1 font-black text-[#f5f0de]">Log Title</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-white/50" />
                 </button>
 
                 <button
@@ -1053,15 +1121,13 @@ export default function DashboardPage() {
                     setShowQuickActions(false);
                     setShowCinePostModal(true);
                   }}
-                  className="flex w-full items-center gap-3 border border-white/10 bg-[#0d0d0d] p-3 text-left transition hover:border-[#ff7a1a]/40 hover:bg-white/[0.04]"
+                  className="group flex w-full items-center gap-3.5 rounded-xl px-1.5 py-3 text-left transition hover:bg-white/[0.05]"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center bg-[#ff7a1a] text-[#0a0a0a]">
-                    <MessageSquareText className="h-5 w-5" />
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#ff7a1a]/25 bg-[#ff7a1a]/10 text-[#ff7a1a]">
+                    <MessageSquareText className="h-5 w-5" strokeWidth={1.75} />
                   </span>
-                  <span className="min-w-0">
-                    <span className="block font-black text-[#f5f0de]">Post</span>
-                    <span className="block text-sm text-white/55">Start a movie or TV discussion.</span>
-                  </span>
+                  <span className="min-w-0 flex-1 font-black text-[#f5f0de]">Post</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-white/50" />
                 </button>
 
                 <button
@@ -1070,15 +1136,13 @@ export default function DashboardPage() {
                     setShowQuickActions(false);
                     router.push("/share");
                   }}
-                  className="flex w-full items-center gap-3 border border-white/10 bg-[#0d0d0d] p-3 text-left transition hover:border-[#ff7a1a]/40 hover:bg-white/[0.04]"
+                  className="group flex w-full items-center gap-3.5 rounded-xl px-1.5 py-3 text-left transition hover:bg-white/[0.05]"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center bg-[#f5f0de] text-[#0a0a0a]">
-                    <Share2 className="h-5 w-5" />
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-[#f5f0de]">
+                    <Share2 className="h-5 w-5" strokeWidth={1.75} />
                   </span>
-                  <span className="min-w-0">
-                    <span className="block font-black text-[#f5f0de]">Share</span>
-                    <span className="block text-sm text-white/55">Send a title recommendation to a friend.</span>
-                  </span>
+                  <span className="min-w-0 flex-1 font-black text-[#f5f0de]">Share</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-white/50" />
                 </button>
               </div>
             </div>

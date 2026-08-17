@@ -226,13 +226,12 @@ export default function SettingsImportPage() {
     setMessage(null);
 
     try {
-      const [profileSnap, logsSnap, listsSnap, followsSnap, notificationsSnap, postsSnap, sharesSnap] = await Promise.all([
+      const [profileSnap, logsSnap, listsSnap, followsSnap, notificationsSnap, sharesSnap] = await Promise.all([
         get(ref(db, `users/${user.id}`)),
         get(ref(db, "movie_logs")),
         get(ref(db, "lists")),
         get(ref(db, "follows")),
         get(ref(db, `notifications/${user.id}`)),
-        get(ref(db, "cine_posts")),
         get(ref(db, "shares")),
       ]);
 
@@ -244,7 +243,6 @@ export default function SettingsImportPage() {
         lists: listsSnap.exists() ? Object.entries(listsSnap.val() as Record<string, List>).filter(([, list]) => list.owner_id === user.id).map(([id, list]) => ({ ...list, id })) : [],
         follows: followsSnap.exists() ? Object.entries(followsSnap.val() as Record<string, any>).filter(([, follow]) => follow.follower_id === user.id || follow.following_id === user.id).map(([id, follow]) => ({ ...follow, id })) : [],
         notifications: notificationsSnap.exists() ? notificationsSnap.val() : null,
-        cinePosts: postsSnap.exists() ? Object.entries(postsSnap.val() as Record<string, any>).filter(([, post]) => post.user_id === user.id).map(([id, post]) => ({ ...post, id })) : [],
         shares: sharesSnap.exists() ? Object.entries(sharesSnap.val() as Record<string, any>).filter(([, share]) => share.sender_id === user.id || share.receiver_id === user.id).map(([id, share]) => ({ ...share, id })) : [],
       };
 

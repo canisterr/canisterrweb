@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
-import { getFirebaseAdminApp, getFirebaseAdminDatabase } from "@/lib/firebase-admin";
+import { getFirebaseAdminApp } from "@/lib/firebase-admin";
+import { ensureUserProfileRecord } from "@/lib/server-user-profile";
 import { getUsernameValidationError, normalizeUsernameKey } from "@/lib/username-utils";
 
 type CompleteSignupBody = {
@@ -41,33 +42,17 @@ export async function POST(request: NextRequest) {
   try {
     const auth = getAuth(getFirebaseAdminApp());
     const decodedToken = await auth.verifyIdToken(idToken);
-    const uid = decodedToken.uid;
-    const adminDb = getFirebaseAdminDatabase();
-    const usernameRef = adminDb.ref(`usernames/${username}`);
-    const usernameClaim = await usernameRef.transaction((current) => {
-      if (current === null || current === uid) {
-        return uid;
-      }
-      return;
-    });
-
-    if (!usernameClaim.committed || usernameClaim.snapshot.val() !== uid) {
-      return NextResponse.json({ error: "Username already taken." }, { status: 409 });
-    }
-
-    const timestamp = new Date().toISOString();
-    await adminDb.ref(`users/${uid}`).update({
-      id: uid,
-      username,
-      username_lower: username,
-      name,
-      name_lower: name.toLowerCase(),
-      createdAt: timestamp,
+    await ensureUserProfileRecord({
+      uid: decodedToken.uid,
+      preferredUsername: username,
+      preferredName: name,
+      strictPreferredUsername: true,
     });
 
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Profile creation failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message === "Username already taken." ? 409 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

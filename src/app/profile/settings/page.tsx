@@ -24,7 +24,6 @@ export default function ProfileSettingsIndexPage() {
       loading={loading}
       onSignOut={handleSignOut}
       title="Settings"
-      description="Pick a section. Each one opens on its own page so the controls stay small and easy to scan."
       backHref="/profile"
     >
       <div className="divide-y divide-white/10">

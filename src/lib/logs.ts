@@ -9,7 +9,7 @@ import {
   orderByChild,
   equalTo,
 } from "firebase/database";
-import { MovieLog, MovieLogWithContent, User, Content, Movie } from "@/types";
+import { MovieLog, MovieLogWithContent, MovieReactionValue, User, Content, Movie } from "@/types";
 import { getMovieDetails } from "./tmdb";
 import { getShowDetails } from "./tvmaze";
 import { removeWatchedMovieSource, upsertWatchedMovie } from "./watched-movies";
@@ -31,6 +31,15 @@ export function isImportedRatingsCsvLog(log: Pick<MovieLog, "notes" | "imported_
 
 export function getVisibleLogNotes(log: Pick<MovieLog, "notes" | "imported_from_csv">): string {
   return isImportedRatingsCsvLog(log) ? "" : (log.notes || "");
+}
+
+// Maps a log's reaction into a 1-5 star display value.
+export function getReactionStars(reaction: MovieReactionValue | null | undefined): 1 | 2 | 3 | 4 | 5 {
+  if (reaction == null) return 3;
+  if (reaction === 2) return 5;
+  if (reaction === 1) return 4;
+  if (reaction === 1.5) return 3;
+  return 2; // reaction === 0 (Bad)
 }
 
 export function getTvEpisodeLabel(
@@ -241,7 +250,22 @@ export async function createMovieLog(
       console.warn("Failed to create log created notifications:", error);
     }
   }
+
+  triggerTasteSignatureRefresh(userId);
   return newLog;
+}
+
+/**
+ * Refresh the cached Movie Matcher taste signature after a log changes.
+ * Reaction, notes, and watched_date all feed the signature's weighting, so
+ * this fires on every create/update/delete rather than only masterpiece
+ * transitions. Fire-and-forget (dynamic import breaks the logs.ts <->
+ * taste-signature.ts cycle) so it never blocks the caller's UI update.
+ */
+function triggerTasteSignatureRefresh(userId: string): void {
+  import("./taste-signature")
+    .then(({ recomputeTasteSignature }) => recomputeTasteSignature(userId))
+    .catch((error) => console.error("Failed to refresh taste signature:", userId, error));
 }
 
 /**
@@ -275,6 +299,8 @@ export async function updateMovieLog(
       "log"
     );
   }
+
+  triggerTasteSignatureRefresh(mergedLog.user_id);
 }
 
 /**
@@ -288,6 +314,9 @@ export async function deleteMovieLog(logId: string): Promise<void> {
     if (!log.watch_later) {
       await removeWatchedMovieSource(log.user_id, log.content_id, log.content_type, "log");
     }
+    await remove(logRef);
+    triggerTasteSignatureRefresh(log.user_id);
+    return;
   }
   await remove(logRef);
 }

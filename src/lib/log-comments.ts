@@ -141,6 +141,12 @@ export async function getLogComments(
   return nestComments(comments, usersById, likesRaw, currentUserId);
 }
 
+// Cheap count-only read, used when only the number is needed (e.g. feed cards).
+export async function getLogCommentCount(logId: string): Promise<number> {
+  const snapshot = await get(ref(db, `log_comments/${logId}`));
+  return snapshot.exists() ? Object.keys(snapshot.val() || {}).length : 0;
+}
+
 export async function createLogComment(
   logId: string,
   logOwnerId: string,

@@ -221,7 +221,7 @@ export default function ListDetailPage() {
     (async () => {
       const map: Record<number, any[]> = {};
       await Promise.all(
-        list.items.map(async (item: any) => {
+        list.items.filter((item: any) => Boolean(item.content)).map(async (item: any) => {
           const logs = await getLogsForContent(Number(item.content.id), "movie");
           map[item.content.id] = logs.sort((a: any, b: any) => new Date(b.watched_date).getTime() - new Date(a.watched_date).getTime());
         })
@@ -758,9 +758,10 @@ export default function ListDetailPage() {
   const isOwner = viewerId !== "" && list.owner_id === viewerId;
   const canEdit = viewerHasAuth && (isOwner || isCollaborator);
   const sortedItems = [...list.items].sort((a, b) => a.position - b.position);
+  const visibleSortedItems = sortedItems.filter((item: any) => Boolean(item.content));
   const isRankedList = list.is_ranked;
   const posterOptions = sortedItems
-    .map((item) => item.content.poster_url)
+    .map((item) => item.content?.poster_url || null)
     .filter((poster): poster is string => Boolean(poster));
   const displayCoverImageUrl = selectedCoverImageUrl || list.cover_image_url || posterOptions[0] || null;
 
@@ -1044,7 +1045,7 @@ export default function ListDetailPage() {
                   : "grid grid-cols-3 gap-2.5 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5"
               }
             >
-              {sortedItems.map((item, idx) => {
+              {visibleSortedItems.map((item, idx) => {
                 const rank = item.position + 1;
                 // Get logs for this movie, most recent first
                 const logs = logsMap[item.content.id] || [];
@@ -1055,7 +1056,7 @@ export default function ListDetailPage() {
                 const canReorder = reorderMode && canEdit && viewType === "list";
                 const canRemoveItem = editMode && canEdit;
                 const isFirst = idx === 0;
-                const isLast = idx === sortedItems.length - 1;
+                const isLast = idx === visibleSortedItems.length - 1;
                 return (
                   <div
                     key={item.id}

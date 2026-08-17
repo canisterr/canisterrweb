@@ -5,24 +5,24 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import { ArrowLeft, Bookmark, LogsIcon, MessageCircle, Share2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import TopActionBanner from "@/components/TopActionBanner";
 import AddToListModal from "@/components/AddToListModal";
 import LogMovieModal from "@/components/LogMovieModal";
 import CinematicLoading from "@/components/CinematicLoading";
-import ContentCinePosts from "@/components/ContentCinePosts";
 import { auth, db } from "@/lib/firebase";
-import { getShowDetails, type ShowDetails } from "@/lib/tvmaze";
-import { getMovieReviewFeed } from "@/lib/movie-reviews";
+import { type ShowDetails } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
-import { getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
+import { getLogsForContent, getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
 import { signOut as authSignOut } from "@/lib/auth";
 import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
+import { getLogEngagementBatch, type LogEngagementSnapshot } from "@/lib/log-engagement";
+import LogFeedCard from "@/components/LogFeedCard";
 import { buildCrewPath } from "@/lib/crew";
 import { resolveTvRouteParam } from "@/lib/content-slugs";
-import { User, Content, MovieReviewWithUser, MovieLog, MovieLogWithContent } from "@/types";
+import { User, Content, MovieLog, MovieLogWithContent } from "@/types";
 
 function formatReleaseYear(releaseDate: string | null | undefined): string {
   if (!releaseDate) return "";
@@ -36,12 +36,6 @@ function formatRuntime(runtime: number | null | undefined): string {
   const minutes = runtime % 60;
   if (hours === 0) return `${minutes}m`;
   return `${hours}h ${minutes}m`;
-}
-
-function getReactionLabelFromRating(rating: number): "Bad" | "Good" | "Masterpiece" {
-  if (rating >= 5) return "Masterpiece";
-  if (rating >= 3) return "Good";
-  return "Bad";
 }
 
 function getReactionLabelFromLogReaction(reaction: 0 | 1 | 1.5 | 2 | null | undefined): "Unrated" | "Bad" | "Average" | "Good" | "Masterpiece" {
@@ -60,10 +54,6 @@ function getReactionBadgeClassFromLabel(label: "Unrated" | "Bad" | "Average" | "
   return "bg-rose-500/20 text-rose-300 border-rose-400/30";
 }
 
-function getReactionBadgeClass(rating: number): string {
-  const label = getReactionLabelFromRating(rating);
-  return getReactionBadgeClassFromLabel(label);
-}
 
 type TVCreditPerson = {
   id: number;
@@ -95,7 +85,8 @@ export default function TVShowPage() {
   const [user, setUser] = useState<User | null>(null);
   const [show, setShow] = useState<ShowDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [reviews, setReviews] = useState<MovieReviewWithUser[]>([]);
+  const [reviews, setReviews] = useState<MovieLogWithContent[]>([]);
+  const [reviewsEngagement, setReviewsEngagement] = useState<Record<string, LogEngagementSnapshot>>({});
   const [showAddToListModal, setShowAddToListModal] = useState(false);
   const [showLogMovieModal, setShowLogMovieModal] = useState(false);
   const [reactionBreakdown, setReactionBreakdown] = useState({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
@@ -104,13 +95,12 @@ export default function TVShowPage() {
   const [allLogs, setAllLogs] = useState<MovieLogWithContent[]>([]);
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"cast" | "crew" | "reviews" | "posts">("cast");
+  const [activeDetailTab, setActiveDetailTab] = useState<"cast" | "crew" | "reviews">("cast");
   const [resolvedShowPath, setResolvedShowPath] = useState<string | null>(null);
 
   const applyActivityPayload = (
     activity: {
       logs: ContentActivityLog[];
-      reviews: MovieReviewWithUser[];
       stats: {
         bad: number;
         average: number;
@@ -131,7 +121,6 @@ export default function TVShowPage() {
       masterpiece: activity.stats.masterpiece,
       total: activity.stats.total,
     });
-    setReviews(activity.reviews);
 
     const logsWithContent = activity.logs.map((log) => ({
       ...log,
@@ -190,12 +179,25 @@ export default function TVShowPage() {
       setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
       setUserLogHistory([]);
       setReviews([]);
+      setReviewsEngagement({});
       setFriendLogs([]);
       setAllLogs([]);
       return;
     }
-    const activity = await fetchContentActivity(showContentId, "tv");
+    const [activity, contentLogs] = await Promise.all([
+      fetchContentActivity(showContentId, "tv"),
+      getLogsForContent(showContentId, "tv"),
+    ]);
     applyActivityPayload(activity, currentUserId, showContent);
+
+    const reviewLogs = contentLogs.filter((log) => getVisibleLogNotes(log).trim().length > 0);
+    setReviews(reviewLogs);
+
+    const engagement = await getLogEngagementBatch(
+      reviewLogs.map((log) => log.id),
+      currentUserId
+    );
+    setReviewsEngagement(engagement);
   };
 
   useEffect(() => {
@@ -801,7 +803,7 @@ export default function TVShowPage() {
 
             <div className="mt-4">
               <div className="flex flex-wrap items-center gap-1.5 border-b border-white/10">
-                {(["cast", "crew", "reviews", "posts"] as const).map((tab) => (
+                {(["cast", "crew", "reviews"] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -859,18 +861,22 @@ export default function TVShowPage() {
                     {reviews.length > 0 ? (
                       <div className="grid gap-4">
                         {reviews.slice(0, 5).map((review) => (
-                          <div key={review.id} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                            <div className="mb-3 flex items-start justify-between gap-4">
-                              <div>
-                                <p className="font-semibold text-white">{review.user.name}</p>
-                                <p className="text-sm text-white/50">{new Date(review.created_at).toLocaleDateString()}</p>
-                              </div>
-                              <span className={`rounded-full border px-2.5 py-1 text-xs ${getReactionBadgeClass(review.rating)}`}>
-                                {getReactionLabelFromRating(review.rating)}
-                              </span>
-                            </div>
-                            <p className="leading-7 text-white/80">{review.text}</p>
-                          </div>
+                          <LogFeedCard
+                            key={review.id}
+                            log={review}
+                            currentUser={user}
+                            engagement={reviewsEngagement[review.id]}
+                            onEngagementChange={(logId, patch) =>
+                              setReviewsEngagement((current) => ({
+                                ...current,
+                                [logId]: { ...current[logId], ...patch } as LogEngagementSnapshot,
+                              }))
+                            }
+                            onDeleted={(logId) => setReviews((current) => current.filter((log) => log.id !== logId))}
+                            onUpdated={(updated) =>
+                              setReviews((current) => current.map((log) => (log.id === updated.id ? updated : log)))
+                            }
+                          />
                         ))}
                       </div>
                     ) : (
@@ -881,11 +887,6 @@ export default function TVShowPage() {
                   </section>
                 )}
 
-                {activeDetailTab === "posts" && (
-                  <section className="space-y-5">
-                    <ContentCinePosts contentId={show.id} contentType="tv" currentUser={user} theme="brutalist" compact />
-                  </section>
-                )}
               </div>
             </div>
           </div>

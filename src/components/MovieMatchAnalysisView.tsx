@@ -1,23 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowLeft,
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  Share2,
   Sparkles,
   Users,
 } from "lucide-react";
 import type { MatchAnalysis } from "@/lib/match-score";
 import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
+import { formatWatchDuration } from "@/lib/format";
+import { shareMatchCard } from "@/lib/share-match-card";
 
 type MovieMatchAnalysisViewProps = {
   analysis: any;
   viewerName: string;
+  viewerAvatarUrl?: string | null;
   subjectName: string;
   subjectUsername?: string;
+  subjectAvatarUrl?: string | null;
   backLabel?: string;
   onBack?: () => void;
   onClose?: () => void;
@@ -25,6 +31,61 @@ type MovieMatchAnalysisViewProps = {
 };
 
 type PosterItem = MatchAnalysis["commonTasteMovies"][number];
+
+const CONFIDENCE_COPY: Record<string, { label: string; detail: string }> = {
+  low: { label: "Low confidence", detail: "Based on a small taste profile — add more movies for a sharper score." },
+  medium: { label: "Medium confidence", detail: "A decent-sized taste profile backs this score." },
+  high: { label: "High confidence", detail: "A deep taste profile backs this score." },
+};
+
+function ConfidenceBadge({ confidence }: { confidence?: string }) {
+  const copy = CONFIDENCE_COPY[confidence || "low"];
+  if (!copy) return null;
+
+  return (
+    <span
+      title={copy.detail}
+      className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-white/45"
+    >
+      {copy.label}
+    </span>
+  );
+}
+
+function ScoreTrend({ points }: { points: MatchAnalysis["scoreHistory"] }) {
+  if (!points || points.length < 2) return null;
+
+  const width = 280;
+  const height = 64;
+  const stepX = width / (points.length - 1);
+  const path = points
+    .map((point, index) => {
+      const x = index * stepX;
+      const y = height - (Math.max(0, Math.min(100, point.score)) / 100) * height;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  const delta = points[points.length - 1].score - points[0].score;
+
+  return (
+    <section className="border-t border-white/10 pt-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[0.65rem] uppercase tracking-[0.45em] text-[#ffb36b]">Score Over Time</p>
+        <span className={`text-xs font-semibold ${delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-white/45"}`}>
+          {delta > 0 ? "+" : ""}
+          {delta}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-4 h-16 w-full" preserveAspectRatio="none">
+        <path d={path} fill="none" stroke="#ff7a1a" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+      </svg>
+      <p className="mt-2 text-xs text-white/40">
+        {points.length} check-ins • last on {points[points.length - 1].date}
+      </p>
+    </section>
+  );
+}
 
 function creatorLinkStyle(accent: "orange" | "amber") {
   return accent === "orange"
@@ -128,9 +189,8 @@ function PosterRail({
                 <div className="relative aspect-[2/3]">
                   <img
                     src={
-                      movie.poster_url
-                        ? `https://image.tmdb.org/t/p/w342${movie.poster_url}`
-                        : "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='342' height='513'%3E%3Crect fill='%23111111' width='342' height='513'/%3E%3C/svg%3E"
+                      movie.poster_url ||
+                      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='342' height='513'%3E%3Crect fill='%23111111' width='342' height='513'/%3E%3C/svg%3E"
                     }
                     alt={movie.title}
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
@@ -150,6 +210,70 @@ function PosterRail({
       ) : (
         <p className="mt-4 text-sm text-white/45">Nothing shared here yet.</p>
       )}
+    </section>
+  );
+}
+
+type ContrarianItem = MatchAnalysis["contrarianMovies"][number];
+
+function ContrarianRail({ items }: { items: ContrarianItem[] }) {
+  const railRef = useRef<HTMLDivElement>(null);
+
+  if (items.length === 0) return null;
+
+  const scrollRail = (direction: -1 | 1) => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const amount = Math.max(rail.clientWidth * 0.82, 260) * direction;
+    rail.scrollBy({ left: amount, behavior: "smooth" });
+  };
+
+  return (
+    <section className="border-t border-white/10 pt-5">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-[0.45em] text-[#ffb36b]">
+            Contrarian Buddies
+          </p>
+          <p className="mt-2 text-sm text-white/55">
+            You both loved these — the crowd on TMDB, not so much.
+          </p>
+        </div>
+        <p className="text-xs uppercase tracking-[0.35em] text-white/35">{items.length} titles</p>
+      </div>
+
+      <div className="relative mt-4">
+        <RailNavButton direction="left" onClick={() => scrollRail(-1)} />
+        <RailNavButton direction="right" onClick={() => scrollRail(1)} />
+        <div
+          ref={railRef}
+          className="-mx-2 overflow-x-auto px-2 pb-3 scrollbar-hide overscroll-x-contain scroll-smooth snap-x snap-mandatory"
+        >
+          <div className="flex w-max gap-3">
+            {items.map((movie) => (
+              <div
+                key={`${movie.type}-${movie.id}`}
+                className="group relative h-[min(58vw,18rem)] w-[min(42vw,11rem)] shrink-0 snap-start overflow-hidden rounded-[1.35rem] border border-white/10 bg-white/[0.03] shadow-[0_24px_48px_rgba(251,191,36,0.16)] transition duration-300 hover:-translate-y-1 hover:border-[#ffb36b]/40 sm:h-[17rem] sm:w-[11rem] lg:h-[18rem] lg:w-[12rem]"
+              >
+                <div className="relative aspect-[2/3]">
+                  <img
+                    src={
+                      movie.poster_url ||
+                      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='342' height='513'%3E%3Crect fill='%23111111' width='342' height='513'/%3E%3C/svg%3E"
+                    }
+                    alt={movie.title}
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
+                  <span className="absolute bottom-2 left-2 rounded-full border border-[#ffb36b]/40 bg-black/70 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[#ffb36b]">
+                    TMDB {movie.tmdbRating.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
@@ -227,8 +351,10 @@ function CreatorRail({
 export default function MovieMatchAnalysisView({
   analysis,
   viewerName,
+  viewerAvatarUrl,
   subjectName,
   subjectUsername,
+  subjectAvatarUrl,
   backLabel = "Back",
   onBack,
   onClose,
@@ -236,6 +362,29 @@ export default function MovieMatchAnalysisView({
 }: MovieMatchAnalysisViewProps) {
   const commonTasteMovies = analysis.commonTasteMovies || [];
   const commonMasterpieceMovies = analysis.commonMasterpieceMovies || [];
+  const [sharingCard, setSharingCard] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
+
+  const handleShareCard = async () => {
+    setSharingCard(true);
+    setShareStatus(null);
+    try {
+      const result = await shareMatchCard({
+        viewerName,
+        viewerAvatarUrl,
+        subjectName,
+        subjectAvatarUrl,
+        score: analysis.totalScore,
+        blendPersonality: analysis.blendPersonality,
+        sharedGenres: analysis.sharedGenres || [],
+      });
+      setShareStatus(
+        result === "shared" ? "Shared!" : result === "downloaded" ? "Saved to your downloads" : "Couldn't create the card"
+      );
+    } finally {
+      setSharingCard(false);
+    }
+  };
 
   return (
     <div
@@ -325,9 +474,12 @@ export default function MovieMatchAnalysisView({
             <div className="absolute inset-y-0 left-0 hidden w-px bg-gradient-to-b from-transparent via-[#ff7a1a]/60 to-transparent lg:block" />
             <div className="relative overflow-hidden border-l border-white/10 pl-6 lg:pl-8">
               <div className="absolute -left-3 top-6 hidden h-2 w-2 rounded-full bg-[#ff7a1a] shadow-[0_0_24px_rgba(255,122,26,0.65)] lg:block" />
-              <p className="text-[0.65rem] uppercase tracking-[0.45em] text-white/40">
-                Match score
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[0.65rem] uppercase tracking-[0.45em] text-white/40">
+                  Match score
+                </p>
+                <ConfidenceBadge confidence={analysis.confidence} />
+              </div>
               <div className="mt-3 flex items-end gap-2">
                 <span className="report-score text-7xl font-black leading-none text-[#ff7a1a] sm:text-8xl">
                   {analysis.totalScore}
@@ -389,6 +541,25 @@ export default function MovieMatchAnalysisView({
                 <p className="mt-3 text-2xl font-black text-[#f5f0de]">{value as number}</p>
               </div>
             ))}
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="border border-white/10 bg-white/[0.03] px-4 py-4">
+              <p className="text-[0.65rem] uppercase tracking-[0.4em] text-white/35">Your watch time</p>
+              <p className="mt-3 text-2xl font-black text-[#f5f0de]">
+                {formatWatchDuration(analysis.watchTimeMinutesA || 0)}
+              </p>
+              <p className="mt-1 text-xs text-white/45">{analysis.totalLoggedA || 0} logged</p>
+            </div>
+            <div className="border border-white/10 bg-white/[0.03] px-4 py-4">
+              <p className="text-[0.65rem] uppercase tracking-[0.4em] text-white/35">
+                {subjectName}&apos;s watch time
+              </p>
+              <p className="mt-3 text-2xl font-black text-[#f5f0de]">
+                {formatWatchDuration(analysis.watchTimeMinutesB || 0)}
+              </p>
+              <p className="mt-1 text-xs text-white/45">{analysis.totalLoggedB || 0} logged</p>
+            </div>
           </div>
         </section>
 
@@ -516,6 +687,15 @@ export default function MovieMatchAnalysisView({
               items={commonMasterpieceMovies}
               accent="amber"
             />
+
+            <PosterRail
+              title={`You Might Love (from ${subjectName})`}
+              subtitle={`${subjectName}'s picks that fit your taste, but aren't in your profile yet.`}
+              items={analysis.recommendationsForA || []}
+              accent="orange"
+            />
+
+            <ContrarianRail items={analysis.contrarianMovies || []} />
           </div>
 
           <aside className="space-y-8">
@@ -529,7 +709,9 @@ export default function MovieMatchAnalysisView({
               <div className="mt-4 space-y-4 border-l border-white/10 pl-5">
                 {[
                   ["Genre match", analysis.genreSim],
+                  ["Keyword match", analysis.keywordSim],
                   ["Creator match", analysis.creatorSim],
+                  ["Studio match", analysis.studioSim],
                   ["Reaction style", analysis.ratingSim],
                   ["Mood match", analysis.vibeSim],
                   ["Era match", analysis.eraSim],
@@ -576,6 +758,8 @@ export default function MovieMatchAnalysisView({
               </div>
             </section>
 
+            <ScoreTrend points={analysis.scoreHistory || []} />
+
             <section className="border-t border-white/10 pt-6">
               <p className="text-[0.65rem] uppercase tracking-[0.45em] text-[#ffb36b]">
                 Quick Links
@@ -587,7 +771,17 @@ export default function MovieMatchAnalysisView({
                 >
                   Open shared movies
                 </Link>
+                <button
+                  type="button"
+                  onClick={handleShareCard}
+                  disabled={sharingCard}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/40 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sharingCard ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                  Share match card
+                </button>
               </div>
+              {shareStatus && <p className="mt-3 text-xs text-white/45">{shareStatus}</p>}
             </section>
           </aside>
         </div>

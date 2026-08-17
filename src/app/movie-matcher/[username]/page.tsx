@@ -5,8 +5,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { auth, db } from "@/lib/firebase";
-import { getFullTasteProfile } from "@/lib/friends-match";
 import { generateMatchAnalysis } from "@/lib/match-score";
+import { buildTasteProfileForScoring } from "@/lib/taste-signature";
 import { getUserByUsername } from "@/lib/profile";
 import CinematicLoading from "@/components/CinematicLoading";
 import PageLayout from "@/components/PageLayout";
@@ -71,8 +71,8 @@ export default function MovieMatcherReportPage() {
         }
 
         const [currentTastes, viewedTastes] = await Promise.all([
-          getFullTasteProfile(currentUserProfile.id),
-          getFullTasteProfile(viewedProfile.id),
+          buildTasteProfileForScoring(currentUserProfile.id),
+          buildTasteProfileForScoring(viewedProfile.id),
         ]);
 
         const report = await generateMatchAnalysis(
@@ -117,8 +117,10 @@ export default function MovieMatcherReportPage() {
       <MovieMatchAnalysisView
         analysis={analysis}
         viewerName={currentUser.name}
+        viewerAvatarUrl={currentUser.avatar_url}
         subjectName={profileUser.name}
         subjectUsername={profileUser.username}
+        subjectAvatarUrl={profileUser.avatar_url}
         backLabel={backLabel}
         onBack={() => router.push(backHref)}
       />

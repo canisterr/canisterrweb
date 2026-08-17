@@ -53,6 +53,15 @@ function isPublicIdentityLabel(value?: string | null, canonicalId?: string): boo
   return true;
 }
 
+function hasPublicIdentity(raw: NormalizableUserRecord, canonicalId: string): boolean {
+  return (
+    isPublicIdentityLabel(raw.name, canonicalId) ||
+    isPublicIdentityLabel("name_lower" in raw ? raw.name_lower : undefined, canonicalId) ||
+    isPublicIdentityLabel(raw.username, canonicalId) ||
+    isPublicIdentityLabel("username_lower" in raw ? raw.username_lower : undefined, canonicalId)
+  );
+}
+
 export function formatFallbackUserName(_userId?: string) {
   return "User";
 }
@@ -100,8 +109,12 @@ export function getDisplayUserHandle(user: Pick<User, "id" | "username">, curren
 }
 
 export function normalizeUserRecord(id: string, raw: NormalizableUserRecord): User {
-  const username = normalizeLabel(raw.username);
-  const name = normalizeLabel(raw.name);
+  const username =
+    normalizeLabel(raw.username) ||
+    ("username_lower" in raw ? normalizeLabel(raw.username_lower) : "");
+  const name =
+    normalizeLabel(raw.name) ||
+    ("name_lower" in raw ? normalizeLabel(raw.name_lower) : "");
   const createdAt = "created_at" in raw ? raw.created_at : "createdAt" in raw ? raw.createdAt : undefined;
   const displayName =
     (isPublicIdentityLabel(name, id) ? name : null) ||
@@ -128,15 +141,59 @@ export function createFallbackUser(userId: string): User {
   };
 }
 
+const cachedGetUsernameClaims = createTimedCache<[], Record<string, string>>({
+  ttlMs: ALL_USERS_TTL_MS,
+  key: () => "username-claims",
+  loader: async () => {
+    try {
+      const snapshot = await get(ref(db, "usernames"));
+      if (!snapshot.exists()) return {};
+
+      const claims = snapshot.val() as Record<string, string | null>;
+      const byUserId: Record<string, string> = {};
+
+      Object.entries(claims).forEach(([username, userId]) => {
+        if (
+          typeof userId === "string" &&
+          userId.trim() &&
+          isPublicIdentityLabel(username, userId)
+        ) {
+          byUserId[userId] = username;
+        }
+      });
+
+      return byUserId;
+    } catch (error) {
+      console.warn("Username claims lookup failed:", error);
+      return {};
+    }
+  },
+});
+
 const cachedGetUserProfile = createTimedCache<[string], User | null>({
   ttlMs: PROFILE_TTL_MS,
   key: (userId) => userId,
+  cacheNullish: false,
   loader: async (userId) => {
     const snapshot = await get(ref(db, `users/${userId}`));
-    if (!snapshot.exists()) return null;
+    const raw = snapshot.exists() ? (snapshot.val() as UserRecord) : null;
 
-    const raw = snapshot.val() as UserRecord;
-    return normalizeUserRecord(userId, raw);
+    if (raw && hasPublicIdentity(raw, userId)) {
+      return normalizeUserRecord(userId, raw);
+    }
+
+    const usernameClaims = await cachedGetUsernameClaims();
+    const recoveredUsername = usernameClaims[userId];
+
+    if (!recoveredUsername) {
+      return null;
+    }
+
+    return normalizeUserRecord(userId, {
+      ...(raw || {}),
+      username: raw?.username || recoveredUsername,
+      name: raw?.name || recoveredUsername,
+    });
   },
 });
 

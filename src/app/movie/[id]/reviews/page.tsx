@@ -5,52 +5,28 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, get } from "firebase/database";
-import { ArrowLeft, Filter, Heart, X, Users } from "lucide-react";
+import { ArrowLeft, Filter, X, Users } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import CinematicLoading from "@/components/CinematicLoading";
+import LogFeedCard from "@/components/LogFeedCard";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getMovieReviewFeed } from "@/lib/movie-reviews";
-import { Movie, MovieReviewWithUser, User } from "@/types";
-import { getLogLikes, likeLog, unlikeLog } from "@/lib/log-likes";
+import { getLogsForContent, getVisibleLogNotes } from "@/lib/logs";
+import { Movie, MovieLogWithContent, MovieReactionValue, User } from "@/types";
+import { getLogEngagementBatch, type LogEngagementSnapshot } from "@/lib/log-engagement";
 import { resolveMovieRouteParam } from "@/lib/content-slugs";
 
 type ScopeFilter = "all" | "friends";
 type SortFilter = "recent" | "oldest" | "rating";
 type RatingFilter = "all" | "bad" | "average" | "good" | "masterpiece";
 
-function getReactionLabelFromRating(rating: number): "Bad" | "Average" | "Good" | "Masterpiece" {
-  if (rating >= 5) return "Masterpiece";
-  if (rating >= 4) return "Good";
-  if (rating >= 3) return "Average";
-  return "Bad";
-}
+const REVIEW_FETCH_LIMIT = 1000;
 
-function getReactionBadgeClass(rating: number): string {
-  const label = getReactionLabelFromRating(rating);
-  if (label === "Masterpiece") return "border-[#ff8a1e]/30 bg-[#ff8a1e]/12 text-[#ffcf9b]";
-  if (label === "Good") return "border-emerald-500/20 bg-emerald-500/10 text-emerald-200";
-  if (label === "Average") return "border-amber-500/20 bg-amber-500/10 text-amber-200";
-  return "border-white/10 bg-white/5 text-white/65";
-}
-
-function getRatingGroup(rating: number): Exclude<RatingFilter, "all"> {
-  if (rating >= 5) return "masterpiece";
-  if (rating >= 4) return "good";
-  if (rating >= 3) return "average";
+function getRatingGroup(reaction: MovieReactionValue | null | undefined): Exclude<RatingFilter, "all"> {
+  if (reaction === 2) return "masterpiece";
+  if (reaction === 1) return "good";
+  if (reaction === 1.5) return "average";
   return "bad";
-}
-
-function getReviewHref(review: MovieReviewWithUser): string {
-  if (review.id.startsWith("log-")) {
-    return `/logs/${review.id.slice(4)}`;
-  }
-
-  return `/user/${review.user.username || review.user.id}/log`;
-}
-
-function getReviewLogId(reviewId: string): string | null {
-  return reviewId.startsWith("log-") ? reviewId.slice(4) : null;
 }
 
 export default function MovieReviewsPage() {
@@ -65,16 +41,14 @@ export default function MovieReviewsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [movie, setMovie] = useState<Movie | null>(null);
   const [moviePath, setMoviePath] = useState<string | null>(null);
-  const [reviews, setReviews] = useState<MovieReviewWithUser[]>([]);
+  const [reviews, setReviews] = useState<MovieLogWithContent[]>([]);
+  const [reviewsEngagement, setReviewsEngagement] = useState<Record<string, LogEngagementSnapshot>>({});
   const [loading, setLoading] = useState(true);
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
   const [sortFilter, setSortFilter] = useState<SortFilter>("recent");
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
   const [friendIds, setFriendIds] = useState<string[]>([]);
-  const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(new Set());
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [reviewLikes, setReviewLikes] = useState<Record<string, { count: number; liked: boolean }>>({});
-  const [likeLoadingIds, setLikeLoadingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -142,9 +116,8 @@ export default function MovieReviewsPage() {
           return;
         }
 
-        const [reviewFeed] = await Promise.all([
-          getMovieReviewFeed(resolved.movie.id, "movie"),
-        ]);
+        const contentLogs = await getLogsForContent(resolved.movie.id, "movie", REVIEW_FETCH_LIMIT);
+        const reviewFeed = contentLogs.filter((log) => getVisibleLogNotes(log).trim().length > 0);
 
         if (cancelled) return;
 
@@ -192,7 +165,7 @@ export default function MovieReviewsPage() {
         return false;
       }
 
-      if (ratingFilter !== "all" && getRatingGroup(review.rating) !== ratingFilter) {
+      if (ratingFilter !== "all" && getRatingGroup(review.reaction) !== ratingFilter) {
         return false;
       }
 
@@ -205,7 +178,7 @@ export default function MovieReviewsPage() {
       }
 
       if (sortFilter === "rating") {
-        if (b.rating !== a.rating) return b.rating - a.rating;
+        if (b.reaction !== a.reaction) return (b.reaction ?? -1) - (a.reaction ?? -1);
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }
 
@@ -213,98 +186,21 @@ export default function MovieReviewsPage() {
     });
   }, [friendIds, ratingFilter, reviews, scopeFilter, sortFilter]);
 
-  const toggleReviewExpanded = (reviewId: string) => {
-    setExpandedReviewIds((current) => {
-      const next = new Set(current);
-      if (next.has(reviewId)) next.delete(reviewId);
-      else next.add(reviewId);
-      return next;
-    });
-  };
-
   useEffect(() => {
-    if (!user || reviews.length === 0) {
-      setReviewLikes({});
-      return;
-    }
-
     let cancelled = false;
 
-    const loadLikes = async () => {
-      const likeEntries = await Promise.all(
-        reviews.map(async (review) => {
-          const logId = getReviewLogId(review.id);
-          if (!logId) return null;
-
-          const likes = await getLogLikes(logId, user.id);
-          return [review.id, likes] as const;
-        })
+    (async () => {
+      const engagement = await getLogEngagementBatch(
+        reviews.map((review) => review.id),
+        user?.id
       );
-
-      if (cancelled) return;
-
-      const nextState: Record<string, { count: number; liked: boolean }> = {};
-      likeEntries.forEach((entry) => {
-        if (!entry) return;
-        nextState[entry[0]] = entry[1];
-      });
-      setReviewLikes(nextState);
-    };
-
-    void loadLikes();
+      if (!cancelled) setReviewsEngagement(engagement);
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [reviews, user]);
-
-  const handleToggleReviewLike = async (review: MovieReviewWithUser) => {
-    if (!user) {
-      router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`);
-      return;
-    }
-    const logId = getReviewLogId(review.id);
-    if (!logId) return;
-
-    const current = reviewLikes[review.id] || { count: 0, liked: false };
-    if (likeLoadingIds.has(review.id)) return;
-
-    setLikeLoadingIds((currentIds) => {
-      const next = new Set(currentIds);
-      next.add(review.id);
-      return next;
-    });
-
-    try {
-      if (current.liked) {
-        await unlikeLog(logId, user.id);
-        setReviewLikes((state) => ({
-          ...state,
-          [review.id]: {
-            count: Math.max(0, current.count - 1),
-            liked: false,
-          },
-        }));
-      } else {
-        await likeLog(logId, user.id);
-        setReviewLikes((state) => ({
-          ...state,
-          [review.id]: {
-            count: current.count + 1,
-            liked: true,
-          },
-        }));
-      }
-    } catch (error) {
-      console.error("Failed to update review like:", error);
-    } finally {
-      setLikeLoadingIds((currentIds) => {
-        const next = new Set(currentIds);
-        next.delete(review.id);
-        return next;
-      });
-    }
-  };
+  }, [reviews, user?.id]);
 
   if (loading) {
     return <CinematicLoading message="Movie reviews are loading" />;
@@ -356,79 +252,24 @@ export default function MovieReviewsPage() {
 
           <div className="mt-6">
             {filteredReviews.length > 0 ? (
-              <div className="divide-y divide-white/10">
+              <div className="grid gap-4">
                 {filteredReviews.map((review) => (
-                  <article key={review.id} className="group py-5 transition-colors hover:bg-white/5">
-                    <div className="flex items-start gap-4">
-                      <div className="h-11 w-11 flex-shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/5">
-                        {review.user.avatar_url ? (
-                          <img
-                            src={review.user.avatar_url}
-                            alt={review.user.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-sm font-bold text-[#f5f0de]">
-                            {review.user.name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <p className="font-semibold text-[#f5f0de] group-hover:text-white">{review.user.name}</p>
-                          <span className="text-xs text-white/40">
-                            @{review.user.username || review.user.id}
-                          </span>
-                          <span className="text-xs text-white/35">•</span>
-                          <span className="text-xs text-white/45">
-                            {new Date(review.created_at).toLocaleDateString()}
-                          </span>
-                          <Link
-                            href={getReviewHref(review)}
-                            className="text-xs font-semibold text-[#ffb36b] transition hover:text-[#ffcf9b]"
-                          >
-                            Open log
-                          </Link>
-                        </div>
-
-                        <p className={`mt-2 text-sm leading-6 text-white/78 ${expandedReviewIds.has(review.id) ? "" : "line-clamp-3"}`}>
-                          {review.text}
-                        </p>
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
-                          {review.text.length > 180 && (
-                            <button
-                              type="button"
-                              onClick={() => toggleReviewExpanded(review.id)}
-                              className="inline-flex items-center rounded-none border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/70 transition hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white"
-                            >
-                              {expandedReviewIds.has(review.id) ? "Show less" : "Show more"}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleReviewLike(review)}
-                            disabled={likeLoadingIds.has(review.id)}
-                            className={`inline-flex items-center gap-2 rounded-none border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                              reviewLikes[review.id]?.liked
-                                ? "border-rose-500/30 bg-rose-500/10 text-rose-100 hover:bg-rose-500/15"
-                                : "border-white/10 bg-white/5 text-white/70 hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-white"
-                            }`}
-                          >
-                            <Heart className={`h-4 w-4 ${reviewLikes[review.id]?.liked ? "fill-current" : ""}`} />
-                            <span className="tabular-nums">{reviewLikes[review.id]?.count ?? 0}</span>
-                            <span className="hidden sm:inline">{reviewLikes[review.id]?.liked ? "Liked" : "Like"}</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      <span
-                        className={`flex-shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${getReactionBadgeClass(review.rating)}`}
-                      >
-                        {getReactionLabelFromRating(review.rating)}
-                      </span>
-                    </div>
-                  </article>
+                  <LogFeedCard
+                    key={review.id}
+                    log={review}
+                    currentUser={user}
+                    engagement={reviewsEngagement[review.id]}
+                    onEngagementChange={(logId, patch) =>
+                      setReviewsEngagement((current) => ({
+                        ...current,
+                        [logId]: { ...current[logId], ...patch } as LogEngagementSnapshot,
+                      }))
+                    }
+                    onDeleted={(logId) => setReviews((current) => current.filter((log) => log.id !== logId))}
+                    onUpdated={(updated) =>
+                      setReviews((current) => current.map((log) => (log.id === updated.id ? updated : log)))
+                    }
+                  />
                 ))}
               </div>
             ) : (

@@ -7,7 +7,7 @@ import CinematicLoading from "@/components/CinematicLoading";
 import LogMovieModal from "@/components/LogMovieModal";
 import { MovieLog, MovieLogWithContent, User, Content, LogCommentWithUser } from "@/types";
 import { deleteMovieLog, updateMovieLog, getLogsForContent, getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
-import { likeLog, unlikeLog, getLogLikes } from "@/lib/log-likes";
+import { likeLogAndNotify, unlikeLog, getLogLikes } from "@/lib/log-likes";
 import { getMovieDetails } from "@/lib/tmdb";
 import { getShowDetails } from "@/lib/tvmaze";
 import {
@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
-import { ref, get, ref as dbRef, push as dbPush } from "firebase/database";
+import { ref, get } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   createLogComment,
@@ -38,17 +38,9 @@ import {
 } from "@/lib/log-comments";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
-import { shouldDeliverNotificationToUser } from "@/lib/settings";
 import { getUsersByIds } from "@/lib/users";
-
-function relativeTime(dateString: string): string {
-  const diff = Date.now() - new Date(dateString).getTime();
-  const minutes = Math.max(1, Math.floor(diff / 60000));
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
+import { formatRelativeTime as relativeTime } from "@/lib/format";
+import LikersModal from "@/components/LikersModal";
 
 function linkify(text: string) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
@@ -87,74 +79,6 @@ function fileToDataUrl(file: File): Promise<string> {
 
 function getSeasonLabel(log: MovieLogWithContent): string {
   return getTvEpisodeLabel(log);
-}
-
-function Avatar({ user }: { user: User }) {
-  if (user.avatar_url) {
-    return <img src={user.avatar_url} alt={user.name} className="h-10 w-10 rounded-full object-cover" />;
-  }
-
-  return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
-      {user.name?.charAt(0)?.toUpperCase() || "U"}
-    </div>
-  );
-}
-
-function PeopleModal({
-  title,
-  users,
-  loading,
-  onClose,
-}: {
-  title: string;
-  users: User[];
-  loading: boolean;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/25 p-3 backdrop-blur-sm sm:items-center">
-      <div className="w-full max-w-md rounded-[1.5rem] border border-white/10 bg-[#121212] p-4 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-bold text-[#f5f0de]">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-white/55 hover:bg-white/5"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        {loading ? (
-          <div className="space-y-2">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded-2xl bg-white/5" />
-            ))}
-          </div>
-        ) : users.length === 0 ? (
-          <p className="text-sm text-white/55">No one here yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {users.map((person) => (
-              <Link
-                key={person.id}
-                href={`/profile/${person.username || person.id}`}
-                onClick={onClose}
-                className="flex items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-white/5"
-              >
-                <Avatar user={person} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#f5f0de]">{person.name}</p>
-                  <p className="truncate text-xs text-white/55">@{person.username}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function TicketActionsModal({
@@ -593,29 +517,9 @@ export default function LogDetailPage() {
         setLiked(false);
         setLikeCount((c) => Math.max(0, c - 1));
       } else {
-        await likeLog(log.id, user.id);
+        await likeLogAndNotify(log.id, log.user_id, user);
         setLiked(true);
         setLikeCount((c) => c + 1);
-        try {
-          // Send notification to log owner if not self.
-          const logOwnerId = log.user_id;
-          if (user.id !== logOwnerId && (await shouldDeliverNotificationToUser(logOwnerId, "like"))) {
-            const notifRef = dbRef(db, `notifications/${logOwnerId}`);
-            await dbPush(notifRef, {
-              type: "like",
-              logId: log.id,
-              fromUser: {
-                id: user.id,
-                username: user.username,
-                name: user.name,
-                avatar_url: user.avatar_url || null,
-              },
-              created_at: new Date().toISOString(),
-            });
-          }
-        } catch (notificationError) {
-          console.warn("Failed to create log like notification:", notificationError);
-        }
       }
     } catch (e) {
       alert("Failed to update like");
@@ -1414,7 +1318,7 @@ export default function LogDetailPage() {
         </div>
       </div>
       {showLikesModal && (
-        <PeopleModal
+        <LikersModal
           title={likeCount === 1 ? "1 like" : `${likeCount} likes`}
           users={likers}
           loading={likersLoading}
@@ -1425,7 +1329,7 @@ export default function LogDetailPage() {
         />
       )}
       {showCommentLikesModal && (
-        <PeopleModal
+        <LikersModal
           title={commentLikesTitle}
           users={commentLikers}
           loading={commentLikersLoading}

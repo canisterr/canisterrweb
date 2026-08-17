@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Content, MovieLog, MovieLogWithContent, User } from "@/types";
-import { createLogCinePost } from "@/lib/cineposts";
 import { createMovieLog, getUserMovieLogs, updateMovieLog } from "@/lib/logs";
 import { getSeasonEpisodes, getShowEpisodes, getShowSeasons, type TVMazeEpisode, type TVMazeSeason } from "@/lib/tvmaze-seasons";
 import { reportAppError } from "@/lib/report-error";
@@ -87,6 +86,14 @@ function getTitleClass(title: string): string {
   return "text-[15px] sm:text-[22px]";
 }
 
+function getReactionLabel(reaction: null | 0 | 1 | 1.5 | 2): string | null {
+  if (reaction === 0) return "bad";
+  if (reaction === 1) return "good";
+  if (reaction === 1.5) return "average";
+  if (reaction === 2) return "masterpiece";
+  return null;
+}
+
 export default function LogMovieModal({
   isOpen,
   onClose,
@@ -111,7 +118,6 @@ export default function LogMovieModal({
   const [showReviewEditor, setShowReviewEditor] = useState(false);
   const [containsSpoiler, setContainsSpoiler] = useState(false);
   const [shareToFriends, setShareToFriends] = useState(false);
-  const [shareAsPost, setShareAsPost] = useState(false);
   const [ticketImageUrl, setTicketImageUrl] = useState<string | null>(null);
   const [tvSeasons, setTvSeasons] = useState<TVMazeSeason[]>([]);
   const [tvEpisodes, setTvEpisodes] = useState<TVMazeEpisode[]>([]);
@@ -333,7 +339,6 @@ export default function LogMovieModal({
       const rewatchValue = existingContext.rewatch;
       setIsRewatch(rewatchValue === "true" || rewatchValue === true);
       setShareToFriends(false);
-      setShareAsPost(false);
       setError("");
       setSelectedSeasonScope(typeof existingLog.season === "number" ? String(existingLog.season) : "all");
       setSelectedEpisodeId(typeof existingLog.episode === "number" ? String(existingLog.episode) : "");
@@ -346,7 +351,6 @@ export default function LogMovieModal({
       setContainsSpoiler(false);
       setShowReviewEditor(false);
       setShareToFriends(false);
-      setShareAsPost(false);
       setShowContextLog(false);
       setLocation("");
       setWatchedWith("");
@@ -458,7 +462,7 @@ export default function LogMovieModal({
           context_log: updates.context_log || {},
         } as MovieLogWithContent);
       } else {
-        const newLog = await createMovieLog(
+        await createMovieLog(
           user.id,
           content.id,
           contentType,
@@ -483,9 +487,6 @@ export default function LogMovieModal({
           containsSpoiler
         );
 
-        if (shareAsPost) {
-          await createLogCinePost(user, newLog, content, notes);
-        }
       }
 
       // Reset form
@@ -496,7 +497,6 @@ export default function LogMovieModal({
       setContainsSpoiler(false);
       setShowReviewEditor(false);
       setShareToFriends(false);
-      setShareAsPost(false);
       setShowContextLog(false);
       setLocation("");
       setWatchedWith("");
@@ -506,21 +506,18 @@ export default function LogMovieModal({
       setIsRewatch(false);
 
       const contentLabel = contentType === "tv" ? "TV show" : "Movie";
-      const successMessage = isEditMode
-        ? `${contentLabel} updated`
-        : shareAsPost
-          ? `${contentLabel} logged and posted`
-          : `${contentLabel} logged`;
+      const successMessage = isEditMode ? `${contentLabel} updated` : `${contentLabel} logged`;
 
       if (!isEditMode) {
         onLogCreated?.(successMessage);
       }
       onClose();
       if (!isEditMode && shareToFriends) {
+        const shareNoteParam = encodeURIComponent(defaultShareNote);
         const shareUrl =
           contentType === "tv"
-            ? `/share?content_id=${content.id}&type=tv`
-            : `/share?movie_id=${content.id}`;
+            ? `/share?content_id=${content.id}&type=tv&note=${shareNoteParam}`
+            : `/share?movie_id=${content.id}&note=${shareNoteParam}`;
         router.push(shareUrl);
       }
     } catch (err) {
@@ -542,6 +539,18 @@ export default function LogMovieModal({
   const titleClass = getTitleClass(content.title);
   const logTypeLabel = content.type === "tv" ? "TV LOG" : "MOVIE LOG";
   const ctaLabel = loading ? (isEditMode ? "SAVING" : "LOGGING") : isEditMode ? "SAVE CHANGES" : "LOG MOVIE";
+  const defaultShareNote = (() => {
+    const review = notes.trim();
+    if (review) return review;
+
+    const actorName = user.name?.trim() || user.username?.trim() || "Someone";
+    const reactionLabel = getReactionLabel(reaction);
+    if (reactionLabel) {
+      return `${actorName} rated this as ${reactionLabel}.`;
+    }
+
+    return `${actorName} logged this.`;
+  })();
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#050505] text-[#F5F2EA]">
@@ -888,8 +897,8 @@ export default function LogMovieModal({
           <section className="border-t border-white/14">
             <label className="flex items-center justify-between gap-3 border-b border-white/10 py-3 sm:py-4">
               <span>
-                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F5F2EA] sm:text-xs sm:tracking-[0.18em]">Share to Friends</span>
-                <span className="mt-1 block text-[11px] text-white/58 sm:text-xs">Selected friends can see this log.</span>
+                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F5F2EA] sm:text-xs sm:tracking-[0.18em]">Share as Post</span>
+                <span className="mt-1 block text-[11px] text-white/58 sm:text-xs">Open share flow with a ready post message.</span>
               </span>
               <input
                 type="checkbox"
@@ -909,32 +918,6 @@ export default function LogMovieModal({
                 />
               </span>
             </label>
-
-            {!isEditMode && (
-              <label className="flex items-center justify-between gap-3 py-3 sm:py-4">
-                <span>
-                  <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F5F2EA] sm:text-xs sm:tracking-[0.18em]">Share as Post</span>
-                  <span className="mt-1 block text-[11px] text-white/58 sm:text-xs">Publish this log to your profile feed.</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={shareAsPost}
-                  onChange={(event) => setShareAsPost(event.target.checked)}
-                  className="sr-only"
-                />
-                <span
-                  className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
-                    shareAsPost ? "border-[#FF6A00] bg-[#FF6A00]" : "border-white/35"
-                  }`}
-                >
-                  <span
-                    className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-[#F5F2EA] transition ${
-                      shareAsPost ? "translate-x-5" : ""
-                    }`}
-                  />
-                </span>
-              </label>
-            )}
           </section>
         </main>
 

@@ -19,6 +19,7 @@ import {
 } from "@/lib/lists";
 import { Film, Globe, ListFilter, Loader2, Lock, Plus, Search, Users } from "lucide-react";
 import Link from "next/link";
+import { AnimatedBackground } from "@/components/core/animated-background";
 
 type ViewMode = "grid" | "list";
 
@@ -378,43 +379,51 @@ export default function ListsPage() {
     <PageLayout user={user} onSignOut={handleSignOut} theme="brutalist">
       <div className="mx-auto min-h-screen w-full max-w-[860px] space-y-8 bg-black px-1 py-4 sm:px-4 sm:py-6">
         <div className="sticky top-16 z-20 -mx-1 space-y-4 border-b border-white/5 bg-black/95 px-1 pb-4 pt-1 backdrop-blur-xl sm:-mx-4 sm:px-4">
-          <div className="grid grid-cols-3 rounded-full border border-white/15 bg-[#0a0b0e] p-1">
+          <div className="rounded-[14px] border border-white/10 bg-[#111111] p-[3px]">
+            <AnimatedBackground
+              defaultValue={activeSection}
+              value={activeSection}
+              onValueChange={(value) => setActiveSection(value as "global" | "friends" | "your")}
+              className="rounded-[11px] bg-[#f5f0de]"
+              transition={{
+                ease: "easeInOut",
+                duration: 0.2,
+              }}
+            >
               <button
+                data-id="global"
                 type="button"
-                onClick={() => setActiveSection("global")}
-                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-3 text-xs font-semibold transition sm:gap-2 sm:text-sm ${
-                  activeSection === "global"
-                    ? "bg-gradient-to-r from-[#ff9d1a] to-[#ff7043] text-white shadow-[0_8px_24px_rgba(255,122,26,0.28)]"
-                    : "text-white/75 hover:bg-white/5 hover:text-white"
+                aria-label="Global lists view"
+                className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[11px] px-2 py-3 text-xs font-semibold transition-transform active:scale-[0.98] sm:gap-2 sm:text-sm ${
+                  activeSection === "global" ? "text-[#111111]" : "text-white/75"
                 }`}
               >
                 <Globe className="h-4 w-4 flex-shrink-0" />
                 Global
               </button>
               <button
+                data-id="friends"
                 type="button"
-                onClick={() => setActiveSection("friends")}
-                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-3 text-xs font-semibold transition sm:gap-2 sm:text-sm ${
-                  activeSection === "friends"
-                    ? "bg-gradient-to-r from-[#ff9d1a] to-[#ff7043] text-white shadow-[0_8px_24px_rgba(255,122,26,0.28)]"
-                    : "text-white/75 hover:bg-white/5 hover:text-white"
+                aria-label="Friends lists view"
+                className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[11px] px-2 py-3 text-xs font-semibold transition-transform active:scale-[0.98] sm:gap-2 sm:text-sm ${
+                  activeSection === "friends" ? "text-[#111111]" : "text-white/75"
                 }`}
               >
                 <Users className="h-4 w-4 flex-shrink-0" />
                 Friends
               </button>
               <button
+                data-id="your"
                 type="button"
-                onClick={() => setActiveSection("your")}
-                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-3 text-xs font-semibold transition sm:gap-2 sm:text-sm ${
-                  activeSection === "your"
-                    ? "bg-gradient-to-r from-[#ff9d1a] to-[#ff7043] text-white shadow-[0_8px_24px_rgba(255,122,26,0.28)]"
-                    : "text-white/75 hover:bg-white/5 hover:text-white"
+                aria-label="Your lists view"
+                className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[11px] px-2 py-3 text-xs font-semibold transition-transform active:scale-[0.98] sm:gap-2 sm:text-sm ${
+                  activeSection === "your" ? "text-[#111111]" : "text-white/75"
                 }`}
               >
                 <Lock className="h-4 w-4 flex-shrink-0" />
                 Your Lists
               </button>
+            </AnimatedBackground>
           </div>
 
             <div className="flex w-full items-center gap-3">

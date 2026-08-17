@@ -20,7 +20,7 @@ export default function SettingsPageFrame({
   loading: boolean;
   onSignOut: () => void | Promise<void>;
   title: string;
-  description: string;
+  description?: string;
   children?: ReactNode;
   backHref?: string;
 }) {
@@ -39,7 +39,7 @@ export default function SettingsPageFrame({
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-black tracking-tight text-[#f5f0de] sm:text-3xl">{title}</h1>
-            <p className="mt-1 max-w-xl text-sm text-white/60">{description}</p>
+            {description ? <p className="mt-1 max-w-xl text-sm text-white/60">{description}</p> : null}
           </div>
 
           <button

@@ -4,10 +4,12 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { auth, db } from "@/lib/firebase";
+import { ensureCurrentUserProfile } from "@/lib/auth";
 import type { User } from "@/types";
 import { DEFAULT_SETTINGS, mergeSettings, type SettingsData } from "@/lib/settings";
 import { normalizeUserRecord } from "@/lib/users";
 import { syncUsernameIndex } from "@/lib/username-index";
+import { getUsernameValidationError } from "@/lib/username-utils";
 
 type CurrentUserContextValue = {
   user: User | null;
@@ -87,7 +89,34 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
       try {
         const userRef = ref(db, `users/${firebaseUser.uid}`);
         const userSnapshot = await get(userRef);
-        const userData = userSnapshot.exists() ? userSnapshot.val() : null;
+        let userData = userSnapshot.exists() ? userSnapshot.val() : null;
+        const hasStoredUsername =
+          typeof userData?.username === "string"
+          && !getUsernameValidationError(userData.username);
+
+        if (!hasStoredUsername) {
+          try {
+            const repairedUser = await ensureCurrentUserProfile({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              getIdToken: () => firebaseUser.getIdToken(),
+            });
+
+            userData = {
+              ...userData,
+              id: repairedUser.id,
+              username: repairedUser.username,
+              name: repairedUser.name,
+              avatar_url: repairedUser.avatar_url,
+              created_at: repairedUser.created_at,
+              createdAt: repairedUser.created_at,
+            };
+          } catch (repairError) {
+            console.warn("Current user profile repair failed:", repairError);
+          }
+        }
 
         const nextSettings = mergeSettings(userData?.settings);
         const normalizedUser = normalizeUserRecord(firebaseUser.uid, {

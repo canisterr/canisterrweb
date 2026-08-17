@@ -12,8 +12,9 @@ import { signOut as authSignOut } from "@/lib/auth";
 import { getUserTasteProfile, addToUserTaste, removeFromUserTaste } from "@/lib/user-taste";
 import { searchMovies } from "@/lib/tmdb";
 import { searchShows } from "@/lib/tvmaze";
-import { calculateMatchScore, generateMatchAnalysis } from "@/lib/match-score";
-import { getAvailableFriends, getFullTasteProfile } from "@/lib/friends-match";
+import { generateMatchAnalysis } from "@/lib/match-score";
+import { getAvailableFriends, getFriendLeaderboard, type LeaderboardEntry } from "@/lib/friends-match";
+import { buildTasteProfileForScoring } from "@/lib/taste-signature";
 import { getMovieRecommendations, RecommendationFilters } from "@/lib/movie-recommendations";
 import { getSimilarMovies } from "@/lib/tmdb";
 import { quickRateMovie, addToWatchlist, getUserMovieLogs } from "@/lib/logs";
@@ -39,14 +40,19 @@ type FriendMatch = {
   tasteCount: number;
 };
 
+type MatchConfidence = "low" | "medium" | "high";
+
 type MatchScore = {
   totalScore: number;
   genreSim: number;
+  keywordSim: number;
   creatorSim: number;
+  studioSim: number;
   ratingSim: number;
   vibeSim: number;
   eraSim: number;
   languageSim: number;
+  confidence: MatchConfidence;
 };
 
 type GenreStat = {
@@ -66,7 +72,10 @@ type MatchAnalysis = {
   totalScore: number;
   tasteInsight: string;
   genreSim: number;
+  keywordSim: number;
   creatorSim: number;
+  studioSim: number;
+  confidence: MatchConfidence;
   sharedGenres: string[];
   genreMismatch?: string | null;
   commonActors: string[];
@@ -84,6 +93,15 @@ type MatchAnalysis = {
   vibeSim: number;
   eraSim: number;
   languageSim: number;
+  contrarianMovies: Array<{ id: number; title: string; poster_url: string | null; tmdbRating: number; type: "movie" | "tv" }>;
+  contrarianBadge: boolean;
+  watchTimeMinutesA: number;
+  watchTimeMinutesB: number;
+  totalLoggedA: number;
+  totalLoggedB: number;
+  recommendationsForA: Array<{ id: number; title: string; poster_url: string | null; type: "movie" | "tv"; reason: string }>;
+  recommendationsForB: Array<{ id: number; title: string; poster_url: string | null; type: "movie" | "tv"; reason: string }>;
+  scoreHistory: Array<{ date: string; score: number }>;
 };
 
 type TasteItem = UserTasteWithContent & {
@@ -99,31 +117,6 @@ function FriendMatchCard({
   onFindScore: () => void;
   disabled?: boolean;
 }) {
-  const [count, setCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchCount() {
-      try {
-        const tastes = await getFullTasteProfile(friend.userId);
-        if (!cancelled) {
-          setCount(tastes.length);
-        }
-      } catch {
-        if (!cancelled) {
-          setCount(friend.tasteCount);
-        }
-      }
-    }
-
-    void fetchCount();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [friend.userId, friend.tasteCount]);
-
   return (
     <div className="flex items-center gap-3 border-b border-white/10 py-3 sm:gap-4 sm:py-4">
       {friend.avatar_url ? (
@@ -140,7 +133,7 @@ function FriendMatchCard({
       <div className="flex-1 min-w-0">
         <div className="truncate text-sm font-semibold text-[#f5f0de] sm:text-base">{friend.name}</div>
         <div className="truncate text-xs text-white/55">
-          @{friend.username} • {count === null ? "..." : count} movies
+          @{friend.username} • {friend.tasteCount} movies
         </div>
       </div>
       <button
@@ -179,6 +172,8 @@ export default function MovieMatcherPage() {
   const [similarSuggestions, setSimilarSuggestions] = useState<MatcherContent[]>([]);
   const [friends, setFriends] = useState<FriendMatch[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<FriendMatch | null>(null);
   const [matchScore, setMatchScore] = useState<MatchScore | null>(null);
   const [matchAnalysis, setMatchAnalysis] = useState<MatchAnalysis | null>(null);
@@ -239,6 +234,59 @@ export default function MovieMatcherPage() {
 
     setSelectedFriend(friend);
     setShowFriendsDropdown(false);
+  };
+
+  const handleFindScore = async (friend: FriendMatch) => {
+    if (!canMatchFriends) {
+      setError("Add at least 7 movies to your taste profile before matching with friends.");
+      return;
+    }
+
+    if (isMobileViewport) {
+      router.push(`/movie-matcher/${friend.username}?from=matcher`);
+      return;
+    }
+
+    setSelectedFriend(friend);
+    setMatchScore(null);
+    setMatchAnalysis(null);
+    setShowAnalysisModal(false);
+    try {
+      setLoadingFriends(true);
+      const [myTastes, theirTastes] = await Promise.all([
+        buildTasteProfileForScoring(user!.id),
+        buildTasteProfileForScoring(friend.userId),
+      ]);
+      const analysis = await generateMatchAnalysis(myTastes, theirTastes, user!.id, friend.userId);
+      setMatchScore({
+        totalScore: analysis.totalScore,
+        genreSim: analysis.genreSim,
+        keywordSim: analysis.keywordSim,
+        creatorSim: analysis.creatorSim,
+        studioSim: analysis.studioSim,
+        ratingSim: analysis.ratingSim,
+        vibeSim: analysis.vibeSim,
+        eraSim: analysis.eraSim,
+        languageSim: analysis.languageSim,
+        confidence: analysis.confidence,
+      });
+      setMatchAnalysis(analysis);
+      setShowAnalysisModal(true);
+
+      if (user!.id !== friend.userId) {
+        await createMatcherUpdateNotification(
+          friend.userId,
+          user!,
+          friend.username,
+          friend.name,
+          new Date().toISOString()
+        );
+      }
+    } catch (err) {
+      setError("Failed to calculate match score");
+    } finally {
+      setLoadingFriends(false);
+    }
   };
 
   const handleSearch = async (query: string) => {
@@ -319,6 +367,33 @@ export default function MovieMatcherPage() {
 
   // Rate Movies State
   const [activeTab, setActiveTab] = useState<"build" | "rate" | "match">("build");
+
+  // Load the leaderboard whenever the Leaderboard tab is open and the profile
+  // is complete enough — scores come from cached taste signatures
+  // (getFriendLeaderboard), so this is cheap even for many friends and safe
+  // to re-run each time the tab is revisited.
+  useEffect(() => {
+    const tasteCount = tastes.length + (includeMasterpieces ? masterpieceMovies.length : 0);
+    if (activeTab !== "match" || !user || tasteCount < 7) return;
+
+    let cancelled = false;
+    const loadLeaderboard = async () => {
+      setLoadingLeaderboard(true);
+      try {
+        const entries = await getFriendLeaderboard(user.id);
+        if (!cancelled) setLeaderboard(entries);
+      } catch (err) {
+        if (!cancelled) setError("Failed to load leaderboard");
+      } finally {
+        if (!cancelled) setLoadingLeaderboard(false);
+      }
+    };
+
+    loadLeaderboard();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, user, tastes, masterpieceMovies, includeMasterpieces]);
   const [recommendations, setRecommendations] = useState<Content[]>([]);
   const [currentMovieIndex, setCurrentMovieIndex] = useState(0);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
@@ -870,6 +945,20 @@ export default function MovieMatcherPage() {
                   <Sparkles size={18} /> Build Profile
                 </span>
               </button>
+              <button
+                onClick={() => {
+                  setActiveTab("match");
+                }}
+                className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-6 sm:py-3 ${
+                  activeTab === "match"
+                    ? "border-[#ff7a1a] text-[#f5f0de]"
+                    : "border-transparent text-white/55 hover:text-[#f5f0de]"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Zap size={18} /> Leaderboard
+                </span>
+              </button>
             </div>
 
             {activeTab === "build" && (
@@ -990,9 +1079,15 @@ export default function MovieMatcherPage() {
                         <h3 className="text-lg font-bold text-[#f5f0de]">Match With Friends</h3>
                       </div>
                       <h3 className="mb-2 hidden text-xl font-bold text-[#f5f0de] sm:block">Match With Friends</h3>
-                      <p className="mb-5 max-w-2xl text-sm text-white/60 sm:text-base">
+                      <p className="mb-3 max-w-2xl text-sm text-white/60 sm:text-base">
                         Instantly see your compatibility with friends who have built their taste profile.
                       </p>
+                      <Link
+                        href="/movie-matcher/group"
+                        className="mb-5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#ffb36b] transition hover:text-[#ff8d3b]"
+                      >
+                        Planning with 3+ people? Try Group Match →
+                      </Link>
                       {!canMatchFriends && (
                         <div className="mb-5 rounded-2xl border border-[#ff7a1a]/25 bg-[#ff7a1a]/10 px-4 py-4 text-sm text-[#ffb36b]">
                           Add at least 7 movies to your taste profile before you can match with friends.
@@ -1016,58 +1111,7 @@ export default function MovieMatcherPage() {
                                 key={friend.userId}
                                 friend={friend}
                                 disabled={!canMatchFriends}
-                                onFindScore={async () => {
-                                  if (!canMatchFriends) {
-                                    setError("Add at least 7 movies to your taste profile before matching with friends.");
-                                    return;
-                                  }
-
-                                  if (isMobileViewport) {
-                                    router.push(`/movie-matcher/${friend.username}?from=matcher`);
-                                    return;
-                                  }
-
-                                  setSelectedFriend(friend);
-                                  setMatchScore(null);
-                                  setMatchAnalysis(null);
-                                  setShowAnalysisModal(false);
-                                  try {
-                                    setLoadingFriends(true);
-                                    const myTastes = includeMasterpieces
-                                      ? [
-                                          ...tastes.map((t) => ({ ...t, isMasterpiece: false })),
-                                          ...masterpieceMovies.filter((m) => !tastes.some((t) => t.content_id === m.content_id)),
-                                        ]
-                                      : tastes.map((t) => ({ ...t, isMasterpiece: false }));
-                                    const theirTastes = await getFullTasteProfile(friend.userId);
-                                    const analysis = await generateMatchAnalysis(myTastes, theirTastes, user!.id, friend.userId);
-                                    setMatchScore({
-                                      totalScore: analysis.totalScore,
-                                      genreSim: analysis.genreSim,
-                                      creatorSim: analysis.creatorSim,
-                                      ratingSim: analysis.ratingSim,
-                                      vibeSim: analysis.vibeSim,
-                                      eraSim: analysis.eraSim,
-                                      languageSim: analysis.languageSim,
-                                    });
-                                    setMatchAnalysis(analysis);
-                                    setShowAnalysisModal(true);
-
-                                    if (user!.id !== friend.userId) {
-                                      await createMatcherUpdateNotification(
-                                        friend.userId,
-                                        user!,
-                                        friend.username,
-                                        friend.name,
-                                        new Date().toISOString()
-                                      );
-                                    }
-                                  } catch (err) {
-                                    setError("Failed to calculate match score");
-                                  } finally {
-                                    setLoadingFriends(false);
-                                  }
-                                }}
+                                onFindScore={() => handleFindScore(friend)}
                               />
                             ))}
                         </div>
@@ -1083,12 +1127,63 @@ export default function MovieMatcherPage() {
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
                   <div className="mb-3 flex items-center gap-3">
                     <Zap className="w-5 h-5 text-[#ff7a1a]" />
-                    <h2 className="text-lg font-bold text-[#f5f0de]">Find Your Movie Match</h2>
+                    <h2 className="text-lg font-bold text-[#f5f0de]">Taste Twin Leaderboard</h2>
                   </div>
                   <p className="text-sm text-white/60">
-                    Compare your movie taste with friends and discover how compatible you are. See what movies you both love and get personalized recommendations!
+                    Every friend with a complete taste profile, ranked by how closely your taste lines up.
                   </p>
                 </div>
+
+                {!canMatchFriends ? (
+                  <div className="rounded-2xl border border-[#ff7a1a]/25 bg-[#ff7a1a]/10 px-4 py-4 text-sm text-[#ffb36b]">
+                    Add at least 7 movies to your taste profile to see your leaderboard.
+                  </div>
+                ) : loadingLeaderboard ? (
+                  <div className="py-8 text-center text-sm text-white/55 sm:text-base">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    Ranking your taste twins...
+                  </div>
+                ) : leaderboard.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-white/55 sm:text-base">
+                    No friends with complete taste profiles yet.
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    {leaderboard.map((entry, index) => (
+                      <button
+                        key={entry.userId}
+                        onClick={() => handleFindScore(entry)}
+                        className="flex w-full items-center gap-3 border-b border-white/10 bg-white/[0.02] px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.06] sm:gap-4 sm:px-5 sm:py-4"
+                      >
+                        <span className="w-6 shrink-0 text-center text-sm font-black text-white/35">
+                          {index + 1}
+                        </span>
+                        {entry.avatar_url ? (
+                          <img
+                            src={entry.avatar_url}
+                            alt={entry.username}
+                            className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-sm font-bold text-[#f5f0de] sm:h-10 sm:w-10">
+                            {entry.username[0]?.toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-[#f5f0de] sm:text-base">
+                            {entry.name}
+                          </div>
+                          <div className="truncate text-xs text-white/55">
+                            @{entry.username} • {entry.tasteCount} movies
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-lg font-black text-[#ff7a1a] sm:text-xl">
+                          {entry.totalScore}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -1102,8 +1197,10 @@ export default function MovieMatcherPage() {
                 embedded
                 analysis={matchAnalysis}
                 viewerName={user?.name || "You"}
+                viewerAvatarUrl={user?.avatar_url}
                 subjectName={selectedFriend.name}
                 subjectUsername={selectedFriend.username}
+                subjectAvatarUrl={selectedFriend.avatar_url}
                 onClose={() => setShowAnalysisModal(false)}
               />
             </div>

@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import CinemaCardModal, { type CinemaCardSummary } from "@/components/CinemaCardModal";
+import { AnimatedBackground } from "@/components/core/animated-background";
 import DOMPurify from 'dompurify';
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -17,13 +18,16 @@ import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import StatsInsights from "@/components/StatsInsights";
 import CinematicLoading from "@/components/CinematicLoading";
-import ProfileCinePostsPanel from "@/components/ProfileCinePostsPanel";
 import { readBrowserCache, writeBrowserCache } from "@/lib/browser-cache";
 import { db } from "@/lib/firebase";
-import { createMovieLog, getUserMovieLogs } from "@/lib/logs";
+import { createMovieLog, getUserMovieLogs, getVisibleLogNotes } from "@/lib/logs";
 import { getListWithDetails, getUserLists } from "@/lib/lists";
 import { searchMovies } from "@/lib/tmdb";
 import { getDisplayUserHandle } from "@/lib/users";
+import { getLogEngagementBatch, type LogEngagementSnapshot } from "@/lib/log-engagement";
+import LogFeedCard from "@/components/LogFeedCard";
+import PostFeedCard from "@/components/PostFeedCard";
+import { getUserCinePosts, getUserEngagedCinePosts } from "@/lib/cineposts";
 import {
   DEFAULT_SETTINGS,
   canShowSharedMovies,
@@ -49,7 +53,7 @@ import {
   createFollowAcceptedNotification,
 } from "@/lib/notifications";
 import { signOut as authSignOut } from "@/lib/auth";
-import type { List, ListWithItems, MovieLogWithContent, User } from "@/types";
+import type { CinePostWithDetails, List, ListWithItems, MovieLogWithContent, User } from "@/types";
 
 type FollowModalType = "followers" | "following";
 
@@ -265,6 +269,19 @@ function ProfilePageInner() {
   const [recentMoodGenres, setRecentMoodGenres] = useState<string[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
   const [listsLoading, setListsLoading] = useState(false);
+  const [profileLogs, setProfileLogs] = useState<MovieLogWithContent[]>([]);
+  const [profileLogsLoading, setProfileLogsLoading] = useState(false);
+  const [profileLogsLimit, setProfileLogsLimit] = useState(10);
+  const [profileLogsHasMore, setProfileLogsHasMore] = useState(true);
+  const [profileLogsEngagement, setProfileLogsEngagement] = useState<Record<string, LogEngagementSnapshot>>({});
+  const [profilePosts, setProfilePosts] = useState<CinePostWithDetails[]>([]);
+  const [profilePostsLoading, setProfilePostsLoading] = useState(false);
+  const [profilePostsLimit, setProfilePostsLimit] = useState(10);
+  const [profilePostsHasMore, setProfilePostsHasMore] = useState(true);
+  const [savedPosts, setSavedPosts] = useState<CinePostWithDetails[]>([]);
+  const [savedPostsLoading, setSavedPostsLoading] = useState(false);
+  const [savedPostsLimit, setSavedPostsLimit] = useState(10);
+  const [savedPostsHasMore, setSavedPostsHasMore] = useState(true);
   const [isCinemaCardOpen, setIsCinemaCardOpen] = useState(false);
   const [cinemaCardSummary, setCinemaCardSummary] = useState<CinemaCardSummary | null>(null);
   const [cinemaCardLoading, setCinemaCardLoading] = useState(false);
@@ -360,7 +377,7 @@ function ProfilePageInner() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<string>("posts");
+  const [activeTab, setActiveTab] = useState<string>("stats");
   const [followModalType, setFollowModalType] = useState<FollowModalType>("followers");
   const [isFollowModalOpen, setIsFollowModalOpen] = useState(false);
   const [followSearch, setFollowSearch] = useState("");
@@ -759,6 +776,38 @@ function ProfilePageInner() {
   }, [activeTab, canAccessActivity, profileUser]);
 
   useEffect(() => {
+    if (!profileUser || activeTab !== "logs" || !canAccessActivity) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setProfileLogsLoading(true);
+        const rawLogs = await getUserMovieLogs(profileUser.id, profileLogsLimit);
+        if (cancelled) return;
+
+        const withNotes = rawLogs.filter((log) => getVisibleLogNotes(log).trim().length > 0);
+        setProfileLogs(withNotes);
+        setProfileLogsHasMore(rawLogs.length >= profileLogsLimit);
+
+        const engagement = await getLogEngagementBatch(
+          withNotes.map((log) => log.id),
+          currentUser?.id
+        );
+        if (!cancelled) setProfileLogsEngagement(engagement);
+      } catch (error) {
+        console.error("[PROFILE] Error loading logs:", error);
+      } finally {
+        if (!cancelled) setProfileLogsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, canAccessActivity, profileUser, profileLogsLimit, currentUser?.id]);
+
+  useEffect(() => {
     if (!profileUser || activeTab !== "lists" || !canAccessLists) return;
 
     let cancelled = false;
@@ -797,6 +846,54 @@ function ProfilePageInner() {
   }, [activeTab, canAccessLists, isOwnProfile, profileUser]);
 
   useEffect(() => {
+    if (!profileUser || activeTab !== "posts" || !canAccessActivity) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setProfilePostsLoading(true);
+        const posts = await getUserCinePosts(profileUser.id, currentUser?.id, profilePostsLimit);
+        if (cancelled) return;
+        setProfilePosts(posts);
+        setProfilePostsHasMore(posts.length >= profilePostsLimit);
+      } catch (error) {
+        console.error("[PROFILE] Error loading cineposts:", error);
+      } finally {
+        if (!cancelled) setProfilePostsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, canAccessActivity, currentUser?.id, profilePostsLimit, profileUser]);
+
+  useEffect(() => {
+    if (!profileUser || !isOwnProfile || activeTab !== "saved") return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setSavedPostsLoading(true);
+        const posts = await getUserEngagedCinePosts(profileUser.id, "save", currentUser?.id, savedPostsLimit);
+        if (cancelled) return;
+        setSavedPosts(posts);
+        setSavedPostsHasMore(posts.length >= savedPostsLimit);
+      } catch (error) {
+        console.error("[PROFILE] Error loading saved cineposts:", error);
+      } finally {
+        if (!cancelled) setSavedPostsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, currentUser?.id, isOwnProfile, profileUser, savedPostsLimit]);
+
+  useEffect(() => {
     if (!profileUser || !isOwnProfile) return;
 
     let cancelled = false;
@@ -826,12 +923,6 @@ function ProfilePageInner() {
   useEffect(() => {
     setOpenFollowMenuUserId(null);
   }, [activeTab, followModalType]);
-
-  useEffect(() => {
-    if (!isOwnProfile && activeTab === "saved-posts") {
-      setActiveTab("posts");
-    }
-  }, [activeTab, isOwnProfile]);
 
   useEffect(() => {
     if (!isOwnProfile || searchParams.get("importRatings") !== "1") return;
@@ -1929,47 +2020,64 @@ function ProfilePageInner() {
         )}
 
         <section className="mb-8 border-t border-white/10 pt-4">
-          <div className="flex overflow-hidden rounded-full border border-[#ff7a1a]/35 bg-[#111111] p-1">
-            {canAccessActivity && (
-              <>
+          <div className="rounded-[18px] border border-[#ff7a1a]/25 bg-[#151515] p-[3px]">
+            <AnimatedBackground
+              defaultValue={activeTab}
+              className="rounded-[14px] bg-[#ff7a1a]"
+              transition={{
+                ease: "easeInOut",
+                duration: 0.2,
+              }}
+            >
+              {canAccessActivity && (
                 <button
+                  data-id="posts"
+                  type="button"
                   onClick={() => setActiveTab("posts")}
-                  className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition ${
-                    activeTab === "posts" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
+                  className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
+                    activeTab === "posts" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
                   }`}
                 >
                   Posts
                 </button>
+              )}
+              {canAccessActivity && (
                 <button
+                  data-id="stats"
+                  type="button"
                   onClick={() => setActiveTab("stats")}
-                  className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition ${
-                    activeTab === "stats" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
+                  className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
+                    activeTab === "stats" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
                   }`}
                 >
                   Stats
                 </button>
-                {isOwnProfile && (
-                  <button
-                    onClick={() => setActiveTab("saved-posts")}
-                    className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition ${
-                      activeTab === "saved-posts" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
-                    }`}
-                  >
-                    Saved
-                  </button>
-                )}
-              </>
-            )}
-            {canAccessLists && (
-              <button
-                onClick={() => setActiveTab("lists")}
-                className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition ${
-                  activeTab === "lists" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
-                }`}
-              >
-                Lists
-              </button>
-            )}
+              )}
+              {canAccessLists && (
+                <button
+                  data-id="lists"
+                  type="button"
+                  onClick={() => setActiveTab("lists")}
+                  className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
+                    activeTab === "lists" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
+                  }`}
+                >
+                  Lists
+                </button>
+              )}
+              {isOwnProfile && (
+                <button
+                  data-id="saved"
+                  type="button"
+                  onClick={() => setActiveTab("saved")}
+                  className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
+                    activeTab === "saved" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
+                  }`}
+                >
+                  Saved
+                </button>
+              )}
+            </AnimatedBackground>
           </div>
         </section>
 
@@ -2227,15 +2335,118 @@ function ProfilePageInner() {
           </div>
         )}
 
-        {activeTab === "posts" && profileUser && canAccessActivity && (
-          <div className="space-y-3">
-            <ProfileCinePostsPanel mode="posts" profileUserId={profileUser.id} currentUser={currentUser} />
+        {activeTab === "logs" && canAccessActivity && (
+          <div className="space-y-4">
+            {profileLogsLoading && profileLogs.length === 0 ? (
+              <div className="border border-white/10 bg-black p-6 text-sm text-white/55">
+                Loading logs...
+              </div>
+            ) : profileLogs.length === 0 ? (
+              <div className="border border-white/10 bg-black p-6 text-center text-sm text-white/55">
+                No written logs yet.
+              </div>
+            ) : (
+              <>
+                {profileLogs.map((log) => (
+                  <LogFeedCard
+                    key={log.id}
+                    log={log}
+                    currentUser={currentUser}
+                    engagement={profileLogsEngagement[log.id]}
+                    onEngagementChange={(logId, patch) =>
+                      setProfileLogsEngagement((current) => ({
+                        ...current,
+                        [logId]: { ...current[logId], ...patch } as LogEngagementSnapshot,
+                      }))
+                    }
+                    onDeleted={(logId) => setProfileLogs((current) => current.filter((entry) => entry.id !== logId))}
+                    onUpdated={(updated) =>
+                      setProfileLogs((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
+                    }
+                  />
+                ))}
+                {profileLogsHasMore && (
+                  <button
+                    type="button"
+                    onClick={() => setProfileLogsLimit((current) => current + 10)}
+                    disabled={profileLogsLoading}
+                    className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-60"
+                  >
+                    {profileLogsLoading ? "Loading..." : "Load more"}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
 
-        {activeTab === "saved-posts" && profileUser && isOwnProfile && canAccessActivity && (
-          <div className="space-y-3">
-            <ProfileCinePostsPanel mode="saved" profileUserId={profileUser.id} currentUser={currentUser} />
+        {activeTab === "posts" && canAccessActivity && (
+          <div className="space-y-4">
+            {profilePostsLoading && profilePosts.length === 0 ? (
+              <div className="border border-white/10 bg-black p-6 text-sm text-white/55">
+                Loading posts...
+              </div>
+            ) : profilePosts.length === 0 ? (
+              <div className="border border-white/10 bg-black p-6 text-center text-sm text-white/55">
+                No cineposts yet.
+              </div>
+            ) : (
+              <>
+                {profilePosts.map((post) => (
+                  <PostFeedCard
+                    key={post.id}
+                    post={post}
+                    currentUser={currentUser}
+                    onDeleted={(postId) => setProfilePosts((current) => current.filter((entry) => entry.id !== postId))}
+                  />
+                ))}
+                {profilePostsHasMore && (
+                  <button
+                    type="button"
+                    onClick={() => setProfilePostsLimit((current) => current + 10)}
+                    disabled={profilePostsLoading}
+                    className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-60"
+                  >
+                    {profilePostsLoading ? "Loading..." : "Load more"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === "saved" && isOwnProfile && (
+          <div className="space-y-4">
+            {savedPostsLoading && savedPosts.length === 0 ? (
+              <div className="border border-white/10 bg-black p-6 text-sm text-white/55">
+                Loading saved posts...
+              </div>
+            ) : savedPosts.length === 0 ? (
+              <div className="border border-white/10 bg-black p-6 text-center text-sm text-white/55">
+                No saved posts yet.
+              </div>
+            ) : (
+              <>
+                {savedPosts.map((post) => (
+                  <PostFeedCard
+                    key={post.id}
+                    post={post}
+                    currentUser={currentUser}
+                    onDeleted={(postId) => setSavedPosts((current) => current.filter((entry) => entry.id !== postId))}
+                  />
+                ))}
+                {savedPostsHasMore && (
+                  <button
+                    type="button"
+                    onClick={() => setSavedPostsLimit((current) => current + 10)}
+                    disabled={savedPostsLoading}
+                    className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-60"
+                  >
+                    {savedPostsLoading ? "Loading..." : "Load more"}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
 

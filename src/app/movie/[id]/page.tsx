@@ -7,24 +7,21 @@ import TopActionBanner from "@/components/TopActionBanner";
 import AddToListModal from "@/components/AddToListModal";
 import LogMovieModal from "@/components/LogMovieModal";
 import CinematicLoading from "@/components/CinematicLoading";
-import ContentCinePosts from "@/components/ContentCinePosts";
-import { User, Movie, MovieReviewWithUser, Content, MovieLog, MovieLogWithContent } from "@/types";
+import { User, Movie, Content, MovieLogWithContent } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getMovieDetails } from "@/lib/tmdb";
-import { getMovieReviewFeed } from "@/lib/movie-reviews";
-import { getLogsForContent } from "@/lib/logs";
+import { getLogsForContent, getVisibleLogNotes } from "@/lib/logs";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
+import { getLogEngagementBatch, type LogEngagementSnapshot } from "@/lib/log-engagement";
+import LogFeedCard from "@/components/LogFeedCard";
 import { buildCrewPath } from "@/lib/crew";
 import { resolveMovieRouteParam } from "@/lib/content-slugs";
 import {
   ArrowLeft,
-  Share2,
-  Bookmark,
   LogsIcon,
   ChevronRight,
   ChevronDown,
@@ -45,7 +42,7 @@ type MovieDetails = Movie & {
   crew_details?: MovieCreditPerson[];
 };
 
-type MovieDetailTab = "cast" | "crew" | "reviews" | "posts";
+type MovieDetailTab = "cast" | "crew" | "reviews";
 
 function formatReleaseYear(releaseDate: string | null | undefined): string {
   if (!releaseDate) return "";
@@ -59,12 +56,6 @@ function formatRuntime(runtime: number | null | undefined): string {
   const minutes = runtime % 60;
   if (hours === 0) return `${minutes}m`;
   return `${hours}h ${minutes}m`;
-}
-
-function getReactionLabelFromRating(rating: number): "Bad" | "Good" | "Masterpiece" {
-  if (rating >= 5) return "Masterpiece";
-  if (rating >= 3) return "Good";
-  return "Bad";
 }
 
 function getReactionLabelFromLogReaction(reaction: 0 | 1 | 1.5 | 2 | null | undefined): "Unrated" | "Bad" | "Average" | "Good" | "Masterpiece" {
@@ -83,10 +74,6 @@ function getReactionBadgeClassFromLabel(label: "Unrated" | "Bad" | "Average" | "
   return "bg-rose-500/20 text-rose-300 border-rose-400/30";
 }
 
-function getReactionBadgeClass(rating: number): string {
-  const label = getReactionLabelFromRating(rating);
-  return getReactionBadgeClassFromLabel(label);
-}
 
 function getMovieMetaParts(movie: Movie | null): string[] {
   if (!movie) return [];
@@ -130,7 +117,8 @@ export default function MoviePage() {
   const [user, setUser] = useState<User | null>(null);
   const [movie, setMovie] = useState<MovieDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [reviews, setReviews] = useState<MovieReviewWithUser[]>([]);
+  const [reviews, setReviews] = useState<MovieLogWithContent[]>([]);
+  const [reviewsEngagement, setReviewsEngagement] = useState<Record<string, LogEngagementSnapshot>>({});
   const [showAddToListModal, setShowAddToListModal] = useState(false);
   const [showLogMovieModal, setShowLogMovieModal] = useState(false);
   const [showScanThanksModal, setShowScanThanksModal] = useState(false);
@@ -142,13 +130,11 @@ export default function MoviePage() {
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<MovieDetailTab>("cast");
   const [showAllCast, setShowAllCast] = useState(false);
-  const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(new Set());
   const [resolvedMoviePath, setResolvedMoviePath] = useState<string | null>(null);
 
   const applyActivityPayload = (
     activity: {
       logs: ContentActivityLog[];
-      reviews: MovieReviewWithUser[];
       stats: {
         bad: number;
         average: number;
@@ -173,7 +159,6 @@ export default function MoviePage() {
       totalLogs: activity.stats.totalLogs,
       totalWatched: activity.stats.totalWatched,
     });
-    setReviews(activity.reviews);
 
     const logsWithContent = activity.logs.map((log) => ({
       ...log,
@@ -220,12 +205,25 @@ export default function MoviePage() {
       setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
       setMovieStats({ totalLogs: 0, totalWatched: 0 });
       setReviews([]);
+      setReviewsEngagement({});
       setFriendLogs([]);
       setAllLogs([]);
       return;
     }
-    const activity = await fetchContentActivity(movieContentId, "movie");
+    const [activity, contentLogs] = await Promise.all([
+      fetchContentActivity(movieContentId, "movie"),
+      getLogsForContent(movieContentId, "movie"),
+    ]);
     applyActivityPayload(activity, currentUserId, movieContent);
+
+    const reviewLogs = contentLogs.filter((log) => getVisibleLogNotes(log).trim().length > 0);
+    setReviews(reviewLogs);
+
+    const engagement = await getLogEngagementBatch(
+      reviewLogs.map((log) => log.id),
+      currentUserId
+    );
+    setReviewsEngagement(engagement);
   };
 
   useEffect(() => {
@@ -429,15 +427,6 @@ export default function MoviePage() {
 
     return counts.reduce((best, current) => (current.count > best.count ? current : best), counts[0]).label;
   }, [reactionBreakdown]);
-
-  const toggleReviewExpanded = (reviewId: string) => {
-    setExpandedReviewIds((current) => {
-      const next = new Set(current);
-      if (next.has(reviewId)) next.delete(reviewId);
-      else next.add(reviewId);
-      return next;
-    });
-  };
 
   const renderCastRow = (person: MovieCreditPerson) => (
     <Link
@@ -849,7 +838,7 @@ export default function MoviePage() {
 
             <div className="pt-2">
               <div className="flex items-center justify-center gap-4 text-sm font-black uppercase tracking-[0.16em] text-white/55 sm:text-base sm:tracking-[0.2em]">
-                {(["cast", "crew", "reviews", "posts"] as MovieDetailTab[]).map((tab) => (
+                {(["cast", "crew", "reviews"] as MovieDetailTab[]).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -929,34 +918,24 @@ export default function MoviePage() {
                     </div>
                     {reviews.length > 0 ? (
                       <div className="grid gap-4">
-                        {reviews.slice(0, 5).map((review) => {
-                          const expanded = expandedReviewIds.has(review.id);
-                          return (
-                            <div key={review.id} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                              <div className="mb-3 flex items-start justify-between gap-4">
-                                <div>
-                                  <p className="font-semibold text-white">{review.user.name}</p>
-                                  <p className="text-sm text-white/50">{new Date(review.created_at).toLocaleDateString()}</p>
-                                </div>
-                                <span className={`text-xs px-2.5 py-1 rounded-full border ${getReactionBadgeClass(review.rating)}`}>
-                                  {getReactionLabelFromRating(review.rating)}
-                                </span>
-                              </div>
-                              <p className={`leading-7 text-white/80 ${expanded ? "" : "line-clamp-3"}`}>
-                                {review.text}
-                              </p>
-                              {review.text.length > 180 && (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleReviewExpanded(review.id)}
-                                  className="mt-3 text-sm font-semibold text-[#ffb36b] hover:text-[#ffcf9b]"
-                                >
-                                  {expanded ? "Show less" : "Show more"}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
+                        {reviews.slice(0, 5).map((review) => (
+                          <LogFeedCard
+                            key={review.id}
+                            log={review}
+                            currentUser={user}
+                            engagement={reviewsEngagement[review.id]}
+                            onEngagementChange={(logId, patch) =>
+                              setReviewsEngagement((current) => ({
+                                ...current,
+                                [logId]: { ...current[logId], ...patch } as LogEngagementSnapshot,
+                              }))
+                            }
+                            onDeleted={(logId) => setReviews((current) => current.filter((log) => log.id !== logId))}
+                            onUpdated={(updated) =>
+                              setReviews((current) => current.map((log) => (log.id === updated.id ? updated : log)))
+                            }
+                          />
+                        ))}
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-white/60">
@@ -966,11 +945,6 @@ export default function MoviePage() {
                   </section>
                 )}
 
-                {activeDetailTab === "posts" && (
-                  <section className="space-y-5">
-                    <ContentCinePosts contentId={movie.id} contentType="movie" currentUser={user} theme="brutalist" compact />
-                  </section>
-                )}
               </div>
             </div>
 

@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import { ArrowLeft, Bookmark, Heart, MessageCircle, MoreVertical, Pencil, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Heart, MessageCircle, MoreVertical, Pencil, Send, Share2, Trash2, X } from "lucide-react";
 import CinematicLoading from "@/components/CinematicLoading";
+import ContentImageRow from "@/components/ContentImageRow";
 import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import PageLayout from "@/components/PageLayout";
-import CinePostArtwork from "@/components/CinePostArtwork";
-import CinePostListStrip from "@/components/CinePostListStrip";
 import { getDisplayUserName } from "@/lib/users";
+import { getMovieDetails } from "@/lib/tmdb";
 import {
   CinePostCommentWithUser,
   CinePostEngagementType,
@@ -24,14 +24,15 @@ import {
   createCinePostComment,
   deleteCinePostComment,
   getCinePostContentHref,
-  getCinePostLogRatingLabel,
   getCinePost,
   getCinePostEngagementUsers,
   getCinePostDisplayBody,
   setCinePostEngagement,
   updateCinePostComment,
 } from "@/lib/cineposts";
+import { formatRelativeTime } from "@/lib/format";
 import { reportAppError } from "@/lib/report-error";
+import { getShowDetails } from "@/lib/tvmaze";
 
 function relativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -54,21 +55,6 @@ function relativeTime(dateString: string): string {
 
 function profileHref(user: User): string {
   return `/profile/${user.username || user.id}`;
-}
-
-function getEngagementPillClass(active = false, tone: "like" | "save" | "neutral" = "neutral"): string {
-  const activeStyles =
-    tone === "like"
-      ? "border-rose-500/25 bg-rose-500/10 text-rose-200 shadow-[0_12px_28px_rgba(244,63,94,0.14)]"
-      : tone === "save"
-      ? "border-[#ff7a1a]/30 bg-[#ff7a1a]/12 text-[#ffb36b] shadow-[0_12px_28px_rgba(255,122,26,0.14)]"
-      : "border-white/15 bg-white/10 text-[#f5f0de]";
-
-  return `group/action inline-flex h-10 items-center rounded-full border transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] ${
-    active
-      ? activeStyles
-      : "border-white/10 bg-white/[0.03] text-white/70 hover:border-[#ff8a1e]/30 hover:bg-[#ff8a1e]/10 hover:text-[#f5f0de]"
-  }`;
 }
 
 function contentHref(post: CinePostWithDetails): string | null {
@@ -105,7 +91,7 @@ function Avatar({ user, size = "h-10 w-10" }: { user: User; size?: string }) {
   }
 
   return (
-    <div className={`flex ${size} items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white`}>
+    <div className={`flex ${size} items-center justify-center rounded-full bg-[#f5f0de] text-sm font-black text-[#050505]`}>
       {user.name.charAt(0).toUpperCase()}
     </div>
   );
@@ -232,7 +218,6 @@ function CommentThread({
   setReplyingTo,
   setReplyText,
   submitting,
-  theme = "brutalist",
   depth = 0,
 }: {
   comment: CinePostCommentWithUser;
@@ -246,16 +231,14 @@ function CommentThread({
   setReplyingTo: (commentId: string | null) => void;
   setReplyText: (value: string) => void;
   submitting: boolean;
-  theme?: "default" | "brutalist";
   depth?: number;
 }) {
-  const isBrutalist = theme === "brutalist";
   const [menuOpen, setMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(comment.content);
   const [commentSaving, setCommentSaving] = useState(false);
   const hasReplies = comment.replies.length > 0;
-  const avatarSize = depth > 0 ? "h-7 w-7" : "h-8 w-8";
+  const avatarSize = depth > 0 ? "h-7 w-7" : "h-9 w-9";
 
   useEffect(() => {
     if (!isEditing) {
@@ -318,51 +301,22 @@ function CommentThread({
   };
 
   return (
-    <div className="relative py-4">
-      <div className="relative pl-11">
-        {(hasReplies || depth > 0) && (
-          <span
-            aria-hidden="true"
-            className={`absolute left-4 top-9 bottom-0 w-px ${
-              isBrutalist ? "bg-white/10" : "bg-slate-200"
-            }`}
-          />
-        )}
-        {depth > 0 && (
-          <span
-            aria-hidden="true"
-            className={`absolute -left-5 top-5 h-px w-5 ${
-              isBrutalist ? "bg-white/10" : "bg-slate-200"
-            }`}
-          />
-        )}
+    <div className="py-3">
+      <div className="flex gap-2.5">
+        <Link href={profileHref(comment.user)} className="flex-shrink-0">
+          <Avatar user={comment.user} size={avatarSize} />
+        </Link>
 
-        <div className="absolute left-0 top-0">
-          <Link href={profileHref(comment.user)} className="block flex-shrink-0">
-            <Avatar user={comment.user} size={avatarSize} />
-          </Link>
-        </div>
-
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <Link
-                  href={profileHref(comment.user)}
-                  className={`text-sm font-black ${isBrutalist ? "text-[#f5f0de] hover:text-white" : "text-slate-900 hover:text-slate-700"}`}
-                >
+                <Link href={profileHref(comment.user)} className="text-[13px] font-black text-[#f5f0de] transition hover:text-[#ffb36b]">
                   {comment.user.name}
                 </Link>
-                <span className={`text-xs ${isBrutalist ? "text-white/35" : "text-slate-400"}`}>
-                  {relativeTime(comment.created_at)}
-                </span>
-                {comment.insightScore > 8 && (
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300/90">
-                    Top insight
-                  </span>
-                )}
+                <span className="text-[11px] text-white/35">{relativeTime(comment.created_at)}</span>
                 {comment.user_id === postOwnerId && (
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ff9b4a]">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#ff9b4a]">
                     Owner
                   </span>
                 )}
@@ -374,27 +328,19 @@ function CommentThread({
                 <button
                   type="button"
                   onClick={() => setMenuOpen((open) => !open)}
-                  className={`rounded-full p-1 transition ${
-                    isBrutalist ? "text-white/45 hover:bg-white/5 hover:text-[#f5f0de]" : "text-slate-400 hover:bg-slate-50 hover:text-slate-950"
-                  }`}
+                  className="rounded-full p-1 text-white/45 transition hover:bg-white/5 hover:text-[#f5f0de]"
                   aria-label="Comment options"
                   aria-expanded={menuOpen}
                 >
-                  <MoreVertical className="h-5 w-5" />
+                  <MoreVertical className="h-4 w-4" />
                 </button>
 
                 {menuOpen && (
-                  <div
-                    className={`absolute right-0 top-9 z-20 w-40 overflow-hidden border p-1 shadow-xl ${
-                      isBrutalist ? "border-white/10 bg-[#111111]" : "rounded-2xl border-slate-200 bg-white"
-                    }`}
-                  >
+                  <div className="absolute right-0 top-9 z-20 w-40 overflow-hidden border border-white/10 bg-[#111111] p-1 shadow-xl">
                     <button
                       type="button"
                       onClick={startEdit}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold transition ${
-                        isBrutalist ? "text-[#f5f0de] hover:bg-white/5" : "rounded-xl text-slate-700 hover:bg-slate-50"
-                      }`}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold text-[#f5f0de] transition hover:bg-white/5"
                     >
                       <Pencil className="h-4 w-4" />
                       Edit
@@ -402,9 +348,7 @@ function CommentThread({
                     <button
                       type="button"
                       onClick={deleteComment}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold transition ${
-                        isBrutalist ? "text-[#ff7a1a] hover:bg-white/5" : "rounded-xl text-red-600 hover:bg-red-50"
-                      }`}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold text-[#ff7a1a] transition hover:bg-white/5"
                     >
                       <Trash2 className="h-4 w-4" />
                       Delete
@@ -421,17 +365,13 @@ function CommentThread({
                 value={editText}
                 onChange={(event) => setEditText(event.target.value)}
                 rows={3}
-                className={`w-full resize-none border px-4 py-3 text-sm leading-6 outline-none ${
-                  isBrutalist
-                    ? "border-white/10 bg-[#0d0d0d] text-[#f5f0de] focus:border-[#ff7a1a]"
-                    : "border-slate-200 bg-white text-slate-800 focus:border-blue-500"
-                }`}
+                className="w-full resize-none border border-white/10 bg-[#0d0d0d] px-4 py-3 text-sm leading-6 text-[#f5f0de] outline-none focus:border-[#ff7a1a]"
               />
               <div className="flex gap-3 text-xs font-black">
                 <button
                   type="button"
                   onClick={cancelEdit}
-                  className={isBrutalist ? "text-white/55 transition hover:text-[#f5f0de]" : "text-slate-500 transition hover:text-slate-800"}
+                  className="text-white/55 transition hover:text-[#f5f0de]"
                 >
                   Cancel
                 </button>
@@ -439,9 +379,7 @@ function CommentThread({
                   type="button"
                   onClick={saveEdit}
                   disabled={commentSaving || editText.trim().length < 2}
-                  className={`transition disabled:opacity-50 ${
-                    isBrutalist ? "text-[#ff9b4a] hover:text-[#ffb36b]" : "text-blue-600 hover:text-blue-700"
-                  }`}
+                  className="text-[#ff9b4a] transition hover:text-[#ffb36b] disabled:opacity-50"
                 >
                   {commentSaving ? "Saving..." : "Save"}
                 </button>
@@ -449,14 +387,8 @@ function CommentThread({
             </div>
           ) : (
             <>
-              <p className={`mt-2 whitespace-pre-wrap text-[15px] leading-7 ${
-                isBrutalist ? "text-[#f5f0de]/84" : "text-slate-700"
-              }`}>
-                {linkify(comment.content)}
-              </p>
-              <div className={`mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm ${
-                isBrutalist ? "text-white/42" : "text-slate-500"
-              }`}>
+              <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5 text-[#f5f0de]/84">{linkify(comment.content)}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] font-black">
                 {currentUser && (
                   <button
                     type="button"
@@ -464,14 +396,11 @@ function CommentThread({
                       setReplyingTo(replyingTo === comment.id ? null : comment.id);
                       setReplyText("");
                     }}
-                    className={`font-medium transition ${
-                      isBrutalist ? "hover:text-[#ff9b4a]" : "hover:text-slate-900"
-                    }`}
+                    className="text-white/55 transition hover:text-[#f5f0de]"
                   >
-                    Reply
+                    Reply{hasReplies ? ` (${comment.replies.length})` : ""}
                   </button>
                 )}
-                {hasReplies && <span>{comment.replies.length} repl{comment.replies.length === 1 ? "y" : "ies"}</span>}
               </div>
             </>
           )}
@@ -479,27 +408,28 @@ function CommentThread({
       </div>
 
       {replyingTo === comment.id && (
-        <div className="mt-3 flex items-end gap-3 pl-11">
+        <div className="mt-2 flex gap-2 pl-11">
           <input
             value={replyText}
             onChange={(event) => setReplyText(event.target.value)}
             placeholder={`Reply to ${comment.user.name}`}
-            className="min-w-0 flex-1 border-b border-white/12 bg-transparent px-0 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/25 focus:border-[#ff7a1a]"
+            className="min-w-0 flex-1 border-b border-white/10 bg-transparent px-0 py-1.5 text-[13px] text-[#f5f0de] outline-none placeholder:text-white/35 focus:border-[#ff7a1a]"
           />
           <button
             type="button"
             disabled={submitting || replyText.trim().length < 2}
             onClick={() => onReply(comment.id, comment.user_id)}
-            className="pb-2 text-[#ff7a1a] transition hover:text-[#ff9b4a] disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-none bg-[#ff7a1a] px-2.5 py-1.5 text-[11px] font-black text-black disabled:opacity-50"
             aria-label="Send reply"
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-3.5 w-3.5" />
+            Reply
           </button>
         </div>
       )}
 
       {hasReplies && (
-        <div className="ml-5 mt-1 space-y-1 pl-8 sm:pl-10">
+        <div className="ml-4 mt-2 space-y-1 border-l border-white/10 pl-3 sm:ml-5 sm:pl-5">
           {comment.replies.map((reply) => (
             <CommentThread
               key={reply.id}
@@ -514,7 +444,6 @@ function CommentThread({
               setReplyingTo={setReplyingTo}
               setReplyText={setReplyText}
               submitting={submitting}
-              theme={theme}
               depth={depth + 1}
             />
           ))}
@@ -539,6 +468,7 @@ export default function CinePostPage() {
   const [peopleModalUsers, setPeopleModalUsers] = useState<User[]>([]);
   const [peopleModalLoading, setPeopleModalLoading] = useState(false);
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
+  const [stillUrls, setStillUrls] = useState<string[]>([]);
   const [engagementPending, setEngagementPending] = useState<Record<CinePostEngagementType, boolean>>({
     like: false,
     save: false,
@@ -673,6 +603,45 @@ export default function CinePostPage() {
     await refreshPost();
   };
 
+  useEffect(() => {
+    if (!post || post.backdrop_gallery_urls?.length) {
+      setStillUrls([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      if (post.content_type === "movie" && post.content_id) {
+        const details = await getMovieDetails(post.content_id);
+        if (!cancelled && details) {
+          const nextStillUrls = details.backdrop_gallery_urls?.length
+            ? details.backdrop_gallery_urls
+            : details.backdrop_url
+              ? [details.backdrop_url]
+              : [];
+          setStillUrls(nextStillUrls);
+        }
+      } else if (post.content_type === "tv" && post.content_id) {
+        const details = await getShowDetails(post.content_id);
+        if (!cancelled && details) {
+          const nextStillUrls = details.backdrop_gallery_urls?.length
+            ? details.backdrop_gallery_urls
+            : details.backdrop_url
+              ? [details.backdrop_url]
+              : [];
+          setStillUrls(nextStillUrls);
+        }
+      } else if (!cancelled) {
+        setStillUrls([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [post]);
+
   if (loading || !user) {
     return <CinematicLoading message="Post is loading" />;
   }
@@ -698,7 +667,10 @@ export default function CinePostPage() {
   }
 
   const href = contentHref(post);
-  const isListPost = post.content_type === "list" && (post.list_items?.length || 0) > 0;
+  const primaryImage = post.content_type === "list" ? post.list_cover_images?.[0] || null : post.poster_url || null;
+  const secondaryImages = post.content_type === "list"
+    ? (post.list_cover_images || []).slice(1, 3)
+    : (post.backdrop_gallery_urls?.length ? post.backdrop_gallery_urls : stillUrls);
   const sortedComments = [...post.comments].sort((a, b) => {
     if (commentSort === "newest") {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -710,198 +682,169 @@ export default function CinePostPage() {
   return (
     <PageLayout user={user} onSignOut={handleSignOut}>
       <main className="mx-auto max-w-5xl px-3 py-4 sm:px-6 sm:py-8">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#111111] px-4 py-2 text-sm font-bold text-[#f5f0de] transition hover:border-[#ff7a1a]/30 hover:text-[#ffb36b]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </button>
-
-        <article className="border-y border-white/10 bg-black">
-          <div className={`py-4 sm:py-6 ${isListPost ? "space-y-5" : "grid gap-6 sm:grid-cols-[12rem_minmax(0,1fr)]"}`}>
-            {isListPost ? (
-              <div className="px-4 sm:px-6">
-                <div className="flex items-start gap-3">
-                  <Link href={profileHref(post.user)} className="flex-shrink-0">
-                    <Avatar user={post.user} size="h-11 w-11" />
-                  </Link>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Link href={profileHref(post.user)} className="text-lg font-black text-[#f5f0de] hover:text-[#ffb36b]">
-                        {getDisplayUserName(post.user, user)}
-                      </Link>
-                      <span className="text-sm text-white/45">{relativeTime(post.created_at)}</span>
-                    </div>
-                    {post.type === "log" ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex rounded-full bg-[#ff7a1a] px-3 py-1 text-xs font-black text-black">
-                          Log
-                        </span>
-                        {getCinePostLogRatingLabel(post) ? (
-                          <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-[#f5f0de]">
-                            {getCinePostLogRatingLabel(post)}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
+        <article className="bg-black">
+          <div className="py-3 sm:py-4">
+            <div className="px-4 sm:px-5">
+              <div className="flex items-start justify-between gap-3">
+                <Link href={profileHref(post.user)} className="flex min-w-0 items-center gap-3">
+                  <Avatar user={post.user} size="h-8 w-8" />
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-black text-[#f5f0de] sm:text-[15px]">
+                      {getDisplayUserName(post.user, user)}
+                    </p>
+                    <p className="flex items-center gap-1 text-[11px] sm:text-xs">
+                      <span className="font-bold uppercase tracking-wide text-[#ff8d3b]">{post.anchor_type}</span>
+                      <span className="text-white/40"> · {formatRelativeTime(post.created_at)}</span>
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <CinePostOwnerMenu
-                      post={post}
-                      currentUser={user}
-                      onDeleted={() => router.push("/dashboard")}
-                      onUpdated={refreshPost}
-                      theme="brutalist"
-                    />
-                  </div>
-                </div>
+                </Link>
 
-                <ExpandablePostBody
-                  body={getCinePostDisplayBody(post)}
-                  spoiler={post.contains_spoiler}
-                  className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82"
-                  buttonClassName="mt-6 max-w-3xl"
+                <CinePostOwnerMenu
+                  post={post}
+                  currentUser={user}
+                  onDeleted={() => router.push("/dashboard")}
+                  onUpdated={refreshPost}
+                  theme="brutalist"
                 />
-
-                <div className="mt-6">
-                  <CinePostListStrip items={post.list_items || []} theme="brutalist" />
-                </div>
               </div>
-            ) : (
-              <>
-                {href ? (
+
+              {href && (
+                <div className="pb-2 pt-2.5">
                   <Link
                     href={href}
-                    className="group relative mx-auto aspect-[2/3] w-full max-w-48 overflow-hidden bg-[#111111] sm:mx-0"
+                    className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/40 hover:bg-white/10 sm:text-[11px]"
                   >
-                    <CinePostArtwork
-                      src={post.poster_url}
-                      collageImages={post.list_cover_images}
-                      alt={post.content_title || post.anchor_label}
-                      className="h-full w-full"
-                      mediaClassName="transition duration-300 group-hover:scale-[1.02]"
-                    />
+                    Open {post.anchor_type === "tv" ? "TV Show" : post.anchor_type === "list" ? "List" : post.anchor_type === "crew" ? "Crew" : "Movie"}
+                    <span className="text-sm leading-none">›</span>
                   </Link>
-                ) : (
-                  <div className="mx-auto aspect-[2/3] w-full max-w-48 bg-[#111111] sm:mx-0" />
-                )}
-
-                <div className="min-w-0 pr-4 sm:pr-0">
-                  <div className="flex items-start gap-3">
-                    <Link href={profileHref(post.user)} className="flex-shrink-0">
-                      <Avatar user={post.user} size="h-11 w-11" />
-                    </Link>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <Link href={profileHref(post.user)} className="text-lg font-black text-[#f5f0de] hover:text-[#ffb36b]">
-                          {getDisplayUserName(post.user, user)}
-                        </Link>
-                        <span className="text-sm text-white/45">{relativeTime(post.created_at)}</span>
-                      </div>
-                    {post.type === "log" ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex rounded-full bg-[#ff7a1a] px-3 py-1 text-xs font-black text-black">
-                          Log
-                        </span>
-                        {getCinePostLogRatingLabel(post) ? (
-                          <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-[#f5f0de]">
-                            {getCinePostLogRatingLabel(post)}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <CinePostOwnerMenu
-                        post={post}
-                        currentUser={user}
-                        onDeleted={() => router.push("/dashboard")}
-                        onUpdated={refreshPost}
-                        theme="brutalist"
-                      />
-                    </div>
-                  </div>
-
-                  <ExpandablePostBody
-                    body={getCinePostDisplayBody(post)}
-                    spoiler={post.contains_spoiler}
-                    className="mt-6 max-w-3xl whitespace-pre-wrap text-[16px] leading-8 text-[#f5f0de]/82"
-                    buttonClassName="mt-6 max-w-3xl"
-                  />
                 </div>
-              </>
-            )}
+              )}
+            </div>
+
+            <ContentImageRow
+              primaryUrl={primaryImage}
+              primaryAlt={post.content_title || post.anchor_label}
+              secondaryUrls={secondaryImages}
+              layout={post.anchor_type === "list" ? "posters-only" : "poster-first"}
+              density="compact"
+            />
+
+            <div className="px-4 pt-2.5 sm:px-5">
+              <h1 className="text-[16px] font-black uppercase tracking-tight text-[#f5f0de] sm:text-[18px]">
+                {post.content_title || post.anchor_label}
+              </h1>
+
+              <ExpandablePostBody
+                body={getCinePostDisplayBody(post)}
+                spoiler={post.contains_spoiler}
+                className="mt-2 border-l-2 border-[#ff7a1a]/50 pl-3 whitespace-pre-wrap text-[13px] leading-5 text-[#f5f0de]/82"
+                buttonClassName="mt-3 max-w-3xl"
+              />
+            </div>
           </div>
 
-          <div className="border-t border-white/10 py-4">
+          <div className="border-t border-white/10 px-4 py-3 sm:px-5">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <div className={getEngagementPillClass(post.liked_by_current_user, "like")}>
+              <div className="flex min-w-0 items-center gap-5 text-white/75">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleEngagement("like", !post.liked_by_current_user)}
                     disabled={engagementPending.like}
-                    className="inline-flex h-full items-center justify-center px-3 disabled:cursor-not-allowed"
+                    className="transition hover:text-[#f5f0de] disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label={post.liked_by_current_user ? "Unlike post" : "Like post"}
                   >
                     <Heart
-                      className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
-                        post.liked_by_current_user ? "fill-rose-500" : ""
+                      className={`h-5 w-5 ${
+                        post.liked_by_current_user ? "fill-rose-500 text-rose-500" : "text-white/80"
                       }`}
                     />
                   </button>
-                  <div className="h-4 w-px bg-current/15" />
                   <button
                     type="button"
                     onClick={() => openPeopleModal("like", "Liked by")}
                     disabled={post.likes_count === 0}
-                    className="inline-flex h-full min-w-[2.5rem] items-center justify-center px-3 text-xs font-black tabular-nums text-current/90 transition-colors disabled:cursor-default disabled:opacity-40"
+                    className="text-base font-semibold text-[#f5f0de] transition hover:text-white disabled:cursor-default disabled:opacity-50"
                     aria-label={post.likes_count === 1 ? "1 like" : `${post.likes_count} likes`}
                   >
-                    <span className="tabular-nums">{post.likes_count}</span>
+                    {post.likes_count}
                   </button>
                 </div>
+
                 <button
                   type="button"
                   onClick={() => {
                     document.getElementById("post-comments")?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                  className={getEngagementPillClass(false, "neutral")}
+                  className="flex items-center gap-2 transition hover:text-[#f5f0de]"
                   aria-label={post.comments_count === 1 ? "1 comment" : `${post.comments_count} comments`}
                 >
-                  <MessageCircle className="h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110" />
-                  <span className="pr-0.5 text-xs font-black tabular-nums text-current/80">{post.comments_count}</span>
+                  <MessageCircle className="h-5 w-5 text-white/80" />
+                  <span className="text-base font-semibold text-[#f5f0de]">{post.comments_count}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleEngagement("save", !post.saved_by_current_user)}
+                  disabled={engagementPending.save}
+                  className="transition hover:text-[#f5f0de] disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
+                >
+                  <Bookmark
+                    className={`h-5 w-5 ${
+                      post.saved_by_current_user ? "fill-[#f5f0de] text-[#f5f0de]" : "text-white/80"
+                    }`}
+                  />
                 </button>
               </div>
+
               <button
                 type="button"
-                onClick={() => handleEngagement("save", !post.saved_by_current_user)}
-                disabled={engagementPending.save}
-                className={getEngagementPillClass(post.saved_by_current_user, "save")}
-                aria-label={post.saved_by_current_user ? "Unsave post" : "Save post"}
+                onClick={async () => {
+                  const absoluteUrl = new URL(`/posts/${post.id}`, window.location.origin).toString();
+                  try {
+                    if (navigator.share) {
+                      await navigator.share({
+                        title: post.content_title || post.anchor_label,
+                        text: getCinePostDisplayBody(post).slice(0, 140),
+                        url: absoluteUrl,
+                      });
+                      return;
+                    }
+                    if (navigator.clipboard?.writeText) {
+                      await navigator.clipboard.writeText(absoluteUrl);
+                      return;
+                    }
+                  } catch (error) {
+                    console.error("Share post failed:", error);
+                  }
+                  window.prompt("Copy this link", absoluteUrl);
+                }}
+                className="flex items-center gap-2.5 text-white/75 transition hover:text-[#f5f0de]"
               >
-                <Bookmark
-                  className={`h-[18px] w-[18px] transition-transform duration-200 group-hover/action:scale-110 ${
-                    post.saved_by_current_user ? "fill-[#ff7a1a]" : ""
-                  }`}
-                />
+                <Share2 className="h-4 w-4" />
+                <span className="text-base font-medium">Share</span>
               </button>
             </div>
           </div>
         </article>
 
-        <section id="post-comments" className="mt-8 px-1 py-2 sm:px-0">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-bold uppercase tracking-[0.18em] text-white/55">Comments</h2>
+        <section id="post-comments" className="mt-6 px-1 py-1 sm:px-0">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-[#f5f0de] sm:text-base">
+                <MessageCircle className="h-3.5 w-3.5" />
+                Comments
+              </h2>
+              <p className="text-[11px] text-white/45 sm:text-xs">Replies stay with this post.</p>
+            </div>
             <div className="rounded-full border border-white/10 bg-[#111111] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               {(["top", "newest"] as const).map((sort) => (
                 <button
                   key={sort}
                   type="button"
                   onClick={() => setCommentSort(sort)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-black capitalize transition ${
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-black capitalize transition ${
                     commentSort === sort ? "bg-[#ff7a1a] text-black" : "text-white/55 hover:bg-white/10 hover:text-[#f5f0de]"
                   }`}
                 >
@@ -911,27 +854,28 @@ export default function CinePostPage() {
             </div>
           </div>
 
-          <div className="mb-6 flex items-end gap-3 border-b border-white/10 pb-3">
+          <div className="mb-3 flex gap-2">
             <input
               value={commentText}
               onChange={(event) => setCommentText(event.target.value)}
               placeholder="Add a comment..."
-              className="min-w-0 flex-1 bg-transparent px-0 py-3 text-base text-[#f5f0de] outline-none transition placeholder:text-white/25"
+              className="min-w-0 flex-1 border-b border-white/10 bg-transparent px-0 py-2 text-[13px] text-[#f5f0de] outline-none placeholder:text-white/35 focus:border-[#ff7a1a]"
             />
             <button
               type="button"
               disabled={submittingComment || commentText.trim().length < 2}
               onClick={handleComment}
-              className="inline-flex h-11 w-11 items-center justify-center text-[#ff7a1a] transition hover:text-[#ff9b4a] disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-none bg-[#ff7a1a] px-3 py-2 text-[12px] font-black text-black disabled:opacity-50"
               aria-label="Send comment"
             >
-              <Send className="h-5 w-5" />
+              <Send className="h-3.5 w-3.5" />
+              Send
             </button>
           </div>
 
-          <div className="space-y-1">
+          <div className="divide-y divide-white/10">
             {post.comments.length === 0 ? (
-              <p className="py-6 text-sm text-white/55">
+              <p className="py-4 text-sm text-white/55">
                 No comments yet. Start the thread.
               </p>
             ) : (
@@ -949,7 +893,6 @@ export default function CinePostPage() {
                   setReplyingTo={setReplyingTo}
                   setReplyText={setReplyText}
                   submitting={submittingComment}
-                  theme="brutalist"
                 />
               ))
             )}
