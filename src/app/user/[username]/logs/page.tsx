@@ -17,7 +17,8 @@ import PageLayout from "@/components/PageLayout";
 import CinematicLoading from "@/components/CinematicLoading";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getTvEpisodeLabel, getUserMovieLogs } from "@/lib/logs";
+import { getUserMovieLogs } from "@/lib/logs";
+import { getTvEpisodeBadgeLabel } from "@/lib/tv-log-label";
 import { getUserByUsername } from "@/lib/profile";
 import type { MovieLogWithContent, User } from "@/types";
 
@@ -119,7 +120,7 @@ function isUnavailableContent(log: MovieLogWithContent): boolean {
 }
 
 function getSeasonLabel(log: MovieLogWithContent): string {
-  return getTvEpisodeLabel(log);
+  return getTvEpisodeBadgeLabel(log);
 }
 
 function normalizeTasteValue(value: string | null | undefined): string {

@@ -10,7 +10,8 @@ import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, get } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
-import { getTvEpisodeLabel, getUserMovieLogs, deleteMovieLog } from "@/lib/logs";
+import { getUserMovieLogs, deleteMovieLog } from "@/lib/logs";
+import { getTvEpisodeBadgeLabel } from "@/lib/tv-log-label";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { searchMovies } from "@/lib/tmdb";
@@ -58,7 +59,7 @@ function isUnavailableContent(log: MovieLogWithContent): boolean {
 }
 
 function getSeasonLabel(log: MovieLogWithContent): string {
-  return getTvEpisodeLabel(log);
+  return getTvEpisodeBadgeLabel(log);
 }
 
 function dateKeyFromLog(log: MovieLogWithContent): string {

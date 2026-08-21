@@ -10,7 +10,7 @@ import { signOut as authSignOut } from "@/lib/auth";
 import { getFriendLogs } from "@/lib/friend-logs";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
-import { getTvEpisodeLabel } from "@/lib/logs";
+import { getTvEpisodeBadgeLabel } from "@/lib/tv-log-label";
 
 export default function FriendLogsPage() {
   // --- Season filter state ---
@@ -84,7 +84,7 @@ export default function FriendLogsPage() {
     }
   };
 
-  const getSeasonLabel = (log: MovieLogWithContent) => getTvEpisodeLabel(log);
+  const getSeasonLabel = (log: MovieLogWithContent) => getTvEpisodeBadgeLabel(log);
 
   // Filter logs by season if seasonFilter is set (and log.season exists)
   const filteredLogs = seasonFilter === "all"
@@ -178,6 +178,11 @@ export default function FriendLogsPage() {
                       alt={log.content.title}
                       className="h-full w-full object-cover"
                     />
+                    {getSeasonLabel(log) && (
+                      <div className="absolute left-2 top-2 rounded-full bg-[#ff7a1a] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg sm:left-3 sm:top-3 sm:text-xs">
+                        {getSeasonLabel(log)}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -199,12 +204,6 @@ export default function FriendLogsPage() {
                   <div className="mb-1 text-[10px] text-slate-500 sm:mb-3 sm:text-sm">
                     {formatDate(log.watched_date)}
                   </div>
-
-                  {getSeasonLabel(log) && (
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ffb36b] sm:mb-3 sm:text-xs">
-                      {getSeasonLabel(log)}
-                    </div>
-                  )}
 
                   {/* Reaction */}
                   <div className="sm:mb-3">

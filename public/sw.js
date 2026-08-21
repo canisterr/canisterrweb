@@ -17,6 +17,119 @@ const messaging = firebase.messaging();
 const SEEN_NOTIFICATION_KEY = "__canisterr_seen_push_notifications__";
 const SEEN_NOTIFICATION_TTL_MS = 15000;
 
+// Bump this whenever the caching strategy below changes so old cache
+// contents don't linger across deploys.
+const CACHE_VERSION = "v1";
+const STATIC_CACHE = `canisterr-static-${CACHE_VERSION}`;
+const IMAGE_CACHE = `canisterr-images-${CACHE_VERSION}`;
+const API_CACHE = `canisterr-api-${CACHE_VERSION}`;
+const CURRENT_CACHES = new Set([STATIC_CACHE, IMAGE_CACHE, API_CACHE]);
+const OFFLINE_URL = "/offline";
+const MAX_IMAGE_ENTRIES = 250;
+const MAX_API_ENTRIES = 200;
+
+async function trimCache(cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  if (keys.length <= maxEntries) return;
+
+  const overflow = keys.length - maxEntries;
+  for (let i = 0; i < overflow; i += 1) {
+    await cache.delete(keys[i]);
+  }
+}
+
+function isNextStaticAsset(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith("/_next/static/");
+}
+
+function isOptimizedImage(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith("/_next/image");
+}
+
+function isTmdbApiProxy(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith("/api/tmdb/");
+}
+
+// Immutable, content-hashed build assets: safe to serve from cache forever
+// once fetched, since a changed file always gets a new URL.
+async function handleStaticAsset(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  if (response.ok) {
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
+// Transformed images rarely change for a given URL: cache-first keeps
+// re-opens instant, with a background refresh so a bad cached response
+// doesn't stick around forever.
+async function handleImage(request) {
+  const cache = await caches.open(IMAGE_CACHE);
+  const cached = await cache.match(request);
+
+  const networkFetch = fetch(request)
+    .then(async (response) => {
+      if (response.ok) {
+        await cache.put(request, response.clone());
+        trimCache(IMAGE_CACHE, MAX_IMAGE_ENTRIES);
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    networkFetch.catch(() => {});
+    return cached;
+  }
+
+  const fresh = await networkFetch;
+  return fresh || Response.error();
+}
+
+// TMDB JSON responses: stale-while-revalidate so search/movie data renders
+// instantly from whatever was last seen, then refreshes in the background.
+async function handleApiRequest(request) {
+  const cache = await caches.open(API_CACHE);
+  const cached = await cache.match(request);
+
+  const networkFetch = fetch(request)
+    .then(async (response) => {
+      if (response.ok) {
+        await cache.put(request, response.clone());
+        trimCache(API_CACHE, MAX_API_ENTRIES);
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    networkFetch.catch(() => {});
+    return cached;
+  }
+
+  const fresh = await networkFetch;
+  return fresh || Response.error();
+}
+
+// App navigations: always prefer the network (client components need fresh
+// auth/data anyway), only falling back to the offline shell when the
+// network is unreachable. Deliberately not cached, since cached HTML would
+// reference JS chunk hashes from a prior deploy that may no longer exist.
+async function handleNavigation(request) {
+  try {
+    return await fetch(request);
+  } catch {
+    const cache = await caches.open(STATIC_CACHE);
+    const offline = await cache.match(OFFLINE_URL);
+    return offline || Response.error();
+  }
+}
+
 function readSeenNotifications() {
   try {
     if (!self[SEEN_NOTIFICATION_KEY]) {
@@ -66,11 +179,61 @@ function shouldShowNotification(dedupKey) {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    (async () => {
+      try {
+        const cache = await caches.open(STATIC_CACHE);
+        await cache.add(OFFLINE_URL);
+      } catch (error) {
+        console.warn("Offline shell precache failed:", error);
+      }
+      await self.skipWaiting();
+    })()
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      const existingCaches = await caches.keys();
+      await Promise.all(
+        existingCaches
+          .filter((name) => name.startsWith("canisterr-") && !CURRENT_CACHES.has(name))
+          .map((name) => caches.delete(name))
+      );
+      await self.clients.claim();
+    })()
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  if (request.mode === "navigate") {
+    event.respondWith(handleNavigation(request));
+    return;
+  }
+
+  if (isNextStaticAsset(url)) {
+    event.respondWith(handleStaticAsset(request));
+    return;
+  }
+
+  if (isOptimizedImage(url)) {
+    event.respondWith(handleImage(request));
+    return;
+  }
+
+  if (isTmdbApiProxy(url)) {
+    event.respondWith(handleApiRequest(request));
+    return;
+  }
+
+  // Everything else (Firebase, analytics, auth, other API routes) is left
+  // untouched so the browser handles it normally.
 });
 
 messaging.onBackgroundMessage((payload) => {

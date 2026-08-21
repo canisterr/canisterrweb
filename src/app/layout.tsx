@@ -6,6 +6,7 @@ import { CurrentUserProvider } from "@/components/CurrentUserProvider";
 import DeferredPushEnhancements from "@/components/DeferredPushEnhancements";
 import GlobalErrorListener from "@/components/GlobalErrorListener";
 import LocalhostServiceWorkerCleanup from "@/components/LocalhostServiceWorkerCleanup";
+import RegisterServiceWorker from "@/components/RegisterServiceWorker";
 import MobileInstallPrompt from "@/components/MobileInstallPrompt";
 import PwaBottomNav from "@/components/PwaBottomNav";
 import JsonLd from "@/components/JsonLd";
@@ -59,6 +60,7 @@ export default function RootLayout({
         <JsonLd data={websiteSchema()} />
         <JsonLd data={organizationSchema()} />
         <LocalhostServiceWorkerCleanup />
+        <RegisterServiceWorker />
         <CurrentUserProvider>
           <HydrationFix>{children}</HydrationFix>
         </CurrentUserProvider>

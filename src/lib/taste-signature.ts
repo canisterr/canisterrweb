@@ -50,6 +50,11 @@ const EMPTY_SIGNATURE: TasteSignature = {
   updatedAt: new Date(0).toISOString(),
 };
 
+function isPermissionDeniedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /permission/i.test(message) && /denied/i.test(message);
+}
+
 function getContentField(taste: MatchTaste, field: "genres" | "keywords" | "studios"): string[] {
   const content = taste.content as any;
   if (!content || !Array.isArray(content[field])) return [];
@@ -344,7 +349,12 @@ export async function recomputeTasteSignature(userId: string): Promise<TasteSign
   try {
     await set(ref(db, `taste_signatures/${userId}`), signature);
   } catch (error) {
-    console.error("recomputeTasteSignature: failed to persist", userId, error);
+    // Some environments intentionally disallow client writes to the cache path.
+    // The computed signature is still valid for immediate use, so treat this
+    // as a silent cache miss instead of an app error.
+    if (!isPermissionDeniedError(error)) {
+      console.error("recomputeTasteSignature: failed to persist", userId, error);
+    }
   }
 
   return signature;

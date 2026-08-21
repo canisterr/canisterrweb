@@ -6,7 +6,8 @@ import PageLayout from "@/components/PageLayout";
 import CinematicLoading from "@/components/CinematicLoading";
 import LogMovieModal from "@/components/LogMovieModal";
 import { MovieLog, MovieLogWithContent, User, Content, LogCommentWithUser } from "@/types";
-import { deleteMovieLog, updateMovieLog, getLogsForContent, getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
+import { deleteMovieLog, updateMovieLog, getLogsForContent, getVisibleLogNotes } from "@/lib/logs";
+import { getTvEpisodeBadgeLabel } from "@/lib/tv-log-label";
 import { likeLogAndNotify, unlikeLog, getLogLikes } from "@/lib/log-likes";
 import { getMovieDetails } from "@/lib/tmdb";
 import { getShowDetails } from "@/lib/tvmaze";
@@ -78,7 +79,7 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 function getSeasonLabel(log: MovieLogWithContent): string {
-  return getTvEpisodeLabel(log);
+  return getTvEpisodeBadgeLabel(log);
 }
 
 function TicketActionsModal({

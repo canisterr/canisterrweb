@@ -110,6 +110,7 @@ export default function LogMovieModal({
   const ALL_EPISODES_VALUE = "__all__";
   const isEditMode = mode === "edit";
   const contentLabel = content.type === "tv" ? "TV show" : "Movie";
+  const isTvContent = content.type === "tv";
   const tvTmdbId = content.type === "tv" ? content.tmdb_id ?? null : null;
   const [watchedDate, setWatchedDate] = useState(new Date().toISOString().split("T")[0]);
   const [reaction, setReaction] = useState<null | 0 | 1 | 1.5 | 2>(null); // 0=Bad, 1=Good, 1.5=Average, 2=Masterpiece
@@ -121,6 +122,7 @@ export default function LogMovieModal({
   const [ticketImageUrl, setTicketImageUrl] = useState<string | null>(null);
   const [tvSeasons, setTvSeasons] = useState<TVMazeSeason[]>([]);
   const [tvEpisodes, setTvEpisodes] = useState<TVMazeEpisode[]>([]);
+  const [tvLogMode, setTvLogMode] = useState<"show" | "episode">("show");
   const [selectedSeasonScope, setSelectedSeasonScope] = useState<string>("all");
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string>("");
   const [loadingSeasons, setLoadingSeasons] = useState(false);
@@ -187,6 +189,7 @@ export default function LogMovieModal({
     if (!isOpen || content.type !== "tv") {
       setTvSeasons([]);
       setTvEpisodes([]);
+      setTvLogMode("show");
       setSelectedSeasonScope("all");
       setSelectedEpisodeId("");
       setLoadingSeasons(false);
@@ -240,7 +243,7 @@ export default function LogMovieModal({
   }, [content.id, content.type, initialTvScope, isOpen, tvTmdbId]);
 
   useEffect(() => {
-    if (!isOpen || content.type !== "tv") return;
+    if (!isOpen || content.type !== "tv" || tvLogMode !== "episode") return;
 
     let cancelled = false;
 
@@ -317,7 +320,7 @@ export default function LogMovieModal({
     return () => {
       cancelled = true;
     };
-  }, [content.id, content.type, existingLog, isEditMode, isOpen, selectedSeasonScope, tvTmdbId]);
+  }, [content.id, content.type, existingLog, isEditMode, isOpen, selectedSeasonScope, tvLogMode, tvTmdbId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -340,6 +343,9 @@ export default function LogMovieModal({
       setIsRewatch(rewatchValue === "true" || rewatchValue === true);
       setShareToFriends(false);
       setError("");
+      const hasEpisodeContext =
+        typeof existingLog.season === "number" || typeof existingLog.episode === "number";
+      setTvLogMode(hasEpisodeContext ? "episode" : "show");
       setSelectedSeasonScope(typeof existingLog.season === "number" ? String(existingLog.season) : "all");
       setSelectedEpisodeId(typeof existingLog.episode === "number" ? String(existingLog.episode) : "");
     } else {
@@ -359,6 +365,7 @@ export default function LogMovieModal({
       setContextNotes("");
       setIsRewatch(false);
       setError("");
+      setTvLogMode("show");
       setSelectedSeasonScope("all");
       setSelectedEpisodeId("");
     }
@@ -381,7 +388,8 @@ export default function LogMovieModal({
     const allowEmptyEpisodeSelection = isEditMode && existingLog && typeof existingLog.episode !== "number";
     const isAllEpisodesSelection = selectedEpisodeId === ALL_EPISODES_VALUE;
     if (
-      content.type === "tv" &&
+      isTvContent &&
+      tvLogMode === "episode" &&
       selectedSeasonScope !== "all" &&
       tvSeasons.length > 0 &&
       !selectedEpisodeId &&
@@ -417,7 +425,9 @@ export default function LogMovieModal({
           ? null
           : tvEpisodes.find((episode) => String(episode.id) === selectedEpisodeId) || null;
       const selectedSeasonNumber =
-        selectedEpisode?.season ?? (selectedSeasonScope === "all" ? undefined : Number(selectedSeasonScope));
+        tvLogMode === "episode"
+          ? selectedEpisode?.season ?? (selectedSeasonScope === "all" ? undefined : Number(selectedSeasonScope))
+          : undefined;
 
       if (isEditMode) {
         if (!existingLog) {
@@ -432,16 +442,16 @@ export default function LogMovieModal({
           mood: mood || undefined,
           ticket_image_url: ticketImageUrl || null,
           context_log: Object.keys(contextLog || {}).length > 0 ? (contextLog as MovieLog["context_log"]) : {},
-          season: contentType === "tv" ? selectedSeasonNumber : undefined,
+          season: contentType === "tv" && tvLogMode === "episode" ? selectedSeasonNumber : undefined,
           episode:
             contentType === "tv"
-              ? selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
+              ? tvLogMode !== "episode" || selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
                 ? undefined
                 : selectedEpisode?.number ?? undefined
               : undefined,
           episode_title:
             contentType === "tv"
-              ? selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
+              ? tvLogMode !== "episode" || selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
                 ? undefined
                 : selectedEpisode?.name ?? undefined
               : undefined,
@@ -473,14 +483,14 @@ export default function LogMovieModal({
           contextLog,
           ticketImageUrl,
           undefined,
-          contentType === "tv" ? selectedSeasonNumber : undefined,
+          contentType === "tv" && tvLogMode === "episode" ? selectedSeasonNumber : undefined,
           contentType === "tv"
-            ? selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
+            ? tvLogMode !== "episode" || selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
               ? undefined
               : selectedEpisode?.number ?? undefined
             : undefined,
           contentType === "tv"
-            ? selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
+            ? tvLogMode !== "episode" || selectedSeasonScope === "all" || selectedEpisodeId === ALL_EPISODES_VALUE
               ? undefined
               : selectedEpisode?.name ?? undefined
             : undefined,
@@ -763,6 +773,97 @@ export default function LogMovieModal({
           </section>
 
           <section className="border-t border-white/14 pt-4 sm:pt-5">
+            {isTvContent && (
+              <div className="mb-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#F5F2EA]">
+                  What are you logging?
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTvLogMode("show");
+                      setSelectedSeasonScope("all");
+                      setSelectedEpisodeId("");
+                    }}
+                    className={`border px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.16em] transition sm:text-xs ${
+                      tvLogMode === "show"
+                        ? "border-[#FF6A00] bg-[#FF6A00]/12 text-[#FFB36B]"
+                        : "border-white/12 text-[#F5F2EA] hover:border-white/30"
+                    }`}
+                  >
+                    Entire series
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTvLogMode("episode");
+                      setSelectedSeasonScope((current) => {
+                        if (current !== "all") return current;
+                        return tvSeasons[0] ? String(tvSeasons[0].number) : "all";
+                      });
+                    }}
+                    className={`border px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.16em] transition sm:text-xs ${
+                      tvLogMode === "episode"
+                        ? "border-[#FF6A00] bg-[#FF6A00]/12 text-[#FFB36B]"
+                        : "border-white/12 text-[#F5F2EA] hover:border-white/30"
+                    }`}
+                  >
+                    Specific episode
+                  </button>
+                </div>
+
+                {tvLogMode === "episode" && (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
+                        Season
+                      </label>
+                      {loadingSeasons ? (
+                        <div className="border border-white/12 px-3 py-2 text-xs text-white/48">Loading seasons...</div>
+                      ) : (
+                        <select
+                          value={selectedSeasonScope}
+                          onChange={(event) => setSelectedSeasonScope(event.target.value)}
+                          className="w-full border border-white/12 bg-[#050505] px-3 py-2 text-xs text-[#F5F2EA] outline-none focus:border-[#FF6A00]"
+                        >
+                          {tvSeasons.map((season) => (
+                            <option key={season.id} value={season.number}>
+                              {getSeasonOptionLabel(season)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
+                        Episode
+                      </label>
+                      {loadingEpisodes ? (
+                        <div className="border border-white/12 px-3 py-2 text-xs text-white/48">Loading episodes...</div>
+                      ) : (
+                        <select
+                          value={selectedEpisodeId}
+                          onChange={(event) => setSelectedEpisodeId(event.target.value)}
+                          className="w-full border border-white/12 bg-[#050505] px-3 py-2 text-xs text-[#F5F2EA] outline-none focus:border-[#FF6A00]"
+                        >
+                          <option value="" disabled>
+                            Select an episode
+                          </option>
+                          {tvEpisodes.map((episode) => (
+                            <option key={episode.id} value={String(episode.id)}>
+                              {getEpisodeOptionLabel(episode)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#F5F2EA]">
               Review
             </p>
@@ -805,7 +906,7 @@ export default function LogMovieModal({
 
             {showContextLog && (
               <div className="grid gap-3 pb-5 sm:grid-cols-2">
-                {content.type === "tv" && (
+                {content.type === "tv" && tvLogMode === "episode" && (
                   <>
                     <div>
                       <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
@@ -819,7 +920,6 @@ export default function LogMovieModal({
                           onChange={(event) => setSelectedSeasonScope(event.target.value)}
                           className="w-full border border-white/12 bg-[#050505] px-3 py-2 text-xs text-[#F5F2EA] outline-none focus:border-[#FF6A00]"
                         >
-                          <option value="all">Entire show</option>
                           {tvSeasons.map((season) => (
                             <option key={season.id} value={season.number}>
                               {getSeasonOptionLabel(season)}
@@ -834,20 +934,19 @@ export default function LogMovieModal({
                         <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
                           Episode
                         </label>
-                        {loadingEpisodes ? (
-                          <div className="border border-white/12 px-3 py-2 text-xs text-white/48">Loading episodes...</div>
-                        ) : (
-                          <select
-                            value={selectedEpisodeId}
-                            onChange={(event) => setSelectedEpisodeId(event.target.value)}
-                            className="w-full border border-white/12 bg-[#050505] px-3 py-2 text-xs text-[#F5F2EA] outline-none focus:border-[#FF6A00]"
-                          >
-                            <option value={ALL_EPISODES_VALUE}>All episodes</option>
-                            <option value="" disabled>
-                              Select an episode
-                            </option>
-                            {tvEpisodes.map((episode) => (
-                              <option key={episode.id} value={String(episode.id)}>
+                      {loadingEpisodes ? (
+                        <div className="border border-white/12 px-3 py-2 text-xs text-white/48">Loading episodes...</div>
+                      ) : (
+                        <select
+                          value={selectedEpisodeId}
+                          onChange={(event) => setSelectedEpisodeId(event.target.value)}
+                          className="w-full border border-white/12 bg-[#050505] px-3 py-2 text-xs text-[#F5F2EA] outline-none focus:border-[#FF6A00]"
+                        >
+                          <option value="" disabled>
+                            Select an episode
+                          </option>
+                          {tvEpisodes.map((episode) => (
+                            <option key={episode.id} value={String(episode.id)}>
                                 {getEpisodeOptionLabel(episode)}
                               </option>
                             ))}

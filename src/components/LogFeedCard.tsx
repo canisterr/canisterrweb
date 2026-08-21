@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { Movie, MovieLogWithContent, TVShow, User } from "@/types";
 import { deleteMovieLog, getReactionStars, getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
+import { getTvEpisodeBadgeLabel } from "@/lib/tv-log-label";
 import { likeLogAndNotify, unlikeLog, getLogLikes, getLogLikers } from "@/lib/log-likes";
 import { saveLog, unsaveLog, getLogSaves } from "@/lib/log-saves";
 import { getLogCommentCount } from "@/lib/log-comments";
@@ -99,6 +100,7 @@ export default function LogFeedCard({
   const year = localLog.content?.release_date ? new Date(localLog.content.release_date).getFullYear() : null;
   const contentHref = isTv ? `/tv/${localLog.content.id}` : `/movie/${localLog.content.id}`;
   const episodeLabel = getTvEpisodeLabel(localLog);
+  const episodeBadge = getTvEpisodeBadgeLabel(localLog);
   const stars = getReactionStars(localLog.reaction);
   const hashtag = getLogHashtag(localLog.content?.title || "");
   const logUrl = buildLogUrl(localLog);
@@ -282,11 +284,18 @@ export default function LogFeedCard({
         </Link>
       </div>
 
-      <ContentImageRow
-        primaryUrl={localLog.content?.poster_url || null}
-        primaryAlt={localLog.content?.title || ""}
-        secondaryUrls={localLog.content?.backdrop_gallery_urls || []}
-      />
+      <div className="relative">
+        <ContentImageRow
+          primaryUrl={localLog.content?.poster_url || null}
+          primaryAlt={localLog.content?.title || ""}
+          secondaryUrls={localLog.content?.backdrop_gallery_urls || []}
+        />
+        {episodeBadge && (
+          <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-[#ffb36b]/40 bg-[#140c04]/90 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#ffd6a3] shadow-[0_10px_25px_rgba(0,0,0,0.35)]">
+            {episodeBadge}
+          </div>
+        )}
+      </div>
 
       <div className="p-4">
         <div className="flex flex-wrap items-center gap-2">
