@@ -1341,7 +1341,9 @@ export default function LogsPage() {
                               result.type === "tv" ? "TV Show" : "Movie",
                               getReleaseYearLabel(
                                 result.release_date,
-                                result.type === "tv" && "premiered" in result ? result.premiered : undefined
+                                result.type === "tv" && "premiered" in result && typeof result.premiered === "string"
+                                  ? result.premiered
+                                  : undefined
                               ),
                             ]
                               .filter(Boolean)
