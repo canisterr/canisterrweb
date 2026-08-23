@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import LogMovieModal from "@/components/LogMovieModal";
 import { MovieLog, MovieLogWithContent, User, Content, LogCommentWithUser } from "@/types";
 import { deleteMovieLog, updateMovieLog, getLogsForContent, getVisibleLogNotes } from "@/lib/logs";
@@ -838,7 +837,7 @@ export default function LogDetailPage() {
   }, [targetCommentId, commentsLoading, sortedComments.length]);
 
   if (loading || !user) {
-    return <CinematicLoading message="Your log details are loading" />;
+    return null;
   }
 
   if (!log) {

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import MovieSwipeCard from "@/components/MovieSwipeCard";
-import CinematicLoading from "@/components/CinematicLoading";
 import MovieMatchAnalysisView from "@/components/MovieMatchAnalysisView";
 import { User, UserTasteWithContent, Content, MovieLogWithContent } from "@/types";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -728,7 +727,7 @@ export default function MovieMatcherPage() {
   };
 
   if (loading) {
-    return <CinematicLoading message="MovieMatcher is loading" />;
+    return null;
   }
 
   if (error && !user) {

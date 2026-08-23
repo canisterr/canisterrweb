@@ -5,7 +5,7 @@ import { get, ref, remove } from "firebase/database";
 import { CloudDownload, Upload } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
-import { SettingLine } from "../settings-ui";
+import { SettingLine, SettingsGroup, SettingsMessage } from "../settings-ui";
 import { auth, db } from "@/lib/firebase";
 import { createMovieLog } from "@/lib/logs";
 import { searchMovies } from "@/lib/tmdb";
@@ -296,10 +296,11 @@ export default function SettingsImportPage() {
       title="Import"
       description="Letterboxd CSV and data export. Keep the actions short and direct."
     >
-      <div className="space-y-3">
+      <div className="space-y-8">
+        <SettingsGroup title="Import">
         <SettingLine icon={Upload} title="Import Letterboxd CSV" description="Pick a ratings export and we will build logs from it.">
           <div className="space-y-4">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-[1.35rem] border border-white/10 bg-white/[0.04] p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black text-[#f5f0de]">Custom rating map</p>
@@ -314,7 +315,7 @@ export default function SettingsImportPage() {
                     setMasterpieceMinInput(String(DEFAULT_RATING_BOUNDS.masterpieceMin));
                   }}
                   disabled={busy}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-50"
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50"
                 >
                   Reset
                 </button>
@@ -331,7 +332,7 @@ export default function SettingsImportPage() {
                     value={badMaxInput}
                     onChange={(event) => setBadMaxInput(event.target.value)}
                     disabled={busy}
-                    className="w-full rounded-2xl border border-white/10 bg-[#0b0b0b] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/60 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
                   />
                 </label>
 
@@ -345,19 +346,19 @@ export default function SettingsImportPage() {
                     value={masterpieceMinInput}
                     onChange={(event) => setMasterpieceMinInput(event.target.value)}
                     disabled={busy}
-                    className="w-full rounded-2xl border border-white/10 bg-[#0b0b0b] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/60 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
                   />
                 </label>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold text-[#f5f0de]/70">
-                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1">
+                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
                   0.0 - {Number.parseFloat(badMaxInput) || DEFAULT_RATING_BOUNDS.badMax} = Bad
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1">
+                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
                   {(Number.isFinite(Number.parseFloat(badMaxInput)) ? Number.parseFloat(badMaxInput) : DEFAULT_RATING_BOUNDS.badMax) + 0.1} - {(Number.isFinite(Number.parseFloat(masterpieceMinInput)) ? Number.parseFloat(masterpieceMinInput) : DEFAULT_RATING_BOUNDS.masterpieceMin) - 0.1} = Good
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1">
+                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
                   {Number.isFinite(Number.parseFloat(masterpieceMinInput)) ? Number.parseFloat(masterpieceMinInput) : DEFAULT_RATING_BOUNDS.masterpieceMin}+ = Masterpiece
                 </span>
               </div>
@@ -367,33 +368,36 @@ export default function SettingsImportPage() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={busy}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-50"
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50"
               >
                 Choose file
               </button>
               <button
                 onClick={handleClearImports}
                 disabled={busy}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-50"
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50"
               >
                 Clear imports
               </button>
             </div>
           </div>
         </SettingLine>
+        </SettingsGroup>
 
-        <SettingLine icon={CloudDownload} title="Export data" description="Download your profile, logs, lists and social data as JSON.">
-          <button
-            onClick={handleExport}
-            disabled={busy}
-            className="rounded-full bg-[#ff7a1a] px-3 py-1.5 text-xs font-semibold text-[#0a0a0a] transition hover:bg-[#ff8d3b] disabled:opacity-50"
-          >
-            Download export
-          </button>
-        </SettingLine>
+        <SettingsGroup title="Export">
+          <SettingLine icon={CloudDownload} title="Export data" description="Download your profile, logs, lists and social data as JSON.">
+            <button
+              onClick={handleExport}
+              disabled={busy}
+              className="rounded-full bg-[#0a84ff] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2994ff] disabled:opacity-50"
+            >
+              Download export
+            </button>
+          </SettingLine>
+        </SettingsGroup>
 
-        {message && <p className="pt-2 text-xs text-emerald-700">{message}</p>}
-        {error && <p className="pt-2 text-xs text-rose-700">{error}</p>}
+        {message ? <SettingsMessage tone="success">{message}</SettingsMessage> : null}
+        {error ? <SettingsMessage tone="error">{error}</SettingsMessage> : null}
 
         <input
           ref={fileInputRef}

@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, List, Content } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -157,7 +156,7 @@ export default function AddItemsToListPage() {
   };
 
   if (loading || !user) {
-    return <CinematicLoading message="Your list editor is loading" />;
+    return null;
   }
 
   if (!list) {

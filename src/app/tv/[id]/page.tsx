@@ -10,7 +10,6 @@ import PageLayout from "@/components/PageLayout";
 import TopActionBanner from "@/components/TopActionBanner";
 import AddToListModal from "@/components/AddToListModal";
 import LogMovieModal from "@/components/LogMovieModal";
-import CinematicLoading from "@/components/CinematicLoading";
 import { auth, db } from "@/lib/firebase";
 import { type ShowDetails } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
@@ -404,7 +403,7 @@ export default function TVShowPage() {
   );
 
   if (loading) {
-    return <CinematicLoading message="Your show page is loading" />;
+    return null;
   }
 
   if (!show) {

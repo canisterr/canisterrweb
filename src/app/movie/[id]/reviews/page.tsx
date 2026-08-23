@@ -7,7 +7,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { ref, get } from "firebase/database";
 import { ArrowLeft, Filter, X, Users } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import LogFeedCard from "@/components/LogFeedCard";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -203,7 +202,7 @@ export default function MovieReviewsPage() {
   }, [reviews, user?.id]);
 
   if (loading) {
-    return <CinematicLoading message="Movie reviews are loading" />;
+    return null;
   }
 
   const filterButtonClass = (active: boolean) =>

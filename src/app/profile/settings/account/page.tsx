@@ -6,7 +6,7 @@ import { get, ref, remove } from "firebase/database";
 import { KeyRound, LogOut, Trash2, LifeBuoy } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
-import { SettingLine } from "../settings-ui";
+import { SettingLine, SettingsGroup, SettingsMessage } from "../settings-ui";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
 import { deleteList } from "@/lib/lists";
@@ -132,39 +132,43 @@ export default function SettingsAccountPage() {
       title="Account"
       description="Password, deactivation and deletion. Kept plain and small."
     >
-      <div className="space-y-2">
+      <div className="space-y-8">
+        <SettingsGroup>
         <SettingLine icon={KeyRound} title="Change password" description="Send a reset email to the connected address.">
-          <button onClick={resetPassword} disabled={busy} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-50">
+          <button onClick={resetPassword} disabled={busy} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50">
             Reset email
           </button>
         </SettingLine>
 
         <SettingLine icon={LogOut} title="Deactivate account" description="Temporarily pause the account and sign out.">
           {settings.account.status === "deactivated" ? (
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/55">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/55">
               Deactivated
             </span>
           ) : (
-            <button onClick={deactivateAccount} disabled={busy} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-50">
+            <button onClick={deactivateAccount} disabled={busy} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50">
               Deactivate
             </button>
           )}
         </SettingLine>
+        </SettingsGroup>
 
-        <SettingLine icon={Trash2} title="Delete profile" description="Remove the profile and related data permanently.">
-          <button onClick={deleteAccount} disabled={busy} className="rounded-full bg-[#ff7a1a] px-3 py-1.5 text-xs font-semibold text-[#0a0a0a] transition hover:bg-[#ff8d3b] disabled:opacity-50">
+        <SettingsGroup title="Danger Zone">
+        <SettingLine icon={Trash2} title="Delete profile" description="Remove the profile and related data permanently." danger>
+          <button onClick={deleteAccount} disabled={busy} className="rounded-full bg-[#ff453a] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#ff5d54] disabled:opacity-50">
             Delete profile
           </button>
         </SettingLine>
 
         <SettingLine icon={LifeBuoy} title="Help" description="If something feels off, contact support.">
-          <a href="mailto:support@canisterr.com" className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/10">
+          <a href="mailto:support@canisterr.com" className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08]">
             Email support
           </a>
         </SettingLine>
+        </SettingsGroup>
 
-        {message && <p className="pt-2 text-xs text-[#ffb36b]">{message}</p>}
-        {error && <p className="pt-2 text-xs text-[#ffb36b]">{error}</p>}
+        {message ? <SettingsMessage tone="success">{message}</SettingsMessage> : null}
+        {error ? <SettingsMessage tone="error">{error}</SettingsMessage> : null}
       </div>
     </SettingsPageFrame>
   );

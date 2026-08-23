@@ -1,3 +1,5 @@
+import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
+
 export default function Loading() {
-  return null;
+  return <RouteLoadingSkeleton title="Loading" description="Preparing your next screen" />;
 }

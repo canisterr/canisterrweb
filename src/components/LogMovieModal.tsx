@@ -77,6 +77,14 @@ function getMetadataLine(content: Content): string {
     .join(" • ");
 }
 
+function getSubmitLabel(content: Content, tvLogMode: "show" | "episode"): string {
+  if (content.type === "tv") {
+    return tvLogMode === "episode" ? "LOG EPISODE" : "LOG SERIES";
+  }
+
+  return "LOG MOVIE";
+}
+
 function getTitleClass(title: string): string {
   const words = title.trim().split(/\s+/).filter(Boolean).length;
   if (words <= 2) return "text-[34px] sm:text-[54px]";
@@ -548,7 +556,13 @@ export default function LogMovieModal({
   const metadataLine = getMetadataLine(content) || (content.type === "tv" ? "TV Show" : "Movie");
   const titleClass = getTitleClass(content.title);
   const logTypeLabel = content.type === "tv" ? "TV LOG" : "MOVIE LOG";
-  const ctaLabel = loading ? (isEditMode ? "SAVING" : "LOGGING") : isEditMode ? "SAVE CHANGES" : "LOG MOVIE";
+  const ctaLabel = loading
+    ? isEditMode
+      ? "SAVING"
+      : "LOGGING"
+    : isEditMode
+      ? "SAVE CHANGES"
+      : getSubmitLabel(content, tvLogMode);
   const defaultShareNote = (() => {
     const review = notes.trim();
     if (review) return review;

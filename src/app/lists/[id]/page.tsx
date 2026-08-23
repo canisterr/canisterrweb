@@ -27,7 +27,6 @@ import {
   UserX,
 } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, ListWithItems, ListCollaboratorWithUser } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -726,7 +725,7 @@ export default function ListDetailPage() {
   };
 
   if (loading) {
-    return <CinematicLoading message="Your list is loading" />;
+    return null;
   }
 
   if (!list) {

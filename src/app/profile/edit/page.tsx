@@ -3,7 +3,6 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, verifyBeforeUpdateEmail, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
@@ -314,7 +313,7 @@ export default function EditProfilePage() {
   };
 
   if (loading || !user) {
-    return <CinematicLoading message="Your profile editor is loading" />;
+    return null;
   }
 
   return (

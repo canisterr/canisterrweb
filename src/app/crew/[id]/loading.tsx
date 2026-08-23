@@ -1,5 +1,5 @@
-import CinematicLoading from "@/components/CinematicLoading";
+import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 
 export default function Loading() {
-  return <CinematicLoading message="Loading career timeline" />;
+  return <RouteLoadingSkeleton title="Credits" description="Loading filmography" />;
 }

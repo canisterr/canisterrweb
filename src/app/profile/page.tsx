@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, get } from "firebase/database";
-import CinematicLoading from "@/components/CinematicLoading";
+import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 
 export default function ProfileRedirectPage() {
   const [loading, setLoading] = useState(true);
@@ -40,5 +40,5 @@ export default function ProfileRedirectPage() {
     return () => unsubscribe();
   }, []);
 
-  return <CinematicLoading message="Redirecting to your profile" />;
+  return loading ? <RouteLoadingSkeleton title="Profile" description="Opening your profile" /> : null;
 }

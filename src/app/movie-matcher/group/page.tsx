@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Users } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getAvailableFriends, type Friend } from "@/lib/friends-match";
@@ -117,7 +116,7 @@ export default function GroupMatchPage() {
   };
 
   if (sessionLoading || !user) {
-    return <CinematicLoading message="Loading group match" />;
+    return null;
   }
 
   return (

@@ -383,7 +383,9 @@ export async function getAllTasteSignatures(): Promise<Record<string, TasteSigna
     const snapshot = await get(ref(db, "taste_signatures"));
     return snapshot.exists() ? (snapshot.val() as Record<string, TasteSignature>) : {};
   } catch (error) {
-    console.error("getAllTasteSignatures: read failed", error);
+    if (!isPermissionDeniedError(error)) {
+      console.error("getAllTasteSignatures: read failed", error);
+    }
     return {};
   }
 }

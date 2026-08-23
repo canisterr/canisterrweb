@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { ArrowLeft, Bookmark, Heart, MessageCircle, MoreVertical, Pencil, Send, Share2, Trash2, X } from "lucide-react";
-import CinematicLoading from "@/components/CinematicLoading";
 import ContentImageRow from "@/components/ContentImageRow";
 import CinePostOwnerMenu from "@/components/CinePostOwnerMenu";
 import PageLayout from "@/components/PageLayout";
@@ -643,7 +642,7 @@ export default function CinePostPage() {
   }, [post]);
 
   if (loading || !user) {
-    return <CinematicLoading message="Post is loading" />;
+    return null;
   }
 
   if (!post) {

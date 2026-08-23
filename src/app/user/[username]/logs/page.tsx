@@ -14,7 +14,6 @@ import {
   Film,
 } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getUserMovieLogs } from "@/lib/logs";
@@ -371,7 +370,7 @@ export default function PublicUserLogsPage() {
   };
 
   if (loading || !currentUser || !profileUser) {
-    return <CinematicLoading message="Movie logs are loading" />;
+    return null;
   }
 
   return (

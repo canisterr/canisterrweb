@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, MovieLogWithContent } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -98,7 +97,7 @@ export default function UserProfilePage() {
   };
 
   if (loading || !currentUser || !profileUser || !stats) {
-    return <CinematicLoading message="This profile is loading" />;
+    return null;
   }
 
   return (

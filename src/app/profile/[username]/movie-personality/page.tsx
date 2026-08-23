@@ -7,7 +7,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import PersonalityCard from "@/components/PersonalityCard";
-import CinematicLoading from "@/components/CinematicLoading";
 import { auth, db } from "@/lib/firebase";
 import { getPersonalityCard, getUserByUsername } from "@/lib/profile";
 import type { User } from "@/types";
@@ -71,7 +70,7 @@ export default function MoviePersonalityPage() {
   }, [username, router]);
 
   if (loading || !profileUser) {
-    return <CinematicLoading message="Movie personality is loading" />;
+    return null;
   }
 
   return (

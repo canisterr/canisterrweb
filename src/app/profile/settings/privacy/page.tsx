@@ -2,11 +2,11 @@
 
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
-import { SettingLine } from "../settings-ui";
+import { SettingLine, SettingsGroup } from "../settings-ui";
 import { Shield, Eye, ListChecks, Lock, Users } from "lucide-react";
 
 const selectClass =
-  "rounded-full border border-white/10 bg-[#111111] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] outline-none transition focus:border-[#ff7a1a]";
+  "rounded-full border border-white/10 bg-[#101010] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] outline-none transition focus:border-[#0a84ff]";
 
 export default function SettingsPrivacyPage() {
   const { user, loading, settings, updateSection, handleSignOut } = useSettingsUser();
@@ -19,7 +19,7 @@ export default function SettingsPrivacyPage() {
       title="Privacy"
       description="Profile, list and log visibility in a few small controls."
     >
-      <div className="space-y-2">
+      <SettingsGroup>
         <SettingLine icon={Shield} title="Profile visibility" description="Who can open your profile page.">
           <select
             className={selectClass}
@@ -79,7 +79,7 @@ export default function SettingsPrivacyPage() {
             <option value="private">Private</option>
           </select>
         </SettingLine>
-      </div>
+      </SettingsGroup>
     </SettingsPageFrame>
   );
 }

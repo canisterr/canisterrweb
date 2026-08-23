@@ -17,7 +17,6 @@ import { ArrowLeft, Ban, Bell, Loader2, MoreVertical, Share2, Sparkles, Upload }
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import StatsInsights from "@/components/StatsInsights";
-import CinematicLoading from "@/components/CinematicLoading";
 import { readBrowserCache, writeBrowserCache } from "@/lib/browser-cache";
 import { db } from "@/lib/firebase";
 import { createMovieLog, getUserMovieLogs, getVisibleLogNotes } from "@/lib/logs";
@@ -1566,7 +1565,7 @@ function ProfilePageInner() {
   };
 
   if (loading || !profileUser) {
-    return <CinematicLoading message="This cinematic profile is loading" />;
+    return null;
   }
 
   return (

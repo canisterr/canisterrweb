@@ -8,7 +8,6 @@ import { auth, db } from "@/lib/firebase";
 import { generateMatchAnalysis } from "@/lib/match-score";
 import { buildTasteProfileForScoring } from "@/lib/taste-signature";
 import { getUserByUsername } from "@/lib/profile";
-import CinematicLoading from "@/components/CinematicLoading";
 import PageLayout from "@/components/PageLayout";
 import MovieMatchAnalysisView from "@/components/MovieMatchAnalysisView";
 import type { User } from "@/types";
@@ -106,7 +105,7 @@ export default function MovieMatcherReportPage() {
   }, [username]);
 
   if (loading || !currentUser || !profileUser || !analysis) {
-    return <CinematicLoading message="Your match report is loading" />;
+    return null;
   }
 
   const backHref = backSource === "matcher" ? "/movie-matcher" : `/profile/${profileUser.username}`;

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { auth, db } from "@/lib/firebase";
@@ -15,6 +15,7 @@ type CurrentUserContextValue = {
   user: User | null;
   settings: SettingsData;
   loading: boolean;
+  setCurrentSettings: (nextSettings: SettingsData) => void;
 };
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
@@ -64,6 +65,17 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
+
+  const setCurrentSettings = useCallback((nextSettings: SettingsData) => {
+    setSettings(nextSettings);
+
+    if (typeof window === "undefined" || !user) return;
+
+    writeCachedCurrentUser(user.id, {
+      user,
+      settings: nextSettings,
+    });
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -158,8 +170,9 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
       user,
       settings,
       loading,
+      setCurrentSettings,
     }),
-    [user, settings, loading]
+    [user, settings, loading, setCurrentSettings]
   );
 
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>;

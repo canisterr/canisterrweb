@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Bell, LoaderCircle, MessageSquare, Mail, SendHorizontal, Smartphone, Sparkles, Users } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
-import { SettingLine, CompactToggle } from "../settings-ui";
+import { SettingLine, CompactToggle, SettingsGroup, SettingsMessage } from "../settings-ui";
 import {
   disablePushNotificationsForUser,
   enablePushNotificationsForUser,
@@ -121,50 +121,49 @@ export default function SettingsNotificationsPage() {
       title="Notifications"
       description="Only the updates you actually want."
     >
-      <div className="space-y-2">
-        <SettingLine
-          icon={Smartphone}
-          title="Web push notifications"
-          description="Get alerts on this browser or installed app."
-        >
-          <div className="flex flex-col items-end gap-2">
-            <p className="text-right text-xs font-semibold text-white/55">{pushStatusText}</p>
-            <div className="flex flex-wrap justify-end gap-2">
-              {pushState.enabled ? (
+      <div className="space-y-8">
+        <SettingsGroup title="Delivery">
+          <SettingLine icon={Smartphone} title="Web push notifications" description="Get alerts on this browser or installed app.">
+            <div className="flex flex-col items-end gap-2">
+              <p className="text-right text-xs font-semibold text-white/50">{pushStatusText}</p>
+              <div className="flex flex-wrap justify-end gap-2">
+                {pushState.enabled ? (
+                  <button
+                    type="button"
+                    onClick={() => void handlePushTest()}
+                    disabled={pushBusy || pushTestBusy}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {pushTestBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    Send test
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => void handlePushTest()}
-                  disabled={pushBusy || pushTestBusy}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-[#f5f0de] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => void handlePushToggle()}
+                  disabled={pushBusy || pushTestBusy || (!pushState.supported && !pushState.enabled)}
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold transition ${
+                    pushState.enabled ? "bg-[#34c759] text-[#08120b] hover:bg-[#48d36b]" : "bg-[#0a84ff] text-white hover:bg-[#2994ff]"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                  {pushTestBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                  Send test
+                  {pushBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                  {pushState.enabled ? "Disable" : "Enable on this device"}
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => void handlePushToggle()}
-                disabled={pushBusy || pushTestBusy || (!pushState.supported && !pushState.enabled)}
-                className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-black transition ${
-                  pushState.enabled
-                    ? "bg-[#f5f0de] text-[#0a0a0a] hover:bg-white"
-                    : "bg-[#ff7a1a] text-[#0a0a0a] hover:bg-[#ff8d3b]"
-                } disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                {pushBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                {pushState.enabled ? "Disable" : "Enable on this device"}
-              </button>
+              </div>
             </div>
-          </div>
-        </SettingLine>
+          </SettingLine>
+        </SettingsGroup>
 
         {pushMessage ? (
-          <div className="flex items-start gap-2 rounded-2xl border border-[#ff7a1a]/20 bg-[#ff7a1a]/10 p-3 text-xs text-[#f5f0de]/80">
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#ffb36b]" />
-            <p>{pushMessage}</p>
-          </div>
+          <SettingsMessage tone={pushState.enabled ? "success" : "info"}>
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <p>{pushMessage}</p>
+            </div>
+          </SettingsMessage>
         ) : null}
 
+        <SettingsGroup title="Activity">
         <SettingLine icon={Users} title="Follow notifications" description="Let people know when someone follows you.">
           <CompactToggle
             checked={settings.notifications.followRequests}
@@ -228,6 +227,7 @@ export default function SettingsNotificationsPage() {
             label={settings.notifications.emailNotifications ? "On" : "Off"}
           />
         </SettingLine>
+        </SettingsGroup>
       </div>
     </SettingsPageFrame>
   );

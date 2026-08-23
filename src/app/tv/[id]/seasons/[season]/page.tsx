@@ -7,7 +7,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { ArrowLeft, PlayCircle, Star } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
 import LogMovieModal from "@/components/LogMovieModal";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -180,7 +179,7 @@ export default function TvSeasonPage() {
   }, [show]);
 
   if (loading) {
-    return <CinematicLoading message="Loading season page" />;
+    return null;
   }
 
   return (

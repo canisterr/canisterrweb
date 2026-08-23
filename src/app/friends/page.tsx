@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
 import UserCard from "@/components/UserCard";
 import SearchBar from "@/components/SearchBar";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, FollowWithUser } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
@@ -282,7 +281,7 @@ export default function FriendsPage() {
   };
 
   if (loading) {
-    return <CinematicLoading message="Your friends are loading" />;
+    return null;
   }
 
   if (!user) {

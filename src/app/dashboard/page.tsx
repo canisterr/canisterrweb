@@ -8,7 +8,6 @@ import PageLayout from "@/components/PageLayout";
 import CrewSearchCard from "@/components/CrewSearchCard";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TopActionBanner from "@/components/TopActionBanner";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, ShareWithDetails, Content, MovieLogWithContent, CinePostWithDetails, TMDBPersonSearchResult } from "@/types";
 import { db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
@@ -572,7 +571,7 @@ export default function DashboardPage() {
   }, [user, postsFeedRefreshKey]);
 
   if (loading) {
-    return <CinematicLoading message="Your home is loading" />;
+    return null;
   }
 
   // Separate unwatched shares for the home preview.

@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
 import TopActionBanner from "@/components/TopActionBanner";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, MovieLogWithContent, Content } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -539,7 +538,7 @@ export default function UserLogPage() {
   };
 
   if (loading || !profileUser) {
-    return <CinematicLoading message="Movie logs are loading" />;
+    return null;
   }
 
   return (

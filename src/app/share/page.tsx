@@ -3,8 +3,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
+import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 import SearchBar from "@/components/SearchBar";
-import CinematicLoading from "@/components/CinematicLoading";
 import ShareModal from "@/components/ShareModal";
 import TopActionBanner from "@/components/TopActionBanner";
 import { Content, ShareWithDetails, TMDBMovie, User } from "@/types";
@@ -152,7 +152,7 @@ function SharePageContent() {
   const [selectedRecipients, setSelectedRecipients] = useState<User[]>([]);
   const [followers, setFollowers] = useState<User[]>([]);
   const [followersSearchQuery, setFollowersSearchQuery] = useState("");
-  const [shareNote, setShareNote] = useState("");
+  const [shareNote, setShareNote] = useState(() => noteParam || "");
   const [contentTypeFilter, setContentTypeFilter] = useState<"all" | "movies" | "tv">("all");
   const [yearFilter, setYearFilter] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
@@ -167,11 +167,6 @@ function SharePageContent() {
     () => (user ? readRecipientPriority(user.id) : {}),
     [user]
   );
-
-  useEffect(() => {
-    if (!noteParam) return;
-    setShareNote((current) => current || noteParam);
-  }, [noteParam]);
 
   useEffect(() => {
     let unsubscribeFollowers = () => {};
@@ -725,11 +720,11 @@ function SharePageContent() {
   };
 
   if (loading) {
-    return <CinematicLoading message="Your share studio is loading" />;
+    return <RouteLoadingSkeleton title="Share" description="Loading shared items" />;
   }
 
   if (!user) {
-    return null;
+    return <RouteLoadingSkeleton title="Share" description="Preparing your share space" />;
   }
 
   return (
@@ -1254,7 +1249,7 @@ function SharePageContent() {
 
 export default function SharePage() {
   return (
-    <Suspense fallback={<CinematicLoading message="Your share studio is loading" />}>
+    <Suspense fallback={null}>
       <SharePageContent />
     </Suspense>
   );

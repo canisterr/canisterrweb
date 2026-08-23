@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Ban, Users, Eye, Share2, Trash2 } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser, normalizeUsername } from "../settings-shared";
-import { SettingLine, CompactToggle } from "../settings-ui";
+import { SettingLine, CompactToggle, SettingsGroup } from "../settings-ui";
 
 export default function SettingsSocialPage() {
   const { user, loading, settings, updateSection, handleSignOut } = useSettingsUser();
@@ -35,7 +35,8 @@ export default function SettingsSocialPage() {
       title="Social"
       description="A few switches and a tiny blocklist."
     >
-      <div className="space-y-2">
+      <div className="space-y-8">
+        <SettingsGroup>
         <SettingLine icon={Share2} title="Share lists publicly" description="Let public lists appear in discovery and profiles.">
           <CompactToggle
             checked={settings.social.shareListsPublicly}
@@ -59,21 +60,23 @@ export default function SettingsSocialPage() {
             label={settings.social.allowCollaborations ? "On" : "Off"}
           />
         </SettingLine>
+        </SettingsGroup>
 
-        <div className="border-b border-white/10 py-3">
+        <SettingsGroup title="Blocked Users">
+        <div className="px-4 py-3.5 sm:px-5">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[#ff7a1a]">
+            <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[0.95rem] bg-[#ff9f0a] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]">
               <Ban className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[#ff7a1a]">Blocked users</p>
-              <p className="text-xs text-white/55">Keep usernames here if you want them out of the way.</p>
+              <p className="text-[15px] font-semibold text-[#f5f0de]">Blocked users</p>
+              <p className="text-xs text-white/45">Keep usernames here if you want them out of the way.</p>
 
               <div className="mt-2 flex flex-wrap gap-2">
                 {settings.social.blockedUsers.map((username) => (
-                  <span key={username} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-[#f5f0de]">
+                  <span key={username} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-[#f5f0de]">
                     @{username}
-                    <button type="button" onClick={() => void removeBlockedUser(username)} className="text-white/45 transition hover:text-[#ff7a1a]" aria-label={`Remove ${username}`}>
+                    <button type="button" onClick={() => void removeBlockedUser(username)} className="text-white/45 transition hover:text-[#ff453a]" aria-label={`Remove ${username}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </span>
@@ -85,12 +88,12 @@ export default function SettingsSocialPage() {
                   value={blockedUserInput}
                   onChange={(event) => setBlockedUserInput(event.target.value)}
                   placeholder="username"
-                  className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#111111] px-3 py-1.5 text-xs text-[#f5f0de] outline-none transition focus:border-[#ff7a1a]"
+                  className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#101010] px-3 py-1.5 text-xs text-[#f5f0de] outline-none transition focus:border-[#0a84ff]"
                 />
                 <button
                   type="button"
                   onClick={() => void addBlockedUser()}
-                  className="rounded-full bg-[#ff7a1a] px-3 py-1.5 text-xs font-semibold text-[#0a0a0a] transition hover:bg-[#ff8d3b]"
+                  className="rounded-full bg-[#0a84ff] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2994ff]"
                 >
                   Add
                 </button>
@@ -98,6 +101,7 @@ export default function SettingsSocialPage() {
             </div>
           </div>
         </div>
+        </SettingsGroup>
       </div>
     </SettingsPageFrame>
   );

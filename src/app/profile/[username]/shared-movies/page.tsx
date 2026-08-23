@@ -10,7 +10,6 @@ import { auth, db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { getUserByUsername } from "@/lib/profile";
 import { getUsersByIds } from "@/lib/users";
-import CinematicLoading from "@/components/CinematicLoading";
 import type { Content, ShareWithDetails, User } from "@/types";
 import { canShowSharedMovies, isUsernameBlocked, mergeSettings } from "@/lib/settings";
 
@@ -256,7 +255,7 @@ export default function SharedMoviesPage() {
   );
 
   if (loading || !currentUser || !profileUser) {
-    return <CinematicLoading message="Shared movies are loading" />;
+    return null;
   }
 
   if (!canAccessPage) {

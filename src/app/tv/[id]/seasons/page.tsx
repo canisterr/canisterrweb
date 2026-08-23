@@ -6,7 +6,6 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { ArrowLeft, CalendarDays, Film, PlayCircle } from "lucide-react";
-import CinematicLoading from "@/components/CinematicLoading";
 import PageLayout from "@/components/PageLayout";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -154,7 +153,7 @@ export default function TvSeasonsPage() {
   };
 
   if (loading) {
-    return <CinematicLoading message="Loading season guide" />;
+    return null;
   }
 
   return (

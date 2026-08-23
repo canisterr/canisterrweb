@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import CinematicLoading from "@/components/CinematicLoading";
 import { signOut as authSignOut } from "@/lib/auth";
 import { searchMovies } from "@/lib/tmdb";
 import { searchShows } from "@/lib/tvmaze";
@@ -209,7 +208,7 @@ export default function TastePage() {
   };
 
   if (loading) {
-    return <CinematicLoading message="Your taste profile is loading" />;
+    return null;
   }
 
   if (error) {

@@ -6,7 +6,6 @@ import PageLayout from "@/components/PageLayout";
 import TopActionBanner from "@/components/TopActionBanner";
 import AddToListModal from "@/components/AddToListModal";
 import LogMovieModal from "@/components/LogMovieModal";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, Movie, Content, MovieLogWithContent } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -477,7 +476,7 @@ export default function MoviePage() {
   );
 
   if (loading) {
-    return <CinematicLoading message="Your movie page is loading" />;
+    return null;
   }
 
   if (!movie) {

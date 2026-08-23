@@ -1,10 +1,5 @@
 import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 
 export default function Loading() {
-  return (
-    <RouteLoadingSkeleton
-      title="Loading friends"
-      description="Fetching recent friend activity and poster stacks."
-    />
-  );
+  return <RouteLoadingSkeleton title="Friend Logs" description="Loading friend activity" />;
 }

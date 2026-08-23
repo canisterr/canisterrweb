@@ -7,7 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { get, onValue, ref } from "firebase/database";
 import { Bell, Check, Settings, Trash2, X } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
-import CinematicLoading from "@/components/CinematicLoading";
+import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 import { auth, db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -179,7 +179,7 @@ export default function NotificationsPage() {
   };
 
   if (loading || !user) {
-    return <CinematicLoading message="Notifications are loading" />;
+    return <RouteLoadingSkeleton title="Notifications" description="Loading notifications" />;
   }
 
   return (

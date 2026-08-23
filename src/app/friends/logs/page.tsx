@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import CinematicLoading from "@/components/CinematicLoading";
 import { User, MovieLogWithContent } from "@/types";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getFriendLogs } from "@/lib/friend-logs";
@@ -99,7 +98,7 @@ export default function FriendLogsPage() {
   });
 
   if (loading || !user) {
-    return <CinematicLoading message="Friends' logs are loading" />;
+    return null;
   }
 
   return (

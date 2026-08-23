@@ -3,7 +3,7 @@
 import { MoonStar, Palette, MonitorSmartphone } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
-import { SettingLine, SmallPillButton, CompactToggle } from "../settings-ui";
+import { SettingLine, SmallPillButton, CompactToggle, SettingsGroup } from "../settings-ui";
 
 export default function SettingsAppearancePage() {
   const { user, loading, settings, updateSection, handleSignOut } = useSettingsUser();
@@ -16,7 +16,7 @@ export default function SettingsAppearancePage() {
       title="Appearance"
       description="Theme, text size and motion in a compact layout."
     >
-      <div className="space-y-2">
+      <SettingsGroup>
         <SettingLine icon={Palette} title="Theme" description="Choose system, light or dark mode.">
           <div className="flex items-center gap-2">
             {(["system", "light", "dark"] as const).map((theme) => (
@@ -52,7 +52,7 @@ export default function SettingsAppearancePage() {
             label={settings.appearance.reduceMotion ? "On" : "Off"}
           />
         </SettingLine>
-      </div>
+      </SettingsGroup>
     </SettingsPageFrame>
   );
 }

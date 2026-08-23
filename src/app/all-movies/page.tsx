@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, onValue, ref } from "firebase/database";
 import { ArrowLeft, Grid3x3, List, MoreVertical, Search } from "lucide-react";
-import CinematicLoading from "@/components/CinematicLoading";
 import PageLayout from "@/components/PageLayout";
+import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 import ShareModal from "@/components/ShareModal";
 import { signOut as authSignOut } from "@/lib/auth";
 import { auth, db } from "@/lib/firebase";
@@ -230,10 +230,10 @@ export default function AllMoviesPage() {
   };
 
   if (loading) {
-    return <CinematicLoading message="Friends activity is loading" />;
+    return <RouteLoadingSkeleton title="Activity" description="Loading activity" />;
   }
 
-  if (!user) return null;
+  if (!user) return <RouteLoadingSkeleton title="Activity" description="Preparing activity" />;
 
   return (
     <PageLayout user={user} onSignOut={handleSignOut}>
