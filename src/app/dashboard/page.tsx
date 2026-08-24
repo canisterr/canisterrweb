@@ -996,7 +996,6 @@ export default function DashboardPage() {
                       </Link>
                     </div>
                   </div>
-                  <div className="mb-4 ml-1 h-0.5 w-[36%] min-w-32 rounded-full bg-white/35" />
                 </>
               ) : (
                 <div className="mx-auto flex max-w-sm flex-col items-center justify-center border border-white/10 bg-[#111111] px-4 py-8 text-center sm:py-10">

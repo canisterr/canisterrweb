@@ -243,6 +243,12 @@ export default function TVShowPage() {
     const loadShowPage = async () => {
       try {
         setLoading(true);
+        setReviews([]);
+        setReviewsEngagement({});
+        setFriendLogs([]);
+        setAllLogs([]);
+        setUserLogHistory([]);
+        setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
         const resolved = await resolveTvRouteParam(showRouteParam);
 
         if (cancelled) return;
@@ -269,8 +275,6 @@ export default function TVShowPage() {
           router.replace(nextUrl);
         }
 
-        await loadShowLogData(resolved.show.id, user?.id || "__guest__", resolved.show);
-
         if (!cancelled) {
           setLoading(false);
         }
@@ -292,11 +296,20 @@ export default function TVShowPage() {
   useEffect(() => {
     if (!show) return;
 
+    let cancelled = false;
+
     const timer = window.setTimeout(() => {
-      void loadShowLogData(show.id, user?.id || "__guest__", show);
+      void loadShowLogData(show.id, user?.id || "__guest__", show).catch((error) => {
+        if (!cancelled) {
+          console.error("Error fetching TV activity:", error);
+        }
+      });
     }, 0);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [show, user?.id]);
 
   const handleSignOut = async () => {

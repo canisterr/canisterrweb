@@ -79,35 +79,55 @@ function isValidDateString(dateText: string) {
 
 type RatingBounds = {
   badMax: number;
+  averageMax: number;
+  goodMax: number;
   masterpieceMin: number;
 };
 
 const DEFAULT_RATING_BOUNDS: RatingBounds = {
   badMax: 2.5,
+  averageMax: 3.4,
+  goodMax: 4.4,
   masterpieceMin: 4.5,
 };
 
-function getReactionFromRating(rating: number, bounds: RatingBounds): 0 | 1 | 2 {
+function getReactionFromRating(rating: number, bounds: RatingBounds): 0 | 1 | 1.5 | 2 {
   if (rating <= bounds.badMax) return 0;
+  if (rating <= bounds.averageMax) return 1.5;
   if (rating >= bounds.masterpieceMin) return 2;
   return 1;
 }
 
-function parseRatingBounds(badMaxText: string, masterpieceMinText: string): RatingBounds {
+function parseRatingBounds(
+  badMaxText: string,
+  averageMaxText: string,
+  goodMaxText: string,
+  masterpieceMinText: string
+): RatingBounds {
   const badMax = Number.parseFloat(badMaxText);
+  const averageMax = Number.parseFloat(averageMaxText);
+  const goodMax = Number.parseFloat(goodMaxText);
   const masterpieceMin = Number.parseFloat(masterpieceMinText);
 
   const safeBadMax = Number.isFinite(badMax) ? Math.min(Math.max(badMax, 0), 5) : DEFAULT_RATING_BOUNDS.badMax;
+  const safeAverageMax = Number.isFinite(averageMax)
+    ? Math.min(Math.max(averageMax, 0), 5)
+    : DEFAULT_RATING_BOUNDS.averageMax;
+  const safeGoodMax = Number.isFinite(goodMax)
+    ? Math.min(Math.max(goodMax, 0), 5)
+    : DEFAULT_RATING_BOUNDS.goodMax;
   const safeMasterpieceMin = Number.isFinite(masterpieceMin)
     ? Math.min(Math.max(masterpieceMin, 0), 5)
     : DEFAULT_RATING_BOUNDS.masterpieceMin;
 
-  if (safeBadMax >= safeMasterpieceMin) {
+  if (!(safeBadMax < safeAverageMax && safeAverageMax < safeGoodMax && safeGoodMax < safeMasterpieceMin)) {
     return DEFAULT_RATING_BOUNDS;
   }
 
   return {
     badMax: safeBadMax,
+    averageMax: safeAverageMax,
+    goodMax: safeGoodMax,
     masterpieceMin: safeMasterpieceMin,
   };
 }
@@ -137,7 +157,10 @@ export default function SettingsImportPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [badMaxInput, setBadMaxInput] = useState(String(DEFAULT_RATING_BOUNDS.badMax));
+  const [averageMaxInput, setAverageMaxInput] = useState(String(DEFAULT_RATING_BOUNDS.averageMax));
+  const [goodMaxInput, setGoodMaxInput] = useState(String(DEFAULT_RATING_BOUNDS.goodMax));
   const [masterpieceMinInput, setMasterpieceMinInput] = useState(String(DEFAULT_RATING_BOUNDS.masterpieceMin));
+  const previewBounds = parseRatingBounds(badMaxInput, averageMaxInput, goodMaxInput, masterpieceMinInput);
 
   const handleImport = async (file: File) => {
     if (!auth.currentUser || !user) return;
@@ -147,7 +170,12 @@ export default function SettingsImportPage() {
     setError("");
 
     try {
-      const ratingBounds = parseRatingBounds(badMaxInput, masterpieceMinInput);
+      const ratingBounds = parseRatingBounds(
+        badMaxInput,
+        averageMaxInput,
+        goodMaxInput,
+        masterpieceMinInput
+      );
       const rows = parseRatingsCsv(await file.text());
       let imported = 0;
       let skipped = 0;
@@ -305,13 +333,15 @@ export default function SettingsImportPage() {
                 <div>
                   <p className="text-sm font-black text-[#f5f0de]">Custom rating map</p>
                   <p className="mt-1 text-xs text-white/45">
-                    Decide how your CSV ratings become Bad, Good, or Masterpiece before importing.
+                    Decide how your CSV ratings become Bad, Average, Good, or Masterpiece before importing.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
                     setBadMaxInput(String(DEFAULT_RATING_BOUNDS.badMax));
+                    setAverageMaxInput(String(DEFAULT_RATING_BOUNDS.averageMax));
+                    setGoodMaxInput(String(DEFAULT_RATING_BOUNDS.goodMax));
                     setMasterpieceMinInput(String(DEFAULT_RATING_BOUNDS.masterpieceMin));
                   }}
                   disabled={busy}
@@ -337,6 +367,34 @@ export default function SettingsImportPage() {
                 </label>
 
                 <label className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb36b]/80">Average up to</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    value={averageMaxInput}
+                    onChange={(event) => setAverageMaxInput(event.target.value)}
+                    disabled={busy}
+                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb36b]/80">Good up to</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    value={goodMaxInput}
+                    onChange={(event) => setGoodMaxInput(event.target.value)}
+                    disabled={busy}
+                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
+                  />
+                </label>
+
+                <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb36b]/80">Masterpiece from</span>
                   <input
                     type="number"
@@ -353,13 +411,16 @@ export default function SettingsImportPage() {
 
               <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold text-[#f5f0de]/70">
                 <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
-                  0.0 - {Number.parseFloat(badMaxInput) || DEFAULT_RATING_BOUNDS.badMax} = Bad
+                  0.0 - {previewBounds.badMax.toFixed(1)} = Bad
                 </span>
                 <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
-                  {(Number.isFinite(Number.parseFloat(badMaxInput)) ? Number.parseFloat(badMaxInput) : DEFAULT_RATING_BOUNDS.badMax) + 0.1} - {(Number.isFinite(Number.parseFloat(masterpieceMinInput)) ? Number.parseFloat(masterpieceMinInput) : DEFAULT_RATING_BOUNDS.masterpieceMin) - 0.1} = Good
+                  {(previewBounds.badMax + 0.1).toFixed(1)} - {previewBounds.averageMax.toFixed(1)} = Average
                 </span>
                 <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
-                  {Number.isFinite(Number.parseFloat(masterpieceMinInput)) ? Number.parseFloat(masterpieceMinInput) : DEFAULT_RATING_BOUNDS.masterpieceMin}+ = Masterpiece
+                  {(previewBounds.averageMax + 0.1).toFixed(1)} - {previewBounds.goodMax.toFixed(1)} = Good
+                </span>
+                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
+                  {previewBounds.masterpieceMin.toFixed(1)}+ = Masterpiece
                 </span>
               </div>
             </div>

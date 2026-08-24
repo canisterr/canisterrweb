@@ -101,7 +101,7 @@ function ListCard({
     ? [list.cover_image_url, ...coverImages]
     : coverImages
   ).slice(0, 4);
-  const shelfHeightClass = compact ? "h-[166px] sm:h-[208px] lg:h-[236px]" : "h-[228px]";
+  const shelfHeightClass = compact ? "h-[228px] sm:h-[282px] lg:h-[318px]" : "h-[296px]";
   const description = list.description?.trim();
 
   const content = (
@@ -165,7 +165,7 @@ function ListCard({
         )}
       </div>
 
-      <div className={`relative mt-4 overflow-hidden ${compact ? "" : "rounded-[10px] bg-[#f4efe7]"} px-3 pt-3 ${shelfHeightClass}`}>
+      <div className={`relative mt-4 overflow-hidden rounded-none ${compact ? "" : "bg-[#f4efe7]"} px-3 pt-3 ${shelfHeightClass}`}>
 
         {visibleShelves.length > 0 ? (
           <div className={`absolute inset-x-5 ${compact ? "bottom-[0.8rem] top-2 lg:bottom-[1.1rem] lg:top-0" : "bottom-[1.1rem] top-4"} z-10 flex items-end justify-center`}>
@@ -176,10 +176,14 @@ function ListCard({
                 className="group/poster relative w-[22%] flex-none transition-transform duration-200 lg:w-[18.5%]"
                 style={{
                   zIndex: 10 + idx,
-                  transform: `translateY(${idx % 2 === 0 ? 0 : 2}px) rotate(${idx % 2 === 0 ? -1.2 : 1.2}deg)`,
+                  transform: idx === 1
+                    ? "translateY(0px) rotate(0deg)"
+                    : idx === 0
+                      ? "translateX(10%) translateY(2px) rotate(0deg)"
+                      : "translateX(-10%) translateY(2px) rotate(0deg)",
                 }}
               >
-                <div className={`overflow-hidden border ${compact ? "border-white/10 bg-[#050505]" : "border-black/10 bg-[#ddd6c8]"} shadow-[0_10px_18px_rgba(0,0,0,0.18)] ${compact ? "rounded-[1px]" : "rounded-[2px]"}`}>
+                <div className={`overflow-hidden rounded-none border ${compact ? "border-white/10 bg-[#050505]" : "border-black/10 bg-[#ddd6c8]"} shadow-[0_10px_18px_rgba(0,0,0,0.18)]`}>
                   <img
                     src={url}
                     alt={`${list.name} cover ${idx + 1}`}
@@ -198,10 +202,14 @@ function ListCard({
                 key={`${list.id}:placeholder:${idx}`}
                 className="relative w-[22%] flex-none lg:w-[18.5%]"
                 style={{
-                  transform: `translateY(${idx % 2 === 0 ? 0 : 2}px) rotate(${idx % 2 === 0 ? -1.2 : 1.2}deg)`,
+                  transform: idx === 1
+                    ? "translateY(0px) rotate(0deg)"
+                    : idx === 0
+                      ? "translateX(10%) translateY(2px) rotate(0deg)"
+                      : "translateX(-10%) translateY(2px) rotate(0deg)",
                 }}
               >
-                <div className={`flex items-center justify-center border ${compact ? "border-white/10 bg-[#111111]" : "border-black/10 bg-[linear-gradient(180deg,#d7d0c2,#bfb6a6)]"} shadow-[0_10px_18px_rgba(0,0,0,0.16)] ${compact ? "aspect-[0.66] rounded-[1px]" : "aspect-[0.68] rounded-[2px]"}`}>
+                <div className={`flex items-center justify-center rounded-none border ${compact ? "border-white/10 bg-[#111111]" : "border-black/10 bg-[linear-gradient(180deg,#d7d0c2,#bfb6a6)]"} shadow-[0_10px_18px_rgba(0,0,0,0.16)] ${compact ? "aspect-[0.66]" : "aspect-[0.68]"}`}>
                   <Plus className="h-7 w-7 text-black/35" />
                 </div>
               </div>
@@ -211,7 +219,7 @@ function ListCard({
         )}
 
         <div
-          className={`absolute inset-x-4 ${compact ? "bottom-3 h-[1.85rem] rounded-[8px] lg:h-[2.45rem]" : "bottom-3 h-[3.4rem] rounded-[6px]"} z-30 border border-white/28`}
+          className={`absolute inset-x-4 ${compact ? "bottom-3 h-[2.1rem] lg:h-[2.7rem]" : "bottom-3 h-[3.7rem]"} z-30 rounded-none border border-white/28`}
           style={{
             background: compact
               ? `linear-gradient(180deg, color-mix(in srgb, ${shelfAccent.base} 52%, white 28%), color-mix(in srgb, ${shelfAccent.base} 62%, transparent 18%))`
@@ -223,10 +231,10 @@ function ListCard({
           }}
         />
         <div className={`absolute inset-x-5 ${compact ? "bottom-[2.6rem] lg:bottom-[3.15rem]" : "bottom-[3.9rem]"} z-40 h-px bg-white/55`} />
-        <div className={`absolute inset-x-8 ${compact ? "bottom-[1.95rem] lg:bottom-[2.5rem]" : "bottom-[3.25rem]"} z-40 h-3 rounded-full bg-white/20 blur-md`} />
-        <div className={`absolute inset-x-7 bottom-2 z-20 h-4 rounded-full ${compact ? "bg-black/28" : "bg-black/12"} blur-md`} />
-        <div className={`absolute left-5 ${compact ? "top-[calc(100%-2rem)] lg:top-[calc(100%-2.3rem)]" : "top-[calc(100%-2.65rem)]"} z-50 h-4 w-4 -translate-y-1/2 rounded-full border border-white/35 bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.98),rgba(205,212,220,0.8)_32%,rgba(94,101,113,0.92)_100%)] shadow-[0_2px_5px_rgba(0,0,0,0.24)]`} />
-        <div className={`absolute right-5 ${compact ? "top-[calc(100%-2rem)] lg:top-[calc(100%-2.3rem)]" : "top-[calc(100%-2.65rem)]"} z-50 h-4 w-4 -translate-y-1/2 rounded-full border border-white/35 bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.98),rgba(205,212,220,0.8)_32%,rgba(94,101,113,0.92)_100%)] shadow-[0_2px_5px_rgba(0,0,0,0.24)]`} />
+        <div className={`absolute inset-x-8 ${compact ? "bottom-[2.1rem] lg:bottom-[2.75rem]" : "bottom-[3.45rem]"} z-40 h-3 bg-white/20 blur-md`} />
+        <div className={`absolute inset-x-7 bottom-2 z-20 h-4 ${compact ? "bg-black/28" : "bg-black/12"} blur-md`} />
+        <div className={`absolute left-7 ${compact ? "top-[calc(100%-2.1rem)] lg:top-[calc(100%-2.45rem)]" : "top-[calc(100%-2.9rem)]"} z-50 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/35 bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.98),rgba(205,212,220,0.8)_32%,rgba(94,101,113,0.92)_100%)] shadow-[0_2px_5px_rgba(0,0,0,0.24)]`} />
+        <div className={`absolute right-7 ${compact ? "top-[calc(100%-2.1rem)] lg:top-[calc(100%-2.45rem)]" : "top-[calc(100%-2.9rem)]"} z-50 h-4 w-4 translate-x-1/2 -translate-y-1/2 rounded-full border border-white/35 bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.98),rgba(205,212,220,0.8)_32%,rgba(94,101,113,0.92)_100%)] shadow-[0_2px_5px_rgba(0,0,0,0.24)]`} />
 
         {!compact ? (
           <div className="absolute inset-x-4 bottom-0 flex items-center justify-between px-2 py-3">

@@ -271,6 +271,12 @@ export default function MoviePage() {
     const loadMoviePage = async () => {
       try {
         setLoading(true);
+        setReviews([]);
+        setReviewsEngagement({});
+        setFriendLogs([]);
+        setAllLogs([]);
+        setReactionBreakdown({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
+        setMovieStats({ totalLogs: 0, totalWatched: 0 });
         const resolved = await resolveMovieRouteParam(movieRouteParam);
 
         if (cancelled) return;
@@ -302,8 +308,6 @@ export default function MoviePage() {
           router.replace(nextUrl);
         }
 
-        await loadMovieLogData(resolved.movie.id, user?.id || "__guest__", nextMovie);
-
         if (!cancelled) {
           setLoading(false);
         }
@@ -325,11 +329,20 @@ export default function MoviePage() {
   useEffect(() => {
     if (!movie) return;
 
+    let cancelled = false;
+
     const timer = window.setTimeout(() => {
-      void loadMovieLogData(movie.id, user?.id || "__guest__", movie);
+      void loadMovieLogData(movie.id, user?.id || "__guest__", movie).catch((error) => {
+        if (!cancelled) {
+          console.error("Error fetching movie activity:", error);
+        }
+      });
     }, 0);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [movie, user?.id]);
 
   useEffect(() => {
