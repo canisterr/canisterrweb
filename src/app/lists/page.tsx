@@ -101,7 +101,7 @@ function ListCard({
     ? [list.cover_image_url, ...coverImages]
     : coverImages
   ).slice(0, 4);
-  const shelfHeightClass = compact ? "h-[228px] sm:h-[282px] lg:h-[318px]" : "h-[296px]";
+  const shelfHeightClass = compact ? "h-[150px] sm:h-[224px] lg:h-[258px]" : "h-[296px]";
   const description = list.description?.trim();
 
   const content = (
@@ -165,7 +165,7 @@ function ListCard({
         )}
       </div>
 
-      <div className={`relative mt-4 overflow-hidden rounded-none ${compact ? "" : "bg-[#f4efe7]"} px-3 pt-3 ${shelfHeightClass}`}>
+      <div className={`relative isolate mt-0 overflow-hidden rounded-none ${compact ? "" : "bg-[#f4efe7]"} px-3 pt-3 ${shelfHeightClass}`}>
 
         {visibleShelves.length > 0 ? (
           <div className={`absolute inset-x-5 ${compact ? "bottom-[0.8rem] top-2 lg:bottom-[1.1rem] lg:top-0" : "bottom-[1.1rem] top-4"} z-10 flex items-end justify-center`}>
@@ -444,7 +444,7 @@ export default function ListsPage() {
               defaultValue={activeSection}
               value={activeSection}
               onValueChange={(value) => setActiveSection(value as "global" | "friends" | "your")}
-              className="rounded-[11px] bg-[#f5f0de]"
+              className="rounded-[11px] bg-[#ff7a1a]"
               transition={{
                 ease: "easeInOut",
                 duration: 0.2,

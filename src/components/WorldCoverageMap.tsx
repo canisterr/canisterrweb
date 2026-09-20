@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { StatDistributionItem } from "@/lib/profile";
 
 interface WorldCoverageMapProps {
@@ -107,19 +107,7 @@ export default function WorldCoverageMap({ countries }: WorldCoverageMapProps) {
     .filter((marker): marker is StatDistributionItem & { key: string; position: MarkerPosition } => Boolean(marker));
 
   const [activeKey, setActiveKey] = useState<string | null>(markers[0]?.key ?? null);
-
-  useEffect(() => {
-    if (!markers.length) {
-      setActiveKey(null);
-      return;
-    }
-
-    if (!markers.some((marker) => marker.key === activeKey)) {
-      setActiveKey(markers[0].key);
-    }
-  }, [activeKey, markers]);
-
-  const activeMarker = markers.find((marker) => marker.key === activeKey) || null;
+  const activeMarker = markers.find((marker) => marker.key === activeKey) || markers[0] || null;
 
   return (
     <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#0f0f0f]">

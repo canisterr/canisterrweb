@@ -976,42 +976,43 @@ export default function LogsPage() {
 
         <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(22rem,0.88fr)] lg:items-start lg:gap-5 lg:space-y-0">
           <div className="space-y-4 lg:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.6rem] border border-white/10 bg-[#0d0d0d] px-3 py-3 sm:px-5">
-              <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 items-center gap-x-3 gap-y-3 px-1 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:px-2">
+              <div className="col-start-1 row-start-2 flex items-center gap-2 sm:row-start-1">
                 <button
                   onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                  className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:h-12 sm:w-12"
                   aria-label="Previous month"
                 >
-                  <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <ChevronLeft className="h-5 w-5" />
                 </button>
                 <button
                   onClick={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                  className="rounded-full border border-white/10 bg-white/5 p-1.5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:p-2"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[#f5f0de] shadow-sm transition hover:bg-white/10 sm:h-12 sm:w-12"
                   aria-label="Next month"
                 >
-                  <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <ChevronRight className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="min-w-0 flex-1 text-center">
-                <h2 className="text-2xl font-black uppercase leading-none tracking-normal text-[#f5f0de] sm:text-4xl">
+              <div className="col-span-2 col-start-1 row-start-1 min-w-0 text-center sm:col-span-1 sm:col-start-2">
+                <h2 className="text-[clamp(2rem,11vw,3rem)] font-black uppercase leading-none tracking-[-0.025em] text-[#f5f0de] sm:text-4xl sm:tracking-normal lg:text-5xl">
                   {formatMonthName(currentMonth)}
                 </h2>
-                <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.24em] text-[#ffb36b] sm:text-[10px]">
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-[#ffb36b] sm:text-xs">
                   {currentMonth.getFullYear()}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1">
+              <div className="col-start-2 row-start-2 flex items-center justify-self-end rounded-full border border-white/10 bg-white/[0.03] p-1 sm:col-start-3 sm:row-start-1">
                 <button
                   onClick={() => setViewMode("diary")}
-                  className={`rounded-full px-3 py-1.5 text-xs font-black transition sm:text-sm ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${
                     viewMode === "diary" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de] hover:bg-white/8"
                   }`}
                   aria-label="Diary view"
+                  title="Diary view"
                 >
-                  {viewMode === "diary" ? <Calendar className="h-4 w-4" /> : "Diary"}
+                  <Calendar className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => {
@@ -1019,20 +1020,21 @@ export default function LogsPage() {
                     setSelectedDay(null);
                     setListMode("month");
                   }}
-                  className={`rounded-full px-3 py-1.5 text-xs font-black transition sm:text-sm ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${
                     viewMode === "ticket" ? "bg-[#ff7a1a] text-black shadow-sm" : "text-[#f5f0de] hover:bg-white/8"
                   }`}
                   aria-label="Ticket view"
+                  title="Ticket view"
                 >
-                  {viewMode === "ticket" ? <Ticket className="h-4 w-4" /> : "Ticket"}
+                  <Ticket className="h-4 w-4 rotate-90" />
                 </button>
               </div>
             </div>
 
             {viewMode === "diary" ? (
               <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(22rem,0.88fr)] lg:items-start lg:gap-5 lg:space-y-0">
-                <div className="space-y-0">
-                  <div className="grid grid-cols-7 border-y border-white/10 bg-white/[0.02]">
+                <div className="space-y-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#111111]">
+                  <div className="grid grid-cols-7 border-b border-white/10 bg-white/[0.02]">
                     {WEEKDAYS.map((day) => (
                       <div key={day} className="border-r border-white/10 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] text-[#ffb36b]/80 last:border-r-0 sm:text-xs">
                         {day}
@@ -1126,7 +1128,7 @@ export default function LogsPage() {
 
                 <div
                   ref={listSectionRef}
-                  className="relative -mx-1 scroll-mt-24 overflow-hidden border border-white/10 bg-gradient-to-b from-[#2a2a2a]/95 via-[#1f1f1f]/95 to-[#141414]/95 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_50px_rgba(0,0,0,0.24)] sm:-mx-2 sm:p-4 lg:mx-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
+                  className="relative -mx-1 scroll-mt-24 overflow-hidden rounded-t-[1.5rem] border border-white/10 bg-gradient-to-b from-[#2a2a2a]/95 via-[#1f1f1f]/95 to-[#141414]/95 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_50px_rgba(0,0,0,0.24)] sm:-mx-2 sm:p-4 lg:mx-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
                 >
           <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-white/5 blur-3xl" />
           <div className="pointer-events-none absolute -right-16 top-56 h-48 w-48 rounded-full bg-white/4 blur-3xl" />

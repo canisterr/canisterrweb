@@ -22,6 +22,7 @@ import {
   MoveRight,
   Copy,
   Share2,
+  ChevronRight,
   ChevronUp,
   ChevronDown,
   UserX,
@@ -78,131 +79,134 @@ function MenuButton({ onEdit, onAddItems, canEdit, isOwner, onDelete, onClone, o
         <MoreVertical className="h-6 w-6" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden border border-white/10 bg-[#111111] shadow-xl">
-          <div className="p-2">
-            {canEdit && (
-              <>
-                <div className="px-3 pb-2 pt-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Layout</p>
+        <div className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#1c1c1e]/95 p-2 shadow-[0_24px_70px_rgba(0,0,0,0.65)] backdrop-blur-2xl">
+            <div className="mb-2 rounded-2xl bg-black/30 p-1">
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                      viewType === "grid" ? "bg-[#ff7a1a] text-black" : "text-white/60 hover:bg-white/5 hover:text-white"
+                    }`}
+                    onClick={() => {
+                      setOpen(false);
+                      onSetViewType("grid");
+                    }}
+                  >
+                    <Grid3x3 className="h-4 w-4" />
+                    Grid
+                  </button>
+                  <button
+                    className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                      viewType === "list" ? "bg-[#ff7a1a] text-black" : "text-white/60 hover:bg-white/5 hover:text-white"
+                    }`}
+                    onClick={() => {
+                      setOpen(false);
+                      onSetViewType("list");
+                    }}
+                  >
+                    <ListIcon className="h-4 w-4" />
+                    List
+                  </button>
                 </div>
-                <button
-                  className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5"
-                  onClick={() => {
-                    setOpen(false);
-                    onSetViewType("grid");
-                  }}
-                >
-                  <Grid3x3 className={`mt-0.5 h-4 w-4 ${viewType === "grid" ? "text-[#ff7a1a]" : "text-white/60"}`} />
-                  <div>
-                    <p className="text-sm font-semibold text-[#f5f0de]">Grid</p>
-                    <p className="text-xs text-white/55">Posters in a tight grid</p>
-                  </div>
-                </button>
-                <button
-                  className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5"
-                  onClick={() => {
-                    setOpen(false);
-                    onSetViewType("list");
-                  }}
-                >
-                  <ListIcon className={`mt-0.5 h-4 w-4 ${viewType === "list" ? "text-[#ff7a1a]" : "text-white/60"}`} />
-                  <div>
-                    <p className="text-sm font-semibold text-[#f5f0de]">List</p>
-                    <p className="text-xs text-white/55">One row per item</p>
-                  </div>
-                </button>
-              </>
-            )}
-            <button
-              className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5"
-              onClick={() => { setOpen(false); onClone(); }}
-            >
-              <Copy className="mt-0.5 h-4 w-4 text-[#ff7a1a]" />
-              <div>
-                <p className="text-sm font-semibold text-[#f5f0de]">{cloneLoading ? "Cloning..." : "Clone list"}</p>
-                <p className="text-xs text-white/55">Save a private copy to Your lists</p>
-              </div>
-            </button>
-            {onShare && (
-              <button
-                className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5"
-                onClick={() => { setOpen(false); onShare(); }}
-              >
-                <Share2 className="mt-0.5 h-4 w-4 text-[#ff7a1a]" />
-                <div>
-                  <p className="text-sm font-semibold text-[#f5f0de]">Share list</p>
-                  <p className="text-xs text-white/55">Send a link to this list</p>
-                </div>
-              </button>
-            )}
-            <button
-              className={`mt-1 flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5 ${
-                watchedStatusEnabled ? "text-[#ffb36b]" : ""
-              }`}
-              onClick={() => {
-                setOpen(false);
-                onToggleWatchedStatus?.();
-              }}
-            >
-              <Eye className={`mt-0.5 h-4 w-4 ${watchedStatusEnabled ? "text-[#ff7a1a]" : "text-white/60"}`} />
-              <div>
-                <p className="text-sm font-medium text-[#f5f0de]">Watched status</p>
-                <p className="text-xs text-white/55">See who watched what</p>
-              </div>
-            </button>
+            </div>
 
-            {canEdit && viewType === "list" && onToggleReorder && (
+            <div className="overflow-hidden rounded-2xl bg-white/[0.055] divide-y divide-white/[0.07]">
               <button
-                className={`mt-1 flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5 ${
-                  reorderMode ? "text-[#ffb36b]" : ""
-                }`}
-                onClick={() => { setOpen(false); onToggleReorder(); }}
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
+                onClick={() => { setOpen(false); onClone(); }}
               >
-                <GripVertical className={`mt-0.5 h-4 w-4 ${reorderMode ? "text-[#ff7a1a]" : "text-white/60"}`} />
-                <div>
-                  <p className="text-sm font-semibold text-[#f5f0de]">Reorder items</p>
-                  <p className="text-xs text-white/55">Drag rows to change order</p>
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/15 text-[#ff8d3b]"><Copy className="h-4 w-4" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[#f5f0de]">{cloneLoading ? "Cloning..." : "Clone list"}</p>
+                  <p className="truncate text-xs text-white/40">Save a private copy</p>
                 </div>
+                <ChevronRight className="h-4 w-4 text-white/25" />
               </button>
-            )}
+
+              {onShare && (
+                <button
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
+                  onClick={() => { setOpen(false); onShare(); }}
+                >
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/15 text-[#ff8d3b]"><Share2 className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[#f5f0de]">Share list</p>
+                    <p className="truncate text-xs text-white/40">Send a link</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-white/25" />
+                </button>
+              )}
+
+              <button
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
+                onClick={() => {
+                  setOpen(false);
+                  onToggleWatchedStatus?.();
+                }}
+              >
+                <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${watchedStatusEnabled ? "bg-[#ff7a1a] text-black" : "bg-white/[0.07] text-white/65"}`}><Eye className="h-4 w-4" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[#f5f0de]">Watched status</p>
+                  <p className="truncate text-xs text-white/40">See who watched what</p>
+                </div>
+                <span className={`relative h-6 w-10 rounded-full transition ${watchedStatusEnabled ? "bg-[#ff7a1a]" : "bg-white/15"}`}>
+                  <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${watchedStatusEnabled ? "translate-x-5" : "translate-x-1"}`} />
+                </span>
+              </button>
+
+              {canEdit && viewType === "list" && onToggleReorder && (
+                <button
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
+                  onClick={() => { setOpen(false); onToggleReorder(); }}
+                >
+                  <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${reorderMode ? "bg-[#ff7a1a] text-black" : "bg-white/[0.07] text-white/65"}`}><GripVertical className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[#f5f0de]">Reorder items</p>
+                    <p className="truncate text-xs text-white/40">Drag rows to reorder</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-white/25" />
+                </button>
+              )}
+            </div>
 
             {canEdit && (
-              <div className="mt-2 border-t border-white/10 pt-2">
+              <div className="mt-2 overflow-hidden rounded-2xl bg-white/[0.055] divide-y divide-white/[0.07]">
                 <button
-                  className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
                   onClick={() => { setOpen(false); onEdit(); }}
                 >
-                  <Edit2 className="mt-0.5 h-4 w-4 text-[#ff7a1a]" />
-                  <div>
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/15 text-[#ff8d3b]"><Edit2 className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-[#f5f0de]">Edit details</p>
-                    <p className="text-xs text-white/55">Title, privacy, description</p>
+                    <p className="truncate text-xs text-white/40">Title, privacy, description</p>
                   </div>
+                  <ChevronRight className="h-4 w-4 text-white/25" />
                 </button>
                 <button
-                  className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-white/5"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
                   onClick={() => { setOpen(false); onAddItems(); }}
                 >
-                  <Plus className="mt-0.5 h-4 w-4 text-white/60" />
-                  <div>
-                    <p className="text-sm font-medium text-[#f5f0de]">Add movies</p>
-                    <p className="text-xs text-white/55">Add items to the list</p>
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-white/70"><Plus className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[#f5f0de]">Add movies</p>
+                    <p className="truncate text-xs text-white/40">Add items to the list</p>
                   </div>
+                  <ChevronRight className="h-4 w-4 text-white/25" />
                 </button>
-                {isOwner && onDelete && (
-                  <button
-                    className="mt-1 flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left text-[#ff7a1a] hover:bg-white/5"
-                    onClick={() => { setOpen(false); onDelete(); }}
-                  >
-                    <Trash2 className="mt-0.5 h-4 w-4" />
-                    <div>
-                      <p className="text-sm font-medium">Delete list</p>
-                      <p className="text-xs text-white/55">Permanently remove this list</p>
-                    </div>
-                  </button>
-                )}
               </div>
             )}
-          </div>
+
+            {isOwner && onDelete && (
+              <button
+                className="mt-2 flex w-full items-center gap-3 rounded-2xl bg-red-500/10 px-3 py-2.5 text-left text-red-300 transition hover:bg-red-500/15"
+                onClick={() => { setOpen(false); onDelete(); }}
+              >
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-red-500/15"><Trash2 className="h-4 w-4" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">Delete list</p>
+                  <p className="truncate text-xs text-red-200/50">This cannot be undone</p>
+                </div>
+              </button>
+            )}
         </div>
       )}
     </div>
@@ -405,7 +409,11 @@ export default function ListDetailPage() {
   }, [listId, router]);
 
   const handleViewTypeChange = async (newViewType: "grid" | "list") => {
-    if (!canEdit) return;
+    if (!canEdit) {
+      setViewType(newViewType);
+      setReorderMode(false);
+      return;
+    }
 
     try {
       setSavingPreferences(true);
@@ -853,7 +861,7 @@ export default function ListDetailPage() {
               )}
               {/* Collaborators: show profile pictures, open modal on click */}
               <button
-                className="flex items-center gap-1 border border-white/10 bg-white/5 px-3 py-1.5 text-[#f5f0de]"
+                className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[#f5f0de]"
                 onClick={() => setShowCollaboratorsModal(true)}
                 aria-label="Show collaborators"
               >

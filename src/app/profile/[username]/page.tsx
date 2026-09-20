@@ -13,7 +13,7 @@ import DOMPurify from 'dompurify';
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { get, ref, set } from "firebase/database";
-import { ArrowLeft, Ban, Bell, Loader2, MoreVertical, Share2, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, Ban, Bell, Loader2, MoreVertical, Share2, Upload } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import StatsInsights from "@/components/StatsInsights";
@@ -25,8 +25,6 @@ import { searchMovies } from "@/lib/tmdb";
 import { getDisplayUserHandle } from "@/lib/users";
 import { getLogEngagementBatch, type LogEngagementSnapshot } from "@/lib/log-engagement";
 import LogFeedCard from "@/components/LogFeedCard";
-import PostFeedCard from "@/components/PostFeedCard";
-import { getUserCinePosts, getUserEngagedCinePosts } from "@/lib/cineposts";
 import {
   DEFAULT_SETTINGS,
   canShowSharedMovies,
@@ -52,7 +50,7 @@ import {
   createFollowAcceptedNotification,
 } from "@/lib/notifications";
 import { signOut as authSignOut } from "@/lib/auth";
-import type { CinePostWithDetails, List, ListWithItems, MovieLogWithContent, User } from "@/types";
+import type { List, ListWithItems, MovieLogWithContent, User } from "@/types";
 
 type FollowModalType = "followers" | "following";
 
@@ -273,14 +271,6 @@ function ProfilePageInner() {
   const [profileLogsLimit, setProfileLogsLimit] = useState(10);
   const [profileLogsHasMore, setProfileLogsHasMore] = useState(true);
   const [profileLogsEngagement, setProfileLogsEngagement] = useState<Record<string, LogEngagementSnapshot>>({});
-  const [profilePosts, setProfilePosts] = useState<CinePostWithDetails[]>([]);
-  const [profilePostsLoading, setProfilePostsLoading] = useState(false);
-  const [profilePostsLimit, setProfilePostsLimit] = useState(10);
-  const [profilePostsHasMore, setProfilePostsHasMore] = useState(true);
-  const [savedPosts, setSavedPosts] = useState<CinePostWithDetails[]>([]);
-  const [savedPostsLoading, setSavedPostsLoading] = useState(false);
-  const [savedPostsLimit, setSavedPostsLimit] = useState(10);
-  const [savedPostsHasMore, setSavedPostsHasMore] = useState(true);
   const [isCinemaCardOpen, setIsCinemaCardOpen] = useState(false);
   const [cinemaCardSummary, setCinemaCardSummary] = useState<CinemaCardSummary | null>(null);
   const [cinemaCardLoading, setCinemaCardLoading] = useState(false);
@@ -843,54 +833,6 @@ function ProfilePageInner() {
       cancelled = true;
     };
   }, [activeTab, canAccessLists, isOwnProfile, profileUser]);
-
-  useEffect(() => {
-    if (!profileUser || activeTab !== "posts" || !canAccessActivity) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setProfilePostsLoading(true);
-        const posts = await getUserCinePosts(profileUser.id, currentUser?.id, profilePostsLimit);
-        if (cancelled) return;
-        setProfilePosts(posts);
-        setProfilePostsHasMore(posts.length >= profilePostsLimit);
-      } catch (error) {
-        console.error("[PROFILE] Error loading cineposts:", error);
-      } finally {
-        if (!cancelled) setProfilePostsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, canAccessActivity, currentUser?.id, profilePostsLimit, profileUser]);
-
-  useEffect(() => {
-    if (!profileUser || !isOwnProfile || activeTab !== "saved") return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setSavedPostsLoading(true);
-        const posts = await getUserEngagedCinePosts(profileUser.id, "save", currentUser?.id, savedPostsLimit);
-        if (cancelled) return;
-        setSavedPosts(posts);
-        setSavedPostsHasMore(posts.length >= savedPostsLimit);
-      } catch (error) {
-        console.error("[PROFILE] Error loading saved cineposts:", error);
-      } finally {
-        if (!cancelled) setSavedPostsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, currentUser?.id, isOwnProfile, profileUser, savedPostsLimit]);
 
   useEffect(() => {
     if (!profileUser || !isOwnProfile) return;
@@ -1779,15 +1721,6 @@ function ProfilePageInner() {
                 <span className="font-black text-[#ffb36b]">{formatCompactCount(followingCount)}</span>
                 <span>following</span>
               </button>
-              {((isOwnProfile) || (canAccessProfile && currentUser && !hasBlockRelationship)) && (
-                <Link
-                  href={`/movie-matcher/${visibleUsername}`}
-                  aria-label="Open Movie Matcher"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-[#ff7a1a]/30 hover:bg-[#ff7a1a]/10 hover:text-[#ffb36b]"
-                >
-                  <Sparkles className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                </Link>
-              )}
             </div>
 
             <p className="mt-3 max-w-xl text-sm leading-6 text-[#f5f0de]/60 sm:text-base">
@@ -2030,18 +1963,6 @@ function ProfilePageInner() {
             >
               {canAccessActivity && (
                 <button
-                  data-id="posts"
-                  type="button"
-                  onClick={() => setActiveTab("posts")}
-                  className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
-                    activeTab === "posts" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
-                  }`}
-                >
-                  Posts
-                </button>
-              )}
-              {canAccessActivity && (
-                <button
                   data-id="stats"
                   type="button"
                   onClick={() => setActiveTab("stats")}
@@ -2062,18 +1983,6 @@ function ProfilePageInner() {
                   }`}
                 >
                   Lists
-                </button>
-              )}
-              {isOwnProfile && (
-                <button
-                  data-id="saved"
-                  type="button"
-                  onClick={() => setActiveTab("saved")}
-                  className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
-                    activeTab === "saved" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
-                  }`}
-                >
-                  Saved
                 </button>
               )}
             </AnimatedBackground>
@@ -2372,76 +2281,6 @@ function ProfilePageInner() {
                     className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-60"
                   >
                     {profileLogsLoading ? "Loading..." : "Load more"}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {activeTab === "posts" && canAccessActivity && (
-          <div className="space-y-4">
-            {profilePostsLoading && profilePosts.length === 0 ? (
-              <div className="border border-white/10 bg-black p-6 text-sm text-white/55">
-                Loading posts...
-              </div>
-            ) : profilePosts.length === 0 ? (
-              <div className="border border-white/10 bg-black p-6 text-center text-sm text-white/55">
-                No cineposts yet.
-              </div>
-            ) : (
-              <>
-                {profilePosts.map((post) => (
-                  <PostFeedCard
-                    key={post.id}
-                    post={post}
-                    currentUser={currentUser}
-                    onDeleted={(postId) => setProfilePosts((current) => current.filter((entry) => entry.id !== postId))}
-                  />
-                ))}
-                {profilePostsHasMore && (
-                  <button
-                    type="button"
-                    onClick={() => setProfilePostsLimit((current) => current + 10)}
-                    disabled={profilePostsLoading}
-                    className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-60"
-                  >
-                    {profilePostsLoading ? "Loading..." : "Load more"}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {activeTab === "saved" && isOwnProfile && (
-          <div className="space-y-4">
-            {savedPostsLoading && savedPosts.length === 0 ? (
-              <div className="border border-white/10 bg-black p-6 text-sm text-white/55">
-                Loading saved posts...
-              </div>
-            ) : savedPosts.length === 0 ? (
-              <div className="border border-white/10 bg-black p-6 text-center text-sm text-white/55">
-                No saved posts yet.
-              </div>
-            ) : (
-              <>
-                {savedPosts.map((post) => (
-                  <PostFeedCard
-                    key={post.id}
-                    post={post}
-                    currentUser={currentUser}
-                    onDeleted={(postId) => setSavedPosts((current) => current.filter((entry) => entry.id !== postId))}
-                  />
-                ))}
-                {savedPostsHasMore && (
-                  <button
-                    type="button"
-                    onClick={() => setSavedPostsLimit((current) => current + 10)}
-                    disabled={savedPostsLoading}
-                    className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-[#f5f0de] transition hover:bg-white/10 disabled:opacity-60"
-                  >
-                    {savedPostsLoading ? "Loading..." : "Load more"}
                   </button>
                 )}
               </>

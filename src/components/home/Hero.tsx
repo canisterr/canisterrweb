@@ -8,7 +8,7 @@ type HeroProps = {
   posters: PosterItem[];
 };
 
-const navItems = ["Movies", "Logs", "Lists", "Matcher"];
+const navItems = ["Movies", "Logs", "Lists"];
 
 export default function Hero({ posters }: HeroProps) {
   return (

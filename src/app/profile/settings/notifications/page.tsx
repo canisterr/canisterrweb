@@ -172,7 +172,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={Sparkles} title="Like notifications" description="Likes and saves on your posts, logs, and comments.">
+        <SettingLine icon={Sparkles} title="Like notifications" description="Likes and saves on your logs and comments.">
           <CompactToggle
             checked={settings.notifications.likeNotifications}
             onChange={(next) => void updateSection("notifications", { likeNotifications: next })}
@@ -180,7 +180,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={MessageSquare} title="Comment notifications" description="Comments and replies on your posts, logs, and shares.">
+        <SettingLine icon={MessageSquare} title="Comment notifications" description="Comments and replies on your logs and shares.">
           <CompactToggle
             checked={settings.notifications.commentNotifications}
             onChange={(next) => void updateSection("notifications", { commentNotifications: next })}
@@ -209,14 +209,6 @@ export default function SettingsNotificationsPage() {
             checked={settings.notifications.collaborationInvites}
             onChange={(next) => void updateSection("notifications", { collaborationInvites: next })}
             label={settings.notifications.collaborationInvites ? "On" : "Off"}
-          />
-        </SettingLine>
-
-        <SettingLine icon={Bell} title="Matcher updates" description="Movie matcher and report updates.">
-          <CompactToggle
-            checked={settings.notifications.matcherUpdates}
-            onChange={(next) => void updateSection("notifications", { matcherUpdates: next })}
-            label={settings.notifications.matcherUpdates ? "On" : "Off"}
           />
         </SettingLine>
 

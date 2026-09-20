@@ -7,7 +7,7 @@ const sections = [
     title: "1. Information we collect",
     items: [
       "Account details such as your username, display name, email address, and profile image.",
-      "Content you create, including logs, posts, comments, lists, reactions, follows, messages, and shared items.",
+      "Content you create, including logs, comments, lists, reactions, follows, messages, and shared items.",
       "Device and usage data such as browser type, pages visited, timestamps, and basic diagnostics.",
       "Technical data used to deliver notifications, prevent abuse, and keep the app working reliably.",
     ],
@@ -16,7 +16,7 @@ const sections = [
     title: "2. How we use information",
     items: [
       "Create and manage your account.",
-      "Show your profile, logs, lists, posts, followers, and related social activity.",
+      "Show your profile, logs, lists, followers, and related social activity.",
       "Send notifications and emails you opt into.",
       "Improve performance, diagnose issues, and protect the service from abuse.",
       "Respond to support requests and account issues.",
@@ -62,7 +62,7 @@ const sections = [
     title: "8. Your choices and rights",
     items: [
       "Update your profile, privacy settings, and notification settings in the app.",
-      "Delete comments, posts, lists, and other content where the product allows it.",
+      "Delete comments, lists, and other content where the product allows it.",
       "Deactivate or delete your account from account settings.",
       "Contact us if you want help with a privacy question or request.",
     ],

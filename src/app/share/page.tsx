@@ -7,6 +7,7 @@ import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 import SearchBar from "@/components/SearchBar";
 import ShareModal from "@/components/ShareModal";
 import TopActionBanner from "@/components/TopActionBanner";
+import { AnimatedBackground } from "@/components/core/animated-background";
 import { Content, ShareWithDetails, TMDBMovie, User } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
@@ -438,8 +439,6 @@ function SharePageContent() {
     return () => window.clearTimeout(timer);
   }, [bannerMessage]);
 
-  const progressPercentage = (currentStep / 2) * 100;
-
   const filteredFollowers = useMemo(() => {
     const query = followersSearchQuery.trim().toLowerCase();
 
@@ -732,7 +731,7 @@ function SharePageContent() {
       <TopActionBanner message={bannerMessage} />
       <div className="min-h-screen px-4 pb-8 pt-4 sm:px-8 sm:pt-6">
         <div className="mx-auto w-full max-w-6xl">
-          <div className="mb-5 flex items-center gap-2 border-b border-white/10 pb-4">
+          <div className="mb-5 flex items-center justify-center gap-2 border-b border-white/10 pb-4">
             <button
               type="button"
               onClick={() => setActivePanel("share")}
@@ -759,85 +758,58 @@ function SharePageContent() {
 
           {activePanel === "share" ? (
             <section>
-              <div className="px-0 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Share Flow</p>
-                    <h2 className="mt-1 text-xl font-semibold text-[#f5f0de] sm:text-2xl">Send a recommendation</h2>
-                  </div>
-                  <div className="flex max-w-full gap-3 overflow-x-auto pb-1">
-                    <span className={`text-xs font-semibold ${
-                      currentStep === 1 ? "text-[#f5f0de]" : "text-white/35"
-                    }`}>
-                      1. Pick title
-                    </span>
-                    <span className={`text-xs font-semibold ${
-                      currentStep === 2 ? "text-[#f5f0de]" : "text-white/35"
-                    }`}>
-                      2. Pick friends
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4 h-1.5 overflow-hidden bg-white/10">
-                  <div
-                    className="h-full bg-[#ff7a1a] transition-all duration-500"
-                    style={{ width: `${progressPercentage}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="min-h-[24rem] py-4 sm:min-h-[28rem] sm:py-6">
+              <div className="py-5 sm:py-7">
                 <div
-                  className={`transition-all duration-500 ${
+                  className={`relative z-20 transition-all duration-500 ${
                     currentStep === 1 ? "opacity-100 translate-x-0" : "opacity-0 translate-x-6"
                   } ${currentStep !== 1 ? "hidden" : ""}`}
                 >
                   <h3 className="text-xl font-semibold text-[#f5f0de] sm:text-2xl">Select a Movie or Show</h3>
                   <p className="mt-1 text-sm text-white/65">Find the right title first, then continue.</p>
 
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => {
-                        setContentTypeFilter("all");
+                  <div className="mt-6 w-full rounded-[14px] border border-white/10 bg-[#111111] p-[3px]">
+                    <AnimatedBackground
+                      defaultValue={contentTypeFilter}
+                      value={contentTypeFilter}
+                      onValueChange={(value) => {
+                        setContentTypeFilter(value as "all" | "movies" | "tv");
                         setSelectedContent(null);
                         setSearchResults([]);
                         setYearFilter("");
                       }}
-                      className={`text-sm font-medium ${
-                        contentTypeFilter === "all" ? "text-[#f5f0de]" : "text-white/45 hover:text-[#f5f0de]"
+                      className="rounded-[11px] bg-[#ff7a1a]"
+                      transition={{ ease: "easeInOut", duration: 0.2 }}
+                    >
+                    <button
+                      data-id="all"
+                      type="button"
+                      className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-[11px] px-2 py-3 text-sm font-semibold transition ${
+                        contentTypeFilter === "all" ? "text-[#111111]" : "text-white/70 hover:text-[#f5f0de]"
                       }`}
                     >
                       All
                     </button>
 
                     <button
-                      onClick={() => {
-                        setContentTypeFilter("movies");
-                        setSelectedContent(null);
-                        setSearchResults([]);
-                        setYearFilter("");
-                      }}
-                      className={`text-sm font-medium ${
-                        contentTypeFilter === "movies" ? "text-[#f5f0de]" : "text-white/45 hover:text-[#f5f0de]"
+                      data-id="movies"
+                      type="button"
+                      className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-[11px] px-2 py-3 text-sm font-semibold transition ${
+                        contentTypeFilter === "movies" ? "text-[#111111]" : "text-white/70 hover:text-[#f5f0de]"
                       }`}
                     >
                       Movies
                     </button>
 
                     <button
-                      onClick={() => {
-                        setContentTypeFilter("tv");
-                        setSelectedContent(null);
-                        setSearchResults([]);
-                        setYearFilter("");
-                      }}
-                      className={`text-sm font-medium ${
-                        contentTypeFilter === "tv" ? "text-[#f5f0de]" : "text-white/45 hover:text-[#f5f0de]"
+                      data-id="tv"
+                      type="button"
+                      className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-[11px] px-2 py-3 text-sm font-semibold transition ${
+                        contentTypeFilter === "tv" ? "text-[#111111]" : "text-white/70 hover:text-[#f5f0de]"
                       }`}
                     >
                       TV Shows
                     </button>
+                    </AnimatedBackground>
                   </div>
 
                   <div className="mt-4">
@@ -857,7 +829,7 @@ function SharePageContent() {
 
                   {searchResults.length > 0 && uniqueYears.length > 1 && (
                     <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <label className="text-sm font-medium text-zinc-700">Filter year</label>
+                      <label className="text-sm font-medium text-white/55">Filter year</label>
                       <select
                         value={yearFilter}
                         onChange={(e) => setYearFilter(e.target.value)}
@@ -907,7 +879,7 @@ function SharePageContent() {
                   )}
 
                   {selectedContent && (
-                  <div className="mt-5 sm:mt-6">
+                  <div className="mt-5 border border-white/10 bg-white/[0.03] p-4 sm:mt-6">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                         {selectedContent.poster_url && (
                           <img
@@ -944,7 +916,7 @@ function SharePageContent() {
                 </div>
 
                 <div
-                  className={`transition-all duration-500 ${
+                  className={`relative z-20 transition-all duration-500 ${
                     currentStep === 2 ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-6"
                   } ${currentStep !== 2 ? "hidden" : ""}`}
                 >
@@ -952,7 +924,7 @@ function SharePageContent() {
                   <p className="mt-1 text-sm text-white/65">Pick recipients and attach a short note.</p>
 
                   {selectedContent && (
-                    <div className="mt-5 flex items-center gap-3 border-b border-zinc-200 py-3">
+                    <div className="mt-5 flex items-center gap-3 border border-white/10 bg-white/[0.03] p-3">
                       {selectedContent.poster_url && (
                         <img
                           src={selectedContent.poster_url}
@@ -975,21 +947,21 @@ function SharePageContent() {
                       placeholder="Search friends..."
                       value={followersSearchQuery}
                       onChange={(e) => setFollowersSearchQuery(e.target.value)}
-                      className="field"
+                      className="field py-2.5 text-sm"
                     />
                   </div>
 
-                  <div className="mb-3 mt-4 max-h-56 space-y-1 overflow-y-auto pr-1">
+                  <div className="mb-3 mt-3 max-h-48 divide-y divide-white/10 overflow-y-auto rounded-2xl border border-white/10 bg-[#141414] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                     {filteredFollowers.length > 0 ? (
                       filteredFollowers.map((friend) => (
                         <button
                           key={friend.id}
-                          className="flex w-full items-center justify-between gap-3 border border-white/10 bg-white/[0.03] px-3 py-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06]"
+                          className="flex w-full items-center justify-between gap-3 bg-[#141414] px-3 py-2.5 text-left transition-colors hover:bg-[#1c1c1c]"
                           onClick={() => handleAddRecipient(friend.id)}
                         >
-                          <div>
-                            <p className="text-sm font-semibold text-slate-200">@{friend.username}</p>
-                            <p className="text-xs text-slate-400">{friend.name}</p>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[#f5f0de]">@{friend.username}</p>
+                            <p className="truncate text-xs text-white/40">{friend.name}</p>
                           </div>
 
                           <div
@@ -1004,16 +976,16 @@ function SharePageContent() {
                         </button>
                       ))
                     ) : (
-                      <p className="py-4 text-center text-sm text-zinc-500">No friends found</p>
+                      <p className="py-4 text-center text-sm text-white/45">No friends found</p>
                     )}
                   </div>
 
                   {selectedRecipients.length > 0 && (
-                    <div className="py-2">
-                      <p className="mb-2 text-sm font-semibold text-[#f5f0de]">
+                    <div className="py-1.5">
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/45">
                         Selected: {selectedRecipients.length} friend{selectedRecipients.length !== 1 ? "s" : ""}
                       </p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/65">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-white/65">
                         {selectedRecipients.map((recipient, index) => (
                           <span key={recipient.id} className="inline-flex items-center gap-2">
                             <span className="text-[#f5f0de]">@{recipient.username}</span>
@@ -1030,22 +1002,24 @@ function SharePageContent() {
                     </div>
                   )}
 
-                  <div className="mt-3">
-                    <label className="mb-2 block text-sm font-medium text-[#f5f0de]">Add a Note (Optional)</label>
+                  <div className="mt-3 border-t border-white/10 pt-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label className="text-sm font-medium text-[#f5f0de]">Note <span className="text-white/40">(optional)</span></label>
+                      <span className="text-xs text-white/35">{shareNote.length}/300</span>
+                    </div>
                     <textarea
                       value={shareNote}
                       onChange={(e) => setShareNote(e.target.value.slice(0, 300))}
-                      placeholder="Write a personal message to include with your share..."
-                      className="field min-h-[100px] resize-none"
-                      rows={3}
+                      placeholder="Add a message..."
+                      className="field min-h-20 resize-none py-2.5 text-sm"
+                      rows={2}
                       maxLength={300}
                     />
-                    <p className="mt-1 text-right text-xs text-white/45">{shareNote.length}/300</p>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 border-t border-white/10 px-0 py-4">
+              <div className="relative z-0 flex items-center justify-between gap-3 border-t border-white/10 px-0 pt-5">
                 <button
                   onClick={() => {
                     if (currentStep > 1) {
@@ -1088,12 +1062,12 @@ function SharePageContent() {
             </section>
           ) : (
             <section>
-              <div className="px-0 py-2">
+              <div className="border-b border-white/10 pb-5">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Share History</p>
                 <h2 className="mt-1 text-xl font-semibold text-[#f5f0de] sm:text-2xl">Titles You Shared</h2>
               </div>
 
-              <div className="py-3">
+              <div className="pt-5">
                 <input
                   type="text"
                   placeholder="Search shared titles..."

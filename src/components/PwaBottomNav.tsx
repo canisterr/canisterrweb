@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clapperboard, Ellipsis, Home, LibraryBig, ScanSearch, Share2, ShoppingBag } from "lucide-react";
+import { Clapperboard, Compass, Ellipsis, Home, LibraryBig, Share2, ShoppingBag } from "lucide-react";
 import { useIsPwa } from "@/lib/pwa";
 
 type NavItem = {
@@ -21,8 +21,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const MORE_ITEMS: NavItem[] = [
+  { href: "/discover", label: "Discover", icon: Compass, exact: false },
   { href: "/store", label: "Store", icon: ShoppingBag, exact: false },
-  { href: "/movie-matcher", label: "Movie Matcher", icon: ScanSearch, exact: false },
 ];
 
 function isActivePath(pathname: string, href: string, exact?: boolean): boolean {

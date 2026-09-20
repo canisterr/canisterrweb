@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Users, Sparkles, MessageSquare, Mail, SendHorizontal } from "lucide-react";
+import { Users, Sparkles, MessageSquare, Mail, SendHorizontal } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
 import { SettingLine, CompactToggle } from "../settings-ui";
@@ -54,14 +54,6 @@ export default function SettingsNotificationsPage() {
             checked={settings.notifications.collaborationInvites}
             onChange={(next) => void updateSection("notifications", { collaborationInvites: next })}
             label={settings.notifications.collaborationInvites ? "On" : "Off"}
-          />
-        </SettingLine>
-
-        <SettingLine icon={Bell} title="Matcher updates" description="Movie matcher and report updates.">
-          <CompactToggle
-            checked={settings.notifications.matcherUpdates}
-            onChange={(next) => void updateSection("notifications", { matcherUpdates: next })}
-            label={settings.notifications.matcherUpdates ? "On" : "Off"}
           />
         </SettingLine>
 

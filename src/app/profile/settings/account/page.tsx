@@ -68,11 +68,10 @@ export default function SettingsAccountPage() {
     setMessage(null);
 
     try {
-      const [followsSnap, logsSnap, listsSnap, postsSnap, sharesSnap] = await Promise.all([
+      const [followsSnap, logsSnap, listsSnap, sharesSnap] = await Promise.all([
         get(ref(db, "follows")),
         get(ref(db, "movie_logs")),
         get(ref(db, "lists")),
-        get(ref(db, "cine_posts")),
         get(ref(db, "shares")),
       ]);
 
@@ -95,12 +94,6 @@ export default function SettingsAccountPage() {
       if (listsSnap.exists()) {
         Object.entries(listsSnap.val() as Record<string, List>).forEach(([listId, list]) => {
           if (list.owner_id === user.id) tasks.push(deleteList(listId, user.id));
-        });
-      }
-
-      if (postsSnap.exists()) {
-        Object.entries(postsSnap.val() as Record<string, any>).forEach(([id, post]) => {
-          if (post.user_id === user.id) tasks.push(remove(ref(db, `cine_posts/${id}`)));
         });
       }
 

@@ -40,7 +40,14 @@ import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getUsersByIds } from "@/lib/users";
 import { formatRelativeTime as relativeTime } from "@/lib/format";
+import { buildCrewPath } from "@/lib/crew";
 import LikersModal from "@/components/LikersModal";
+
+type CrewCredit = {
+  id: number;
+  name: string;
+  job?: string | null;
+};
 
 function linkify(text: string) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
@@ -176,6 +183,13 @@ function sortLogCommentTree(
     });
 }
 
+function countLogCommentTree(comments: LogCommentWithUser[]): number {
+  return comments.reduce(
+    (total, comment) => total + 1 + countLogCommentTree(comment.replies),
+    0
+  );
+}
+
 function CommentThread({
   comment,
   currentUser,
@@ -214,15 +228,18 @@ function CommentThread({
       }`}
     >
       <div className="flex gap-3">
-        <Link href={onJumpToProfile(comment.user)} className="flex-shrink-0">
+        <Link
+          href={onJumpToProfile(comment.user)}
+          className="flex-shrink-0 border-2 border-[#f5f0de] bg-black"
+        >
           {comment.user.avatar_url ? (
             <img
               src={comment.user.avatar_url}
               alt={comment.user.name}
-              className="h-10 w-10 rounded-full object-cover"
+              className="h-10 w-10 rounded-none object-cover grayscale contrast-125"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-none bg-black text-sm font-black text-[#f5f0de]">
               {comment.user.name?.charAt(0)?.toUpperCase() || "U"}
             </div>
           )}
@@ -235,13 +252,13 @@ function CommentThread({
             </Link>
             <span className="text-xs text-slate-400">{relativeTime(comment.created_at)}</span>
             {comment.user_id === logOwnerId && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#f5f0de]">
+              <span className="rounded-none bg-[#ff7a1a]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffb36b]">
                 owner
               </span>
             )}
           </div>
 
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{linkify(comment.content)}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#f5f0de]/75">{linkify(comment.content)}</p>
 
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-black">
             <button
@@ -249,7 +266,7 @@ function CommentThread({
               onClick={() => onToggleLike(comment)}
               disabled={submitting}
               className={`inline-flex items-center gap-1.5 transition ${
-                comment.liked_by_current_user ? "text-rose-600" : "text-slate-500 hover:text-slate-900"
+                comment.liked_by_current_user ? "text-rose-400" : "text-white/40 hover:text-[#f5f0de]"
               }`}
             >
               <Heart className={`h-3.5 w-3.5 ${comment.liked_by_current_user ? "fill-rose-500" : ""}`} />
@@ -258,7 +275,7 @@ function CommentThread({
               type="button"
               onClick={() => onOpenLikers(comment.id)}
               disabled={comment.likes_count === 0}
-              className="text-slate-500 hover:text-slate-900 disabled:cursor-default disabled:text-slate-300"
+              className="text-white/40 hover:text-[#f5f0de] disabled:cursor-default disabled:text-white/20"
             >
               {comment.likes_count}
             </button>
@@ -284,13 +301,13 @@ function CommentThread({
             value={replyText}
             onChange={(event) => setReplyText(event.target.value)}
             placeholder={`Reply to ${comment.user.name}`}
-            className="min-w-0 flex-1 border-b border-slate-200 bg-transparent px-0 py-2 text-sm outline-none placeholder:text-slate-400 focus:border-blue-500"
+            className="min-w-0 flex-1 rounded-none border border-white/10 bg-black px-3 py-2 text-sm text-[#f5f0de] outline-none placeholder:text-white/35 focus:border-[#ff7a1a]"
           />
           <button
             type="button"
             disabled={submitting || replyText.trim().length < 2}
             onClick={() => onReply(comment.id, comment.user_id)}
-            className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-none bg-[#ff7a1a] px-3 py-2 text-xs font-black text-black disabled:opacity-50"
             aria-label="Send reply"
           >
             <Send className="h-4 w-4" />
@@ -300,7 +317,7 @@ function CommentThread({
       )}
 
       {comment.replies.length > 0 && (
-        <div className="ml-5 mt-3 space-y-1 border-l border-slate-200 pl-4 sm:ml-6 sm:pl-6">
+        <div className="ml-5 mt-3 space-y-1 border-l border-white/10 pl-4 sm:ml-6 sm:pl-6">
           {comment.replies.map((reply) => (
             <CommentThread
               key={reply.id}
@@ -348,6 +365,7 @@ export default function LogDetailPage() {
   const [likersLoading, setLikersLoading] = useState(false);
   const [comments, setComments] = useState<LogCommentWithUser[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentSort, setCommentSort] = useState<"newest" | "top">("newest");
   const [commentText, setCommentText] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -772,8 +790,18 @@ export default function LogDetailPage() {
   };
 
   const releaseYear = log?.content.release_date ? new Date(log.content.release_date).getFullYear() : null;
+  const directorCredit = log?.content_type === "movie"
+    ? ((log.content as Content & { crew_details?: CrewCredit[] }).crew_details || []).find(
+        (credit) => credit.job === "Director"
+      ) || null
+    : null;
+  const directorName = directorCredit?.name || log?.content.director || null;
   const hasTicketImage = Boolean(ticketImageUrl);
-  const sortedComments = useMemo(() => sortLogCommentTree(comments, "top", log?.user_id), [comments, log?.user_id]);
+  const sortedComments = useMemo(
+    () => sortLogCommentTree(comments, commentSort, log?.user_id),
+    [commentSort, comments, log?.user_id]
+  );
+  const commentCount = useMemo(() => countLogCommentTree(comments), [comments]);
   const contentHref = log
     ? log.content_type === "tv"
       ? `/tv/${log.content.id}`
@@ -1084,16 +1112,24 @@ export default function LogDetailPage() {
 
               <div className="mt-4 space-y-2 text-[13px] text-white/72 sm:text-sm">
                 {releaseYear && (
-                  <p>Year {releaseYear}</p>
+                  <p>{releaseYear}</p>
                 )}
-                <p className="inline-flex items-center gap-1.5">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  Watched {formatDate(log.watched_date)}
-                </p>
                 {getSeasonLabel(log) && (
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#ffb36b]/80">
                     {getSeasonLabel(log)}
                   </p>
+                )}
+                {directorName && (
+                  directorCredit ? (
+                    <Link
+                      href={buildCrewPath(directorCredit)}
+                      className="block w-fit text-[#ff7a1a] transition hover:text-[#ffb36b]"
+                    >
+                      {directorName}
+                    </Link>
+                  ) : (
+                    <p>{directorName}</p>
+                  )
                 )}
                 {log.content.genres?.length ? (
                   <p className="leading-6 text-[#f5f0de]/76">
@@ -1108,62 +1144,77 @@ export default function LogDetailPage() {
           </div>
 
           {/* Review */}
-          <div className="mt-8 border-t border-white/10 pt-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-semibold text-[#f5f0de] sm:text-xl">
-                {isOwnLog ? (
-                  "Your review"
-                ) : (
-                  <>
-                    <Link
-                      href={profileHref(log.user)}
-                      className="text-[#ff7a1a] transition hover:text-[#ffb36b]"
-                    >
-                      {log.user.name}
-                    </Link>
-                    {' '}
-                    <span className="text-[#f5f0de]">'s review</span>
-                  </>
-                )}
-              </h2>
+          <div className="mb-8 mt-8 border border-white/10 bg-[#090909] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.32)] sm:p-6">
+            <div className="flex items-start justify-between gap-3 sm:gap-5">
+              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                <Link
+                  href={profileHref(log.user)}
+                  className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/[0.06] sm:h-14 sm:w-14"
+                  aria-label={`Open ${log.user.name}'s profile`}
+                >
+                  {log.user.avatar_url ? (
+                    <img
+                      src={log.user.avatar_url}
+                      alt={log.user.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-base font-black text-[#ff9a52] sm:text-lg">
+                      {log.user.name?.charAt(0)?.toUpperCase() || "U"}
+                    </span>
+                  )}
+                </Link>
+
+                <div className="min-w-0">
+                  <Link
+                    href={profileHref(log.user)}
+                    className="block truncate text-base font-black text-[#f5f0de] transition hover:text-[#ffb36b] sm:text-lg"
+                  >
+                    {log.user.name}
+                  </Link>
+                  <p className="mt-0.5 text-xs text-white/45 sm:text-sm">
+                    {formatDate(log.watched_date)}
+                  </p>
+                </div>
+              </div>
+
               {(() => {
                 const reaction = getReactionDisplay(log.reaction);
                 return (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`text-lg font-black tracking-tight sm:text-xl ${reaction.textClass}`}>{reaction.label}</span>
-                  </div>
+                  <span className={`flex-shrink-0 rounded-full border border-[#ff7a1a]/20 bg-[#ff7a1a]/10 px-3.5 py-2 text-sm font-black sm:px-5 sm:text-base ${reaction.textClass}`}>
+                    {reaction.label}
+                  </span>
                 );
               })()}
             </div>
 
-          <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-[#f5f0de]/90">
-            {log.notes || <span className="text-white/35">No review written yet.</span>}
-          </div>
+            <div className="mt-6 whitespace-pre-wrap text-[15px] leading-7 text-[#f5f0de]/90 sm:mt-7 sm:text-[17px] sm:leading-8">
+              {log.notes || <span className="text-white/35">No review written yet.</span>}
+            </div>
 
-          <div className="mt-5 inline-flex items-center gap-2 text-sm">
-            <button
-              onClick={handleLike}
-              disabled={likeLoading}
-              className={`inline-flex items-center gap-1.5 font-medium transition-colors ${
-                liked
-                  ? "text-rose-300"
-                  : "text-[#f5f0de]/80 hover:text-[#f5f0de]"
-              }`}
-              aria-label={liked ? "Unlike" : "Like"}
-              title={liked ? "Unlike" : "Like"}
-            >
-              <Heart className={`h-4 w-4 ${liked ? "fill-rose-500" : ""}`} />
-            </button>
-            <button
-              type="button"
-              onClick={handleOpenLikes}
-              className="font-medium text-[#f5f0de]/80 transition hover:text-[#f5f0de]"
-            >
-              {likeCount}
-            </button>
+            <div className="mt-6 flex items-center border-t border-white/[0.07] pt-4 sm:mt-8">
+              <button
+                onClick={handleLike}
+                disabled={likeLoading}
+                className={`inline-flex items-center gap-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+                  liked
+                    ? "text-rose-300"
+                    : "text-[#f5f0de]/75 hover:text-[#f5f0de]"
+                }`}
+                aria-label={liked ? "Unlike" : "Like"}
+                title={liked ? "Unlike" : "Like"}
+              >
+                <Heart className={`h-5 w-5 ${liked ? "fill-rose-500" : ""}`} />
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenLikes}
+                className="ml-2 text-sm font-semibold text-[#f5f0de]/65 transition hover:text-[#f5f0de]"
+              >
+                {likeCount}
+              </button>
+            </div>
           </div>
-
-        </div>
 
         {/* Context Log */}
         {log.context_log && (
@@ -1195,45 +1246,40 @@ export default function LogDetailPage() {
         )}
 
         {/* Comments */}
-        <div className="mb-8 border-t border-white/10 pt-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="inline-flex items-center gap-2 text-base font-semibold text-[#f5f0de] sm:text-lg">
-                <MessageCircle className="h-4 w-4" />
-                Comments
-              </h3>
-              <p className="text-xs text-white/45 sm:text-sm">Replies and likes stay with this log.</p>
+        <section className="mb-8 border border-white/10 bg-[#090909] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.32)] sm:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <h3 className="text-xl font-black tracking-tight text-[#f5f0de] sm:text-2xl">Comments</h3>
+              <span className="min-w-9 rounded-none bg-white/[0.06] px-2.5 py-1 text-center text-sm font-semibold text-white/55">
+                {commentCount}
+              </span>
             </div>
-          </div>
 
-          <div className="mb-4 flex gap-2">
-            <input
-              value={commentText}
-              onChange={(event) => setCommentText(event.target.value)}
-              placeholder="Add a comment..."
-              className="min-w-0 flex-1 border-b border-white/10 bg-transparent px-0 py-2.5 text-sm text-[#f5f0de] outline-none placeholder:text-white/35 focus:border-[#ff7a1a]"
-            />
-            <button
-              type="button"
-              disabled={submittingComment || commentText.trim().length < 2}
-              onClick={handleComment}
-              className="inline-flex items-center gap-1 rounded-none bg-[#ff7a1a] px-4 py-2.5 text-sm font-black text-black disabled:opacity-50"
-              aria-label="Send comment"
+            <label className="sr-only" htmlFor="comment-sort">Sort comments</label>
+            <select
+              id="comment-sort"
+              value={commentSort}
+              onChange={(event) => setCommentSort(event.target.value as "newest" | "top")}
+              className="rounded-none border border-white/10 bg-black px-3 py-2 text-sm text-[#f5f0de]/75 outline-none focus:border-[#ff7a1a] sm:text-base"
             >
-              <Send className="h-4 w-4" />
-              Send
-            </button>
+              <option value="newest">Newest</option>
+              <option value="top">Top</option>
+            </select>
           </div>
 
-          <div className="divide-y divide-white/10">
+          <div className="mt-5 divide-y divide-white/10 border-y border-white/10">
             {commentsLoading ? (
-              <div className="space-y-3 py-2">
+              <div className="space-y-3 py-8">
                 {[0, 1, 2].map((item) => (
                   <div key={item} className="h-20 animate-pulse rounded-none bg-white/5" />
                 ))}
               </div>
             ) : sortedComments.length === 0 ? (
-              <p className="py-4 text-sm text-white/55">No comments yet. Start the thread.</p>
+              <div className="flex min-h-56 flex-col items-center justify-center px-4 py-12 text-center sm:min-h-64">
+                <MessageCircle className="mb-5 h-9 w-9 text-white/45" strokeWidth={1.5} />
+                <p className="text-base text-white/55 sm:text-lg">No comments yet.</p>
+                <p className="mt-1 text-base text-white/55 sm:text-lg">Start the conversation.</p>
+              </div>
             ) : (
               sortedComments.map((comment) => (
                 <CommentThread
@@ -1255,7 +1301,41 @@ export default function LogDetailPage() {
               ))
             )}
           </div>
-        </div>
+
+          <div className="mt-5 flex items-stretch gap-3">
+            <Link
+              href={profileHref(user)}
+              className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-none border-2 border-[#f5f0de] bg-black text-sm font-black text-[#f5f0de] sm:h-14 sm:w-14"
+              aria-label="Open your profile"
+            >
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt={user.name} className="h-full w-full object-cover grayscale contrast-125" />
+              ) : (
+                user.name?.charAt(0)?.toUpperCase() || "U"
+              )}
+            </Link>
+            <input
+              value={commentText}
+              onChange={(event) => setCommentText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !submittingComment && commentText.trim().length >= 2) {
+                  void handleComment();
+                }
+              }}
+              placeholder="Add a comment..."
+              className="min-w-0 flex-1 rounded-none border border-white/10 bg-black px-4 py-3 text-sm text-[#f5f0de] outline-none placeholder:text-white/35 focus:border-[#ff7a1a] sm:text-base"
+            />
+            <button
+              type="button"
+              disabled={submittingComment || commentText.trim().length < 2}
+              onClick={handleComment}
+              className="inline-flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-none bg-[#ff7a1a] text-black transition hover:bg-[#ff913d] disabled:opacity-40 sm:h-14 sm:w-14"
+              aria-label="Send comment"
+            >
+              <Send className="h-5 w-5" />
+            </button>
+          </div>
+        </section>
 
         {/* Log History for this user and movie/show */}
         {userLogs.length > 1 && (

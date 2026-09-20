@@ -44,7 +44,7 @@ const sections = [
   {
     title: "6. Social features",
     body: [
-      "Canisterr includes follows, lists, posts, comments, shares, and notifications. Those features are designed to help people discover and discuss film and television.",
+      "Canisterr includes follows, lists, comments, shares, and notifications. Those features are designed to help people discover and discuss film and television.",
       "You are responsible for how you use those features, including who you follow, what you share, and the visibility settings you choose.",
     ],
   },

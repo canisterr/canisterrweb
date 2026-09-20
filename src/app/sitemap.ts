@@ -89,11 +89,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const adminDb = getFirebaseAdminDatabase();
-    const [listsSnapshot, listItemsSnapshot, logsSnapshot, postsSnapshot] = await Promise.all([
+    const [listsSnapshot, listItemsSnapshot, logsSnapshot] = await Promise.all([
       adminDb.ref("lists").get(),
       adminDb.ref("list_items").get(),
       adminDb.ref("movie_logs").get(),
-      adminDb.ref("posts").get(),
     ]);
 
     const movieIds = new Set<number>();
@@ -121,13 +120,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (listItemsSnapshot.exists()) {
       const listItems = Object.values(listItemsSnapshot.val() as Record<string, any>);
       listItems.forEach((item) => addContentRoute(item?.content_type, item?.content_id));
-    }
-
-    if (postsSnapshot.exists()) {
-      const posts = Object.values(postsSnapshot.val() as Record<string, any>);
-      posts.forEach((post) => {
-        addContentRoute(post?.content_type, post?.content_id ?? post?.movie_id);
-      });
     }
 
     if (listsSnapshot.exists()) {

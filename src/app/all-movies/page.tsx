@@ -20,7 +20,7 @@ import { MovieLogWithContent, ShareWithDetails, User } from "@/types";
 import { getBlurDataUrl } from "@/lib/performance";
 import { getUsersByIds } from "@/lib/users";
 
-type ActivityFilter = "shared" | "logged";
+type ActivityFilter = "all" | "shared" | "logged";
 type ShareFilter = "recent" | "watched";
 type ViewMode = "grid" | "list";
 
@@ -63,7 +63,7 @@ export default function AllMoviesPage() {
   const [friendLogs, setFriendLogs] = useState<(MovieLogWithContent & { friend: User })[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("shared");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [shareFilter, setShareFilter] = useState<ShareFilter>("recent");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedShare, setSelectedShare] = useState<ShareWithDetails | null>(null);
@@ -210,7 +210,9 @@ export default function AllMoviesPage() {
     const combined =
       activityFilter === "shared"
         ? sharedActivities
-        : loggedActivities;
+        : activityFilter === "logged"
+          ? loggedActivities
+          : [...sharedActivities, ...loggedActivities];
 
     return combined
       .filter((item) => !query || item.searchText.includes(query))
@@ -295,8 +297,9 @@ export default function AllMoviesPage() {
         </div>
 
         <div className="mb-4 space-y-4 sm:mb-6">
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="mx-auto flex w-full max-w-xl gap-1 rounded-[1.25rem] border border-[#2d2d2d] bg-[#111111] p-1 sm:w-fit">
             {([
+              ["all", "All"],
               ["shared", "Shared"],
               ["logged", "Logged"],
             ] as const).map(([value, label]) => (
@@ -304,10 +307,10 @@ export default function AllMoviesPage() {
                 key={value}
                 type="button"
                 onClick={() => setActivityFilter(value)}
-                className={`flex-shrink-0 rounded-full px-4 py-2 text-sm font-black transition ${
+                className={`min-w-0 flex-1 rounded-[1rem] px-5 py-2.5 text-sm font-bold transition sm:flex-none sm:px-7 sm:py-2.5 sm:text-base ${
                   activityFilter === value
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-[#ff7a1a] text-black"
+                    : "text-white hover:bg-[#1b1b1b]"
                 }`}
               >
                 {label}
@@ -365,11 +368,11 @@ export default function AllMoviesPage() {
                 onClick={() => openActivity(item)}
                 className={
                   viewMode === "grid"
-                    ? "min-w-0 cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
+                    ? "group flex min-w-0 cursor-pointer flex-col overflow-hidden border border-[#303638] bg-[#090d0e] text-left transition-colors hover:border-[#d66a18] hover:shadow-[0_0_18px_rgba(214,106,24,0.35)]"
                     : "flex w-full cursor-pointer items-center gap-4 border-b border-slate-200 py-3 text-left transition-colors hover:bg-slate-50"
                 }
               >
-                <div className={viewMode === "grid" ? "relative aspect-[3/4] overflow-hidden bg-slate-100 sm:h-64 sm:aspect-auto" : "relative h-28 w-20 flex-shrink-0 overflow-hidden bg-slate-100"}>
+                <div className={viewMode === "grid" ? "relative aspect-[3/4] w-full overflow-hidden border-b border-[#303638] bg-slate-100 transition-colors group-hover:border-[#d66a18] sm:h-64 sm:aspect-auto" : "relative h-28 w-20 flex-shrink-0 overflow-hidden bg-slate-100"}>
                   {item.poster_url ? (
                     <Image
                       src={item.poster_url}
@@ -387,15 +390,15 @@ export default function AllMoviesPage() {
                   )}
                 </div>
 
-                <div className={viewMode === "grid" ? "p-2 sm:p-4" : "min-w-0 flex-1 pr-2"}>
-                  <h3 className="mb-1 truncate text-[11px] font-semibold leading-tight text-slate-900 sm:text-lg">
+                <div className={viewMode === "grid" ? "p-3 sm:p-4" : "min-w-0 flex-1 pr-2"}>
+                  <h3 className="line-clamp-2 text-sm font-bold text-[#f5f0de] sm:text-lg">
                     {item.title}
                   </h3>
-                  <p className="mb-1 truncate text-[10px] leading-tight text-slate-500 sm:text-sm">
+                  <p className="mt-1 truncate text-xs text-[#9a9a9a] sm:text-sm">
                     {item.byline}
                   </p>
                   <div className="min-h-[1rem] sm:min-h-[1.5rem]">
-                    <span className="text-[10px] font-medium text-slate-700 sm:text-sm">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-[#9a9a9a] transition-colors group-hover:text-[#ff7a1a] sm:text-sm">
                       {item.reaction}
                     </span>
                   </div>

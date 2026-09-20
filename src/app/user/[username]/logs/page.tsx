@@ -10,7 +10,6 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   Film,
 } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
@@ -107,11 +106,11 @@ function getReactionLabel(log: MovieLogWithContent): string {
 }
 
 function getReactionClasses(log: MovieLogWithContent): string {
-  if (log.reaction == null) return "bg-slate-50 text-slate-500 border border-slate-200";
-  if (log.reaction === 2) return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-  if (log.reaction === 1.5) return "bg-amber-50 text-amber-700 border border-amber-200";
-  if (log.reaction === 1) return "bg-sky-50 text-[#f5f0de] border border-sky-200";
-  return "bg-rose-50 text-rose-700 border border-rose-200";
+  if (log.reaction == null) return "border border-white/10 bg-white/5 text-white/45";
+  if (log.reaction === 2) return "border border-[#ff7a1a]/40 bg-[#ff7a1a]/12 text-[#ffb36b]";
+  if (log.reaction === 1.5) return "border border-white/15 bg-white/[0.07] text-[#f5f0de]";
+  if (log.reaction === 1) return "border border-white/10 bg-white/5 text-[#f5f0de]";
+  return "border border-white/10 bg-black/30 text-white/55";
 }
 
 function isUnavailableContent(log: MovieLogWithContent): boolean {
@@ -374,84 +373,92 @@ export default function PublicUserLogsPage() {
   }
 
   return (
-    <PageLayout user={currentUser} onSignOut={handleSignOut} fullWidth>
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center justify-between">
+    <PageLayout user={currentUser} onSignOut={handleSignOut}>
+      <div className="brutalist mx-auto w-full max-w-6xl space-y-5 px-1 pb-8 sm:space-y-6 sm:p-8">
+        <div className="flex items-center justify-between px-1 pt-2 sm:px-0 sm:pt-0">
           <Link
             href={`/profile/${profileUser.username}`}
-            className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white/65 transition hover:border-[#ff7a1a]/35 hover:text-[#ffb36b]"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Profile
           </Link>
         </div>
 
-        <section className="mb-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#111111] p-5 shadow-[0_20px_55px_rgba(0,0,0,0.25)] sm:p-7">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-[#ff7a1a]/10 blur-3xl" />
           <div className="flex items-start gap-4">
             {profileUser.avatar_url ? (
               <img
                 src={profileUser.avatar_url}
                 alt={profileUser.name}
-                className="h-20 w-20 rounded-full object-cover sm:h-24 sm:w-24"
+                className="relative h-16 w-16 rounded-full border border-white/15 object-cover grayscale sm:h-20 sm:w-20"
               />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-900 text-2xl font-semibold text-white sm:h-24 sm:w-24 sm:text-3xl">
+              <div className="relative flex h-16 w-16 items-center justify-center rounded-full border border-white/15 bg-black text-2xl font-black text-[#f5f0de] sm:h-20 sm:w-20 sm:text-3xl">
                 {profileUser.name.charAt(0).toUpperCase()}
               </div>
             )}
 
-            <div className="min-w-0 flex-1">
+            <div className="relative min-w-0 flex-1">
+              <p className="mb-1 text-[9px] font-black uppercase tracking-[0.24em] text-[#ffb36b]/75">Watch Diary</p>
               <div className="flex items-center gap-3">
-                <Film className="h-5 w-5 text-zinc-700" />
-                <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-4xl">{pageTitle}</h1>
+                <Film className="hidden h-5 w-5 text-[#ff7a1a] sm:block" />
+                <h1 className="text-xl font-black tracking-tight text-[#f5f0de] sm:text-3xl">{pageTitle}</h1>
               </div>
-              <p className="mt-1 text-sm text-zinc-500 sm:text-base">@{profileUser.username}</p>
-              <p className="mt-2 text-sm text-zinc-600">
-                <span className="font-semibold text-zinc-800">Viewing</span> {filteredLogs.length} logs
+              <p className="mt-1 text-sm text-white/45 sm:text-base">@{profileUser.username}</p>
+              <p className="mt-2 text-sm text-white/55">
+                <span className="font-semibold text-[#ffb36b]">{filteredLogs.length}</span> logged titles
               </p>
             </div>
           </div>
         </section>
 
-        <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(22rem,0.88fr)] lg:items-start lg:gap-5 lg:space-y-0">
+        <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#111111] shadow-[0_20px_55px_rgba(0,0,0,0.2)] lg:sticky lg:top-24">
+          <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-5">
             <button
               onClick={() => {
                 setSelectedDay(null);
                 setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
               }}
-              className="rounded-lg p-2 transition hover:bg-gray-100"
+              className="rounded-full border border-white/10 bg-white/5 p-2 text-[#f5f0de] transition hover:bg-white/10"
               aria-label="Previous month"
             >
-              <ChevronLeft className="h-5 w-5 text-gray-700" />
+              <ChevronLeft className="h-5 w-5" />
             </button>
 
-            <h2 className="text-lg font-bold text-gray-900">{formatMonthTitle(currentMonth)}</h2>
+            <div className="text-center">
+              <h2 className="text-2xl font-black uppercase leading-none text-[#f5f0de] sm:text-4xl">
+                {currentMonth.toLocaleDateString("en-US", { month: "long" })}
+              </h2>
+              <p className="mt-1 text-[9px] font-black tracking-[0.28em] text-[#ffb36b]">{currentMonth.getFullYear()}</p>
+            </div>
 
             <button
               onClick={() => {
                 setSelectedDay(null);
                 setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
               }}
-              className="rounded-lg p-2 transition hover:bg-gray-100"
+              className="rounded-full border border-white/10 bg-white/5 p-2 text-[#f5f0de] transition hover:bg-white/10"
               aria-label="Next month"
             >
-              <ChevronRight className="h-5 w-5 text-gray-700" />
+              <ChevronRight className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="mb-2 grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 border-y border-white/10 bg-white/[0.02]">
             {WEEKDAYS.map((day) => (
-              <div key={day} className="py-1 text-center text-xs font-semibold text-gray-500">
+              <div key={day} className="border-r border-white/10 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] text-[#ffb36b]/80 last:border-r-0 sm:text-xs">
                 {day}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 bg-[#111111]">
             {calendarCells.map((cell) => {
               if (!cell.inMonth || !cell.date) {
-                return <div key={cell.key} className="[aspect-ratio:2/3] rounded-lg bg-gray-50" />;
+                return <div key={cell.key} className="min-h-[6.25rem] border-b border-r border-white/10 bg-white/[0.02] sm:min-h-[9rem]" />;
               }
 
               const day = cell.date.getDate();
@@ -467,12 +474,12 @@ export default function PublicUserLogsPage() {
                     setSelectedDay((prev) => (prev === dayKey ? null : dayKey));
                     scrollToListSection();
                   }}
-                  className={`relative overflow-hidden rounded-lg border p-0.5 text-left transition-colors [aspect-ratio:2/3] ${
+                  className={`relative min-h-[6.25rem] overflow-hidden border-b border-r border-white/10 p-0 text-left transition sm:min-h-[9rem] ${
                     isSelected
-                      ? "border-blue-500 bg-blue-50"
+                      ? "bg-[#ff7a1a]/10 shadow-[inset_0_0_0_2px_rgba(255,122,26,0.55)]"
                       : dayLogsInCell.length > 0
-                        ? "border-gray-300 bg-white hover:bg-gray-50"
-                        : "border-gray-200 bg-white hover:bg-gray-50"
+                        ? "bg-[#101010] hover:bg-white/[0.03]"
+                        : "bg-[#0f0f0f] hover:bg-white/[0.03]"
                   }`}
                 >
                   {dayLogsInCell.length > 0 ? (
@@ -482,7 +489,7 @@ export default function PublicUserLogsPage() {
                           key={log.id}
                           src={log.content.poster_url || undefined}
                           alt={log.content.title}
-                          className={`absolute h-full w-full rounded object-cover border border-white shadow ${idx === 0 ? "" : idx === 1 ? "translate-x-1 translate-y-1" : "translate-x-2 translate-y-2"}`}
+                          className={`absolute h-full w-full object-cover shadow ${idx === 0 ? "" : idx === 1 ? "translate-y-1.5" : "translate-y-3"}`}
                           style={{
                             zIndex: 10 + idx,
                           }}
@@ -490,14 +497,14 @@ export default function PublicUserLogsPage() {
                       ))}
 
                       {dayLogsInCell.length > 1 && (
-                        <span className="absolute left-1 top-1 z-30 rounded-full bg-blue-600 px-2 py-0.5 text-xs font-bold text-white shadow">
+                        <span className="absolute right-1.5 top-1.5 z-30 rounded-full bg-[#ff7a1a] px-2 py-0.5 text-[10px] font-black text-black shadow">
                           {dayLogsInCell.length}
                         </span>
                       )}
                     </div>
                   ) : (
-                    <div className="flex h-full w-full items-start justify-start p-1">
-                      <span className="text-[10px] font-semibold text-gray-400">{day}</span>
+                    <div className="flex h-full w-full items-start justify-start p-2">
+                      <span className={`text-[11px] font-black ${isSelected ? "text-[#ffb36b]" : "text-[#ff7a1a]"}`}>{day}</span>
                     </div>
                   )}
                 </button>
@@ -506,24 +513,25 @@ export default function PublicUserLogsPage() {
           </div>
         </div>
 
-        <div ref={listSectionRef} className="scroll-mt-24 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Clock3 className="h-4 w-4 text-gray-600" />
-              <h3 className="text-lg font-bold text-gray-900">
+        <div ref={listSectionRef} className="relative scroll-mt-24 overflow-hidden rounded-t-[1.5rem] border border-white/10 bg-gradient-to-b from-[#292929] via-[#1d1d1d] to-[#111111] p-3 shadow-[0_20px_55px_rgba(0,0,0,0.24)] sm:p-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+          <div className="pointer-events-none absolute -right-16 top-16 h-48 w-48 rounded-full bg-[#ff7a1a]/5 blur-3xl" />
+          <div className="relative mb-5 flex flex-col items-center gap-3 text-center">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#ffb36b]/75">Watch Diary</p>
+              <h3 className="mt-1 text-xl font-black text-[#f5f0de] sm:text-2xl">
                 {listMode === "all"
-                  ? "All Movies"
+                  ? "All Months"
                   : selectedDay
                     ? `Logs for ${formatWatchedDate(selectedDay)}`
                     : `Logs for ${formatMonthTitle(currentMonth)}`}
               </h3>
             </div>
 
-            <div className="inline-flex rounded-lg border border-gray-300 p-1">
+            <div className="inline-flex rounded-full border border-white/10 bg-black/20 p-1">
               <button
                 onClick={() => setListMode("month")}
-                className={`rounded-md px-3 py-1 text-sm ${
-                  listMode === "month" ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"
+                className={`rounded-full px-3 py-1.5 text-xs font-black transition sm:text-sm ${
+                  listMode === "month" ? "bg-[#ff7a1a] text-black" : "text-white/60 hover:bg-white/10"
                 }`}
               >
                 Month
@@ -533,8 +541,8 @@ export default function PublicUserLogsPage() {
                   setListMode("all");
                   setSelectedDay(null);
                 }}
-                className={`rounded-md px-3 py-1 text-sm ${
-                  listMode === "all" ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"
+                className={`rounded-full px-3 py-1.5 text-xs font-black transition sm:text-sm ${
+                  listMode === "all" ? "bg-[#ff7a1a] text-black" : "text-white/60 hover:bg-white/10"
                 }`}
               >
                 All
@@ -544,37 +552,37 @@ export default function PublicUserLogsPage() {
 
           {displayLogs.length > 0 ? (
             listMode === "all" ? (
-              <div className="space-y-6">
+              <div className="relative space-y-7">
                 {groupLogsByMonth(displayLogs).map((group) => (
                   <div key={group.month}>
-                    <h4 className="mb-3 text-lg font-bold text-gray-900">{group.month}</h4>
+                    <h4 className="mb-3 text-center text-sm font-black uppercase tracking-[0.18em] text-[#ffb36b]/70">{group.month}</h4>
                     <div className="space-y-3">
                       {group.logs.map((log) => (
                         <Link
                           key={log.id}
                           href={log.content_type === "movie" ? `/movie/${log.content_id}` : `/tv/${log.content_id}`}
-                          className="block rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50"
+                          className="group block rounded-[1.35rem] border border-white/10 bg-[#111111] p-3 shadow-[0_14px_32px_rgba(0,0,0,0.2)] transition hover:-translate-y-0.5 hover:border-[#ff7a1a]/30 sm:p-4"
                         >
                           <div className="flex items-center gap-4">
                             <div className="w-12 flex-shrink-0 text-center">
-                              <span className="text-xl font-bold text-gray-900">{getDayDD(log.watched_date)}</span>
+                              <span className="text-2xl font-black text-[#ff7a1a]">{getDayDD(log.watched_date)}</span>
                             </div>
 
                             <img
                               src={log.content.poster_url || undefined}
                               alt={log.content.title}
-                              className="h-20 w-14 flex-shrink-0 rounded border border-gray-200 object-cover"
+                              className="h-20 w-14 flex-shrink-0 rounded-lg border border-white/10 object-cover grayscale-[0.15]"
                             />
 
                             <div className="min-w-0 flex-1">
-                              <p className="truncate font-semibold text-gray-900">{log.content.title}</p>
+                              <p className="truncate font-bold text-[#f5f0de]">{log.content.title}</p>
                               {getSeasonLabel(log) && (
                                 <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ffb36b]">
                                   {getSeasonLabel(log)}
                                 </p>
                               )}
                               {isUnavailableContent(log) && (
-                                <span className="mt-1 inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                <span className="mt-1 inline-flex items-center rounded-full border border-[#ff7a1a]/30 bg-[#ff7a1a]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ffb36b]">
                                   Details unavailable
                                 </span>
                               )}
@@ -598,28 +606,28 @@ export default function PublicUserLogsPage() {
                   <Link
                     key={log.id}
                     href={log.content_type === "movie" ? `/movie/${log.content_id}` : `/tv/${log.content_id}`}
-                    className="block rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50"
+                    className="group block rounded-[1.35rem] border border-white/10 bg-[#111111] p-3 shadow-[0_14px_32px_rgba(0,0,0,0.2)] transition hover:-translate-y-0.5 hover:border-[#ff7a1a]/30 sm:p-4"
                   >
                     <div className="flex items-center gap-4">
                       <div className="w-12 flex-shrink-0 text-center">
-                        <span className="text-xl font-bold text-gray-900">{getDayDD(log.watched_date)}</span>
+                        <span className="text-2xl font-black text-[#ff7a1a]">{getDayDD(log.watched_date)}</span>
                       </div>
 
                       <img
                         src={log.content.poster_url || undefined}
                         alt={log.content.title}
-                        className="h-20 w-14 flex-shrink-0 rounded border border-gray-200 object-cover"
+                        className="h-20 w-14 flex-shrink-0 rounded-lg border border-white/10 object-cover grayscale-[0.15]"
                       />
 
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold text-gray-900">{log.content.title}</p>
+                        <p className="truncate font-bold text-[#f5f0de]">{log.content.title}</p>
                         {getSeasonLabel(log) && (
                           <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ffb36b]">
                             {getSeasonLabel(log)}
                           </p>
                         )}
                         {isUnavailableContent(log) && (
-                          <span className="mt-1 inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          <span className="mt-1 inline-flex items-center rounded-full border border-[#ff7a1a]/30 bg-[#ff7a1a]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#ffb36b]">
                             Details unavailable
                           </span>
                         )}
@@ -636,15 +644,16 @@ export default function PublicUserLogsPage() {
               </div>
             )
           ) : (
-            <div className="py-10 text-center text-gray-500">
+            <div className="relative py-12 text-center text-sm text-white/45">
               No logs for this selection.
             </div>
           )}
         </div>
+        </div>
 
-        <div className="mt-6 rounded-3xl border border-dashed border-gray-200 bg-white/60 p-4 text-sm text-gray-500">
+        <div className="rounded-[1.25rem] border border-dashed border-white/10 bg-white/[0.025] p-4 text-sm text-white/40">
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
+            <Calendar className="h-4 w-4 text-[#ff7a1a]" />
             <span>Calendar and list view for {profileUser.name}'s logged movies.</span>
           </div>
         </div>

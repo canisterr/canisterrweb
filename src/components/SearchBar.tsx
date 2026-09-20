@@ -159,7 +159,11 @@ export default function SearchBar({
 
       {/* Dropdown Results */}
       {isOpen && (results.length > 0 || (isLoading && results.length === 0)) && (
-        <div className="menu-panel absolute left-0 right-0 top-full z-50 mt-3 max-w-2xl overflow-hidden">
+        <div
+          className={`menu-panel absolute left-0 right-0 top-full z-50 mt-3 max-w-2xl isolate overflow-hidden opacity-100 ${
+            isBrutalist ? "bg-[#111111]" : "bg-white"
+          }`}
+        >
           {results.length > 0 ? (
             <ul className="max-h-[min(70dvh,600px)] overflow-y-auto overscroll-contain">
               {results.map((item) => (

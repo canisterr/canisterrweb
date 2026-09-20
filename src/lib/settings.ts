@@ -251,10 +251,6 @@ export type NotificationPreferenceKey =
 export type NotificationType =
   | "follow_request"
   | "collaboration_request"
-  | "post_like"
-  | "post_save"
-  | "post_comment"
-  | "comment_reply"
   | "like"
   | "share_reply"
   | "share_received"
@@ -270,8 +266,8 @@ export function notificationPreferenceForType(type: NotificationType): Notificat
   if (type === "matcher_update") return "matcherUpdates";
   if (type === "share_reply" || type === "share_received") return "shareNotifications";
   if (type === "log_created") return "logNotifications";
-  if (type === "like" || type === "post_like" || type === "post_save" || type === "log_comment_like") return "likeNotifications";
-  if (type === "log_comment" || type === "log_comment_reply" || type === "post_comment" || type === "comment_reply") {
+  if (type === "like" || type === "log_comment_like") return "likeNotifications";
+  if (type === "log_comment" || type === "log_comment_reply") {
     return "commentNotifications";
   }
   return "commentNotifications";

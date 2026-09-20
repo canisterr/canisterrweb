@@ -10,10 +10,6 @@ export type FollowRequestState = "pending" | "accepted";
 export type NotificationType =
   | "follow_request"
   | "collaboration_request"
-  | "post_like"
-  | "post_save"
-  | "post_comment"
-  | "comment_reply"
   | "like"
   | "share_reply"
   | "share_received"
@@ -90,7 +86,9 @@ function sanitizeNotificationKeyPart(value: string): string {
 export function parseNotificationItems(raw: unknown): NotificationItem[] {
   if (!raw || typeof raw !== "object") return [];
 
-  return Object.entries(raw as Record<string, Record<string, unknown>>).map(([id, entry]) => ({
+  return Object.entries(raw as Record<string, Record<string, unknown>>)
+    .filter(([, entry]) => entry.type !== "matcher_update")
+    .map(([id, entry]) => ({
     id,
     type: entry.type as NotificationType,
     fromUser: entry.fromUser as NotificationItem["fromUser"],
@@ -118,17 +116,11 @@ export function sortNotificationItems(items: NotificationItem[]): NotificationIt
 
 export function notificationHref(note: NotificationItem): string {
   if (note.type === "collaboration_request" && note.listId) return `/lists/${note.listId}`;
-  if ((note.type === "post_like" || note.type === "post_save" || note.type === "post_comment" || note.type === "comment_reply") && note.ref_id) {
-    return `/posts/${note.ref_id}`;
-  }
   if (note.type === "share_reply" && note.shareId) {
     return `/share?share_id=${note.shareId}&panel=history`;
   }
   if (note.type === "share_received" && note.shareId) {
     return `/share?share_id=${note.shareId}&panel=history`;
-  }
-  if (note.type === "matcher_update") {
-    return "/movie-matcher";
   }
   if (note.type === "log_created" && note.logId) {
     return `/logs/${note.logId}`;
@@ -147,22 +139,12 @@ export function notificationText(note: NotificationItem): string {
       return "is now following you.";
     case "collaboration_request":
       return `sent you a collaboration request${note.listName ? ` for ${note.listName}` : ""}.`;
-    case "post_like":
-      return "liked your post.";
-    case "post_save":
-      return "saved your post.";
-    case "post_comment":
-      return "commented on your post.";
-    case "comment_reply":
-      return "replied to your comment.";
     case "like":
       return "liked your log.";
     case "share_reply":
       return note.shareTitle ? `replied to your share of ${note.shareTitle}.` : "replied to your share.";
     case "share_received":
       return note.shareTitle ? `shared ${note.shareTitle} with you.` : "shared a title with you.";
-    case "matcher_update":
-      return note.subjectName ? `updated your movie matcher with ${note.subjectName}.` : "updated your movie matcher.";
     case "log_created":
       return note.contentType === "tv" ? "logged a new show." : "logged a new movie.";
     case "log_comment":
