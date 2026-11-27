@@ -22,7 +22,6 @@ import {
   MoveRight,
   Copy,
   Share2,
-  ChevronRight,
   ChevronUp,
   ChevronDown,
   UserX,
@@ -39,14 +38,12 @@ import {
   removeCollaborator,
   updateList,
   deleteList,
-  isUserCollaborator,
   updateListViewPreferences,
   reorderListItems,
   createList,
   addItemToList,
   syncListCollaboratorIds,
 } from "@/lib/lists";
-import { getLogsForContent } from "@/lib/logs";
 import { getUserWatchedMovies, upsertWatchedMovie, type WatchedMovie } from "@/lib/watched-movies";
 import { canInviteCollaborators, isUsernameBlocked, mergeSettings } from "@/lib/settings";
 import { createCollaborationRequestNotification } from "@/lib/notifications";
@@ -73,140 +70,68 @@ function MenuButton({ onEdit, onAddItems, canEdit, isOwner, onDelete, onClone, o
       <button
         type="button"
         aria-label="Open menu"
+        aria-expanded={open}
+        aria-haspopup="true"
         className="relative z-50 flex items-center justify-center p-1 text-[#ff7a1a] transition hover:text-[#ffb36b]"
         onClick={() => setOpen((v) => !v)}
       >
         <MoreVertical className="h-6 w-6" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#1c1c1e]/95 p-2 shadow-[0_24px_70px_rgba(0,0,0,0.65)] backdrop-blur-2xl">
-            <div className="mb-2 rounded-2xl bg-black/30 p-1">
-                <div className="grid grid-cols-2 gap-1">
-                  <button
-                    className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                      viewType === "grid" ? "bg-[#ff7a1a] text-black" : "text-white/60 hover:bg-white/5 hover:text-white"
-                    }`}
-                    onClick={() => {
-                      setOpen(false);
-                      onSetViewType("grid");
-                    }}
-                  >
-                    <Grid3x3 className="h-4 w-4" />
-                    Grid
-                  </button>
-                  <button
-                    className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                      viewType === "list" ? "bg-[#ff7a1a] text-black" : "text-white/60 hover:bg-white/5 hover:text-white"
-                    }`}
-                    onClick={() => {
-                      setOpen(false);
-                      onSetViewType("list");
-                    }}
-                  >
-                    <ListIcon className="h-4 w-4" />
-                    List
-                  </button>
-                </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl bg-white/[0.055] divide-y divide-white/[0.07]">
-              <button
-                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
-                onClick={() => { setOpen(false); onClone(); }}
-              >
-                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/15 text-[#ff8d3b]"><Copy className="h-4 w-4" /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[#f5f0de]">{cloneLoading ? "Cloning..." : "Clone list"}</p>
-                  <p className="truncate text-xs text-white/40">Save a private copy</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-white/25" />
-              </button>
-
-              {onShare && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-[min(17rem,calc(100vw-2rem))] rounded-xl border border-white/15 bg-[#101010] p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.6)]">
+          <div className="grid grid-cols-2 gap-1 border-b border-white/10 pb-1.5">
+            {(["grid", "list"] as const).map((mode) => {
+              const Icon = mode === "grid" ? Grid3x3 : ListIcon;
+              return (
                 <button
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
-                  onClick={() => { setOpen(false); onShare(); }}
+                  key={mode}
+                  type="button"
+                  aria-pressed={viewType === mode}
+                  onClick={() => { setOpen(false); onSetViewType(mode); }}
+                  className={`flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${viewType === mode ? "bg-[#ff7a1a] text-black" : "text-white/55 hover:bg-white/[0.06] hover:text-[#f5f0de]"}`}
                 >
-                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/15 text-[#ff8d3b]"><Share2 className="h-4 w-4" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[#f5f0de]">Share list</p>
-                    <p className="truncate text-xs text-white/40">Send a link</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-white/25" />
+                  <Icon className="h-4 w-4" strokeWidth={1.8} />
+                  {mode === "grid" ? "Grid" : "List"}
                 </button>
-              )}
-
-              <button
-                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
-                onClick={() => {
-                  setOpen(false);
-                  onToggleWatchedStatus?.();
-                }}
-              >
-                <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${watchedStatusEnabled ? "bg-[#ff7a1a] text-black" : "bg-white/[0.07] text-white/65"}`}><Eye className="h-4 w-4" /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[#f5f0de]">Watched status</p>
-                  <p className="truncate text-xs text-white/40">See who watched what</p>
-                </div>
-                <span className={`relative h-6 w-10 rounded-full transition ${watchedStatusEnabled ? "bg-[#ff7a1a]" : "bg-white/15"}`}>
-                  <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${watchedStatusEnabled ? "translate-x-5" : "translate-x-1"}`} />
-                </span>
-              </button>
-
-              {canEdit && viewType === "list" && onToggleReorder && (
-                <button
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
-                  onClick={() => { setOpen(false); onToggleReorder(); }}
-                >
-                  <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${reorderMode ? "bg-[#ff7a1a] text-black" : "bg-white/[0.07] text-white/65"}`}><GripVertical className="h-4 w-4" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[#f5f0de]">Reorder items</p>
-                    <p className="truncate text-xs text-white/40">Drag rows to reorder</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-white/25" />
-                </button>
-              )}
-            </div>
-
-            {canEdit && (
-              <div className="mt-2 overflow-hidden rounded-2xl bg-white/[0.055] divide-y divide-white/[0.07]">
-                <button
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
-                  onClick={() => { setOpen(false); onEdit(); }}
-                >
-                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/15 text-[#ff8d3b]"><Edit2 className="h-4 w-4" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[#f5f0de]">Edit details</p>
-                    <p className="truncate text-xs text-white/40">Title, privacy, description</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-white/25" />
-                </button>
-                <button
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
-                  onClick={() => { setOpen(false); onAddItems(); }}
-                >
-                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-white/70"><Plus className="h-4 w-4" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[#f5f0de]">Add movies</p>
-                    <p className="truncate text-xs text-white/40">Add items to the list</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-white/25" />
-                </button>
-              </div>
-            )}
-
-            {isOwner && onDelete && (
-              <button
-                className="mt-2 flex w-full items-center gap-3 rounded-2xl bg-red-500/10 px-3 py-2.5 text-left text-red-300 transition hover:bg-red-500/15"
-                onClick={() => { setOpen(false); onDelete(); }}
-              >
-                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-red-500/15"><Trash2 className="h-4 w-4" /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">Delete list</p>
-                  <p className="truncate text-xs text-red-200/50">This cannot be undone</p>
-                </div>
-              </button>
-            )}
+              );
+            })}
+          </div>
+          <div className="py-1">
+            <button type="button" onClick={() => { setOpen(false); onClone(); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-[#f5f0de] hover:bg-white/[0.06]">
+              <Copy className="h-4 w-4 text-white/55" strokeWidth={1.8} />
+              {cloneLoading ? "Cloning…" : "Clone list"}
+            </button>
+            {onShare && <button type="button" onClick={() => { setOpen(false); onShare(); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-[#f5f0de] hover:bg-white/[0.06]">
+              <Share2 className="h-4 w-4 text-white/55" strokeWidth={1.8} />
+              Share list
+            </button>}
+            <button type="button" aria-pressed={Boolean(watchedStatusEnabled)} onClick={() => { setOpen(false); onToggleWatchedStatus?.(); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-[#f5f0de] hover:bg-white/[0.06]">
+              <Eye className="h-4 w-4 text-white/55" strokeWidth={1.8} />
+              Watched status
+              <span className={`ml-auto text-xs ${watchedStatusEnabled ? "text-[#ff9b52]" : "text-white/40"}`}>{watchedStatusEnabled ? "On" : "Off"}</span>
+            </button>
+            {canEdit && viewType === "list" && onToggleReorder && <button type="button" aria-pressed={Boolean(reorderMode)} onClick={() => { setOpen(false); onToggleReorder(); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-[#f5f0de] hover:bg-white/[0.06]">
+              <GripVertical className="h-4 w-4 text-white/55" strokeWidth={1.8} />
+              Reorder items
+              {reorderMode && <span className="ml-auto text-xs text-[#ff9b52]">On</span>}
+            </button>}
+          </div>
+          {canEdit && <div className="border-t border-white/10 py-1">
+            {isOwner && <button type="button" onClick={() => { setOpen(false); onEdit(); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-[#f5f0de] hover:bg-white/[0.06]">
+              <Edit2 className="h-4 w-4 text-white/55" strokeWidth={1.8} />
+              Edit details
+            </button>}
+            <button type="button" onClick={() => { setOpen(false); onAddItems(); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-[#f5f0de] hover:bg-white/[0.06]">
+              <Plus className="h-4 w-4 text-white/55" strokeWidth={1.8} />
+              Add movies
+            </button>
+          </div>}
+          {isOwner && onDelete && <div className="border-t border-white/10 pt-1">
+            <button type="button" onClick={() => { setOpen(false); onDelete(); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-red-300 transition hover:bg-red-500/10">
+              <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+              Delete list
+            </button>
+          </div>}
         </div>
       )}
     </div>
@@ -217,23 +142,6 @@ export default function ListDetailPage() {
   const [user, setUser] = useState<User | null>(null);
   const [currentUserSettings, setCurrentUserSettings] = useState(() => mergeSettings(null));
   const [list, setList] = useState<ListWithItems | null>(null);
-  const [logsMap, setLogsMap] = useState<Record<number, any[]>>({});
-  useEffect(() => {
-    if (!list) return;
-    let cancelled = false;
-    (async () => {
-      const map: Record<number, any[]> = {};
-      await Promise.all(
-        list.items.filter((item: any) => Boolean(item.content)).map(async (item: any) => {
-          const logs = await getLogsForContent(Number(item.content.id), "movie");
-          map[item.content.id] = logs.sort((a: any, b: any) => new Date(b.watched_date).getTime() - new Date(a.watched_date).getTime());
-        })
-      );
-      if (!cancelled) setLogsMap(map);
-    })();
-    return () => { cancelled = true; };
-  }, [list]);
-
   useEffect(() => {
     if (!user || !list) return;
 
@@ -273,7 +181,6 @@ export default function ListDetailPage() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPrivacy, setEditPrivacy] = useState<"private" | "public">("private");
-  const [selectedCoverImageUrl, setSelectedCoverImageUrl] = useState<string | null>(null);
   const [showAddCollaborator, setShowAddCollaborator] = useState(false);
   const [collaboratorInput, setCollaboratorInput] = useState("");
   const [savingChanges, setSavingChanges] = useState(false);
@@ -316,7 +223,6 @@ export default function ListDetailPage() {
         setEditName(publicList.name);
         setEditDescription(publicList.description || "");
         setEditPrivacy(publicList.privacy);
-        setSelectedCoverImageUrl(publicList.cover_image_url || null);
         setViewType(publicList.view_type || "grid");
         setShowUnwatchedFirst(publicList.show_unwatched_first || false);
         setIsCollaborator(false);
@@ -371,14 +277,14 @@ export default function ListDetailPage() {
           setEditName(listData.name);
           setEditDescription(listData.description || "");
           setEditPrivacy(listData.privacy);
-          setSelectedCoverImageUrl(listData.cover_image_url || null);
           setViewType(listData.view_type || "grid");
           setShowUnwatchedFirst(listData.show_unwatched_first || false);
 
-          const isCollab = await isUserCollaborator(listId, currentUser.id);
-          if (cancelled) return;
-
-          setIsCollaborator(isCollab || listData.owner_id === currentUser.id);
+          setIsCollaborator(
+            listData.owner_id === currentUser.id ||
+            Boolean(listData.collaborator_ids?.[currentUser.id]) ||
+            listData.collaborators.some((collaborator) => collaborator.user_id === currentUser.id)
+          );
 
           if (listData.owner_id === currentUser.id) {
             const collaboratorIds = [
@@ -409,7 +315,7 @@ export default function ListDetailPage() {
   }, [listId, router]);
 
   const handleViewTypeChange = async (newViewType: "grid" | "list") => {
-    if (!canEdit) {
+    if (!list || list.owner_id !== user?.id) {
       setViewType(newViewType);
       setReorderMode(false);
       return;
@@ -434,7 +340,10 @@ export default function ListDetailPage() {
   };
 
   const handleUnwatchedFilterChange = async () => {
-    if (!canEdit) return;
+    if (!list || list.owner_id !== user?.id) {
+      setShowUnwatchedFirst((current) => !current);
+      return;
+    }
 
     try {
       setSavingPreferences(true);
@@ -507,24 +416,22 @@ export default function ListDetailPage() {
 
   const handleSaveChanges = async () => {
     if (!list || !user) return;
+    const name = editName.trim();
+    if (!name) return;
 
     try {
       setSavingChanges(true);
       await updateList(listId, {
-        name: editName,
+        name,
         description: editDescription || null,
-        privacy: editPrivacy,
-        cover_type: selectedCoverImageUrl ? "custom" : "grid",
-        cover_image_url: selectedCoverImageUrl,
+        privacy: list.owner_id === user.id ? editPrivacy : list.privacy,
       });
 
       setList({
         ...list,
-        name: editName,
+        name,
         description: editDescription || null,
-        privacy: editPrivacy,
-        cover_type: selectedCoverImageUrl ? "custom" : "grid",
-        cover_image_url: selectedCoverImageUrl,
+        privacy: list.owner_id === user.id ? editPrivacy : list.privacy,
       });
 
       setEditMode(false);
@@ -767,10 +674,6 @@ export default function ListDetailPage() {
   const sortedItems = [...list.items].sort((a, b) => a.position - b.position);
   const visibleSortedItems = sortedItems.filter((item: any) => Boolean(item.content));
   const isRankedList = list.is_ranked;
-  const posterOptions = sortedItems
-    .map((item) => item.content?.poster_url || null)
-    .filter((poster): poster is string => Boolean(poster));
-  const displayCoverImageUrl = selectedCoverImageUrl || list.cover_image_url || posterOptions[0] || null;
 
   const handleShareList = async () => {
     if (typeof window === "undefined") return;
@@ -824,6 +727,22 @@ export default function ListDetailPage() {
               {list.description && !editMode && (
                 <p className="mt-2 text-sm leading-relaxed text-white/55 sm:mt-2 sm:text-base">{list.description}</p>
               )}
+              {!editMode && (isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => setEditMode(true)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-xs font-medium text-white/65 transition hover:border-[#ff7a1a]/50 hover:text-[#f5f0de]"
+                  aria-label="Change list privacy"
+                >
+                  {list.privacy === "public" ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                  {list.privacy === "public" ? "Public" : "Private"}
+                </button>
+              ) : (
+                <span className="mt-3 inline-flex items-center gap-1.5 text-xs text-white/45">
+                  {list.privacy === "public" ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                  {list.privacy === "public" ? "Public" : "Private"}
+                </span>
+              ))}
             </div>
 
             {viewerHasAuth && (
@@ -831,7 +750,6 @@ export default function ListDetailPage() {
                 <MenuButton
                   onEdit={() => {
                     setEditMode(true);
-                    setSelectedCoverImageUrl(list.cover_image_url || null);
                   }}
                   onAddItems={() => {
                     window.location.href = `/lists/${listId}/add-items`;
@@ -882,151 +800,74 @@ export default function ListDetailPage() {
               </button>
           </div>
 
-          {/* Edit mode UI remains unchanged */}
-          {editMode && canEdit && (
-            <div className="mt-5 border border-white/10 bg-[#111111] p-4 sm:mt-6 sm:p-6">
-              <div className="mb-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#ffb36b] sm:text-sm">Edit list</p>
-                <h3 className="text-xl font-bold text-[#f5f0de] sm:text-2xl">Refine the details</h3>
-                <p className="mt-1 text-xs text-white/55 sm:text-sm">Update the title, description, privacy, and display cover.</p>
-              </div>
-
-              <div className="space-y-4 sm:space-y-5">
+          {/* List details */}
+          {editMode && isOwner && (
+            <div className="mt-5 max-w-2xl border-t border-white/15 pt-5 sm:mt-6">
+              <h3 className="mb-5 text-lg font-semibold text-[#f5f0de]">Edit list</h3>
+              <div className="space-y-5">
                 <div>
-                  <label className="mb-2 block text-xs font-medium text-white/65 sm:text-sm">Title</label>
+                  <label htmlFor="edit-list-name" className="mb-2 block text-sm text-white/65">Title</label>
                   <input
-                    aria-label="List name"
+                    id="edit-list-name"
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     placeholder="List name"
-                    className="field w-full px-4 py-2.5 text-base font-semibold sm:py-3 sm:text-lg"
+                    className="w-full rounded-md border border-white/15 bg-[#111] px-3 py-2.5 text-sm text-[#f5f0de] outline-none transition focus:border-[#ff7a1a]"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-xs font-medium text-white/65 sm:text-sm">Description</label>
+                  <label htmlFor="edit-list-description" className="mb-2 block text-sm text-white/65">Description</label>
                   <textarea
-                    aria-label="List description"
+                    id="edit-list-description"
                     value={editDescription}
                     onChange={(e) => setEditDescription(e.target.value)}
                     placeholder="Add a short description for this list"
-                    className="field w-full resize-none px-4 py-2.5 text-xs sm:py-3 sm:text-sm"
-                    rows={3}
+                    className="w-full resize-y rounded-md border border-white/15 bg-[#111] px-3 py-2.5 text-sm text-[#f5f0de] outline-none transition focus:border-[#ff7a1a]"
+                    rows={2}
                   />
                 </div>
 
-                {/* Display cover picker */}
-                <div className="space-y-3 border border-white/10 bg-white/[0.03] p-3 sm:p-4">
-                  <div>
-                    <p className="text-sm font-medium text-[#f5f0de]">Display cover</p>
-                    <p className="text-[11px] text-white/55 sm:text-xs">Pick one poster from this list or keep the auto grid cover.</p>
+                {/* Only the owner decides whether collaborators' list is public. */}
+                {isOwner && <fieldset className="border-t border-white/10 pt-4">
+                  <legend className="text-sm text-white/65">Visibility</legend>
+                  <div className="mt-2 flex flex-wrap gap-x-6 gap-y-3">
+                    {(["private", "public"] as const).map((privacy) => (
+                      <label key={privacy} className="inline-flex cursor-pointer items-center gap-2 text-sm text-[#f5f0de]">
+                        <input
+                          type="radio"
+                          name="privacy"
+                          value={privacy}
+                          checked={editPrivacy === privacy}
+                          onChange={() => setEditPrivacy(privacy)}
+                          className="h-4 w-4 accent-[#ff7a1a]"
+                        />
+                        {privacy === "private" ? "Private" : "Public"}
+                      </label>
+                    ))}
                   </div>
-                <div className="flex flex-wrap gap-2">
+                  <p className="mt-2 text-xs text-white/45">{editPrivacy === "private" ? "Only you and collaborators can see this list." : "Anyone can discover this list."}</p>
+                </fieldset>}
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
                   <button
                     type="button"
-                    onClick={() => setSelectedCoverImageUrl(null)}
-                    className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                      selectedCoverImageUrl === null
-                        ? "bg-[#ff7a1a] text-[#0a0a0a]"
-                        : "border border-white/10 bg-[#0d0d0d] text-[#f5f0de] hover:bg-white/5"
-                    }`}
+                    onClick={handleSaveChanges}
+                    disabled={savingChanges || !editName.trim()}
+                    className="rounded-md bg-[#ff7a1a] px-4 py-2.5 text-sm font-semibold text-[#0a0a0a] transition hover:bg-[#ff8d3b] disabled:bg-white/10 disabled:text-white/35"
                   >
-                    Auto grid
+                    {savingChanges ? "Saving..." : "Save changes"}
                   </button>
-                  {posterOptions.map((posterUrl, idx) => (
-                    <button
-                      key={`${posterUrl}-${idx}`}
-                      type="button"
-                      onClick={() => setSelectedCoverImageUrl(posterUrl)}
-                      className={`h-14 w-10 overflow-hidden rounded-md border-2 transition-all sm:h-16 sm:w-12 ${
-                        selectedCoverImageUrl === posterUrl
-                          ? "border-[#ff7a1a] ring-2 ring-[#ff7a1a]/20"
-                          : "border-transparent hover:border-white/20"
-                      }`}
-                      aria-label={`Select poster ${idx + 1} as cover`}
-                    >
-                      <img src={posterUrl} alt={`Poster ${idx + 1}`} className="h-full w-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-                {selectedCoverImageUrl && (
-                  <div className="flex items-center gap-3 border border-white/10 bg-[#0d0d0d] p-3">
-                    <img
-                      src={selectedCoverImageUrl}
-                      alt="Selected cover"
-                      className="h-16 w-11 rounded-md object-cover shadow-sm sm:h-20 sm:w-14"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#f5f0de]">Selected cover</p>
-                      <p className="text-[11px] text-white/55 sm:text-xs">This poster will be used as the list cover image.</p>
-                    </div>
-                  </div>
-                )}
-                </div>
-                {/* Privacy Toggle */}
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
-                    editPrivacy === "private"
-                      ? "border-[#ff7a1a] bg-white/[0.04]"
-                      : "border-white/10 bg-[#0d0d0d] hover:border-white/20"
-                  }`}>
-                    <input
-                      type="radio"
-                      name="privacy"
-                      value="private"
-                      checked={editPrivacy === "private"}
-                      onChange={() => setEditPrivacy("private")}
-                      className="mt-1 h-4 w-4"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Lock className="h-4 w-4 text-white/65" />
-                        <span className="font-semibold text-[#f5f0de]">Private</span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-white/55 sm:text-xs">Only you and collaborators can see it.</p>
-                    </div>
-                  </label>
-                  <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
-                    editPrivacy === "public"
-                      ? "border-[#ff7a1a] bg-white/[0.04]"
-                      : "border-white/10 bg-[#0d0d0d] hover:border-white/20"
-                  }`}>
-                    <input
-                      type="radio"
-                      name="privacy"
-                      value="public"
-                      checked={editPrivacy === "public"}
-                      onChange={() => setEditPrivacy("public")}
-                      className="mt-1 h-4 w-4"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Globe className="h-4 w-4 text-white/65" />
-                        <span className="font-semibold text-[#f5f0de]">Public</span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-white/55 sm:text-xs">Anyone can discover this list.</p>
-                    </div>
-                  </label>
-                </div>
-
-                <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                onClick={handleSaveChanges}
-                disabled={savingChanges}
-                className="rounded-xl bg-[#ff7a1a] px-5 py-3 text-sm font-semibold text-[#0a0a0a] transition hover:bg-[#ff8d3b] disabled:bg-white/10 disabled:text-white/35"
-              >
-                {savingChanges ? "Saving..." : "Save changes"}
-              </button>
-              <button
+                  <button
+                    type="button"
                     onClick={() => {
                       setEditMode(false);
                       setEditName(list.name);
                       setEditDescription(list.description || "");
                       setEditPrivacy(list.privacy);
-                      setSelectedCoverImageUrl(list.cover_image_url || null);
                     }}
-                    className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-[#f5f0de] transition hover:bg-white/5"
+                    className="px-2 py-2.5 text-sm text-white/55 transition hover:text-[#f5f0de]"
                   >
                     Cancel
                   </button>
@@ -1055,8 +896,7 @@ export default function ListDetailPage() {
               {visibleSortedItems.map((item, idx) => {
                 const rank = item.position + 1;
                 // Get logs for this movie, most recent first
-                const logs = logsMap[item.content.id] || [];
-                const posterSrc = logs[0]?.content?.poster_url || item.content.poster_url || null;
+                const posterSrc = item.content.poster_url || null;
                 const watchedKey = `${item.content.type || "movie"}-${item.content.id}`;
                 const watchedRecord = watchedMovies[watchedKey] || null;
                 const userWatched = Boolean(watchedRecord);

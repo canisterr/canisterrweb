@@ -1,6 +1,6 @@
 import { db } from "@/lib/firebase";
-import { ref, set, get, push, remove, query, orderByChild, equalTo } from "firebase/database";
-import { UserTaste, UserTasteWithContent, Content } from "@/types";
+import { ref, set, get, push, remove, query, orderByChild, equalTo, update } from "firebase/database";
+import { UserTaste, UserTasteWithContent, Content, MovieReactionValue } from "@/types";
 import { getMovieDetails } from "./tmdb";
 import { getShowDetails } from "./tvmaze";
 
@@ -10,7 +10,8 @@ import { getShowDetails } from "./tvmaze";
 export async function addToUserTaste(
   userId: string,
   contentId: number,
-  contentType: "movie" | "tv"
+  contentType: "movie" | "tv",
+  reaction?: MovieReactionValue
 ): Promise<UserTaste> {
   const tasteRef = push(ref(db, "user_tastes"));
   const tasteId = tasteRef.key;
@@ -22,6 +23,7 @@ export async function addToUserTaste(
     user_id: userId,
     content_id: contentId,
     content_type: contentType,
+    ...(reaction === undefined ? {} : { reaction }),
     added_at: new Date().toISOString(),
   };
 
@@ -138,3 +140,9 @@ export async function hasMinimumTaste(userId: string): Promise<boolean> {
   }
 }
 
+
+export async function setUserTasteReaction(tasteId: string, reaction: MovieReactionValue): Promise<void> {
+  await update(ref(db, `user_tastes/${tasteId}`), { reaction });
+  const snapshot = await get(ref(db, `user_tastes/${tasteId}`));
+  if (snapshot.exists()) triggerTasteSignatureRefresh((snapshot.val() as UserTaste).user_id);
+}

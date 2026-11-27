@@ -160,15 +160,20 @@ export default function NotificationBell({
             <>
               <div className="max-h-96 overflow-y-auto p-2">
                 {visibleNotifications.slice(0, 5).map((note) => {
-                  const avatar = note.fromUser?.avatar_url ? (
+                  const isHonourNotification = note.type === "honour_unlocked";
+                  const senderName = isHonourNotification
+                    ? "You"
+                    : note.fromUser?.name || note.fromUser?.username || "";
+                  const avatarUrl = note.fromUser?.avatar_url || (isHonourNotification ? user.avatar_url : null);
+                  const avatar = avatarUrl ? (
                     <img
-                      src={note.fromUser.avatar_url}
-                      alt={note.fromUser.name}
+                      src={avatarUrl}
+                      alt={senderName}
                       className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">
-                      {note.fromUser?.name?.charAt(0)?.toUpperCase() || "N"}
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#f5f0de] text-sm font-bold text-black">
+                      {senderName.charAt(0).toUpperCase() || "?"}
                     </div>
                   );
 
@@ -177,7 +182,7 @@ export default function NotificationBell({
                       {avatar}
                       <div className="min-w-0 flex-1">
                         <p className={`text-sm leading-5 ${isBrutalist ? "text-[#f5f0de]/85" : "text-slate-700"}`}>
-                          <span className={`font-black ${isBrutalist ? "text-[#f5f0de]" : "text-slate-950"}`}>{note.fromUser?.name || "Someone"}</span>{" "}
+                          {senderName && <><span className={`font-black ${isBrutalist ? "text-[#f5f0de]" : "text-slate-950"}`}>{senderName}</span>{" "}</>}
                           {notificationText(note)}
                         </p>
                         <p className={`mt-1 text-xs ${isBrutalist ? "text-white/40" : "text-slate-400"}`}>{formatNotificationDate(note.createdAt)}</p>

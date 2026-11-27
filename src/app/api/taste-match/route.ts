@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerMovieLogs } from "@/lib/movie-dna-server";
+import { getCachedServerMovieLogs } from "@/lib/movie-dna-server";
 import {
   calculateTasteMatch,
   computeMovieDna,
@@ -9,7 +9,7 @@ import {
 
 export const runtime = "nodejs";
 
-function logsToDnaInputs(logs: Awaited<ReturnType<typeof getServerMovieLogs>>): DnaLogInput[] {
+function logsToDnaInputs(logs: Awaited<ReturnType<typeof getCachedServerMovieLogs>>): DnaLogInput[] {
   return logs.map((log) => ({
     title: contentToTitleFeatures(log.content as unknown as Record<string, unknown>, log.content_id, log.content_type),
     rating: log.reaction,
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     }
 
     const [logsA, logsB] = await Promise.all([
-      getServerMovieLogs(body.user_a),
-      getServerMovieLogs(body.user_b),
+      getCachedServerMovieLogs(body.user_a),
+      getCachedServerMovieLogs(body.user_b),
     ]);
     const result = calculateTasteMatch(
       computeMovieDna(logsToDnaInputs(logsA)),

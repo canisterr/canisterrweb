@@ -208,6 +208,7 @@ export default function FloatingPosters({ posters }: FloatingPostersProps) {
               {poster.posterUrl ? (
                 <Image
                   src={poster.posterUrl}
+                  unoptimized
                   alt={`${poster.title} poster`}
                   width={400}
                   height={600}

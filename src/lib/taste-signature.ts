@@ -158,11 +158,48 @@ function buildWeightedAffinities(
 }
 
 function mapToRecord(map: Map<string, number>): Record<string, number> {
-  const record: Record<string, number> = {};
-  map.forEach((value, key) => {
-    record[key] = value;
-  });
-  return record;
+  return Object.fromEntries(map);
+}
+
+const ENCODED_KEY_PREFIX = "__firebase_encoded__";
+const INVALID_FIREBASE_KEY_CHARS = /[.#$/[\]]/;
+const INVALID_FIREBASE_KEY_CHARS_GLOBAL = /[.#$/[\]]/g;
+
+function encodeAffinityKey(key: string): string {
+  if (!INVALID_FIREBASE_KEY_CHARS.test(key) && !key.startsWith(ENCODED_KEY_PREFIX)) return key;
+  return ENCODED_KEY_PREFIX + encodeURIComponent(key).replace(INVALID_FIREBASE_KEY_CHARS_GLOBAL, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+}
+
+function decodeAffinityKey(key: string): string {
+  if (!key.startsWith(ENCODED_KEY_PREFIX)) return key;
+  try {
+    return decodeURIComponent(key.slice(ENCODED_KEY_PREFIX.length));
+  } catch {
+    return key;
+  }
+}
+
+function transformAffinities(
+  affinities: Record<string, number>,
+  transformKey: (key: string) => string
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(affinities).map(([key, value]) => [transformKey(key), value])
+  );
+}
+
+function transformSignatureKeys(
+  signature: TasteSignature,
+  transformKey: (key: string) => string
+): TasteSignature {
+  return {
+    ...signature,
+    genreAffinities: transformAffinities(signature.genreAffinities, transformKey),
+    keywordAffinities: transformAffinities(signature.keywordAffinities, transformKey),
+    studioAffinities: transformAffinities(signature.studioAffinities, transformKey),
+  };
 }
 
 function getUserCreators(tastes: MatchTaste[]): Set<string> {
@@ -347,7 +384,7 @@ export async function recomputeTasteSignature(userId: string): Promise<TasteSign
   const signature = computeTasteSignature(tastes);
 
   try {
-    await set(ref(db, `taste_signatures/${userId}`), signature);
+    await set(ref(db, `taste_signatures/${userId}`), transformSignatureKeys(signature, encodeAffinityKey));
   } catch (error) {
     // Some environments intentionally disallow client writes to the cache path.
     // The computed signature is still valid for immediate use, so treat this
@@ -364,10 +401,12 @@ export async function getTasteSignature(userId: string): Promise<TasteSignature>
   try {
     const snapshot = await get(ref(db, `taste_signatures/${userId}`));
     if (snapshot.exists()) {
-      return snapshot.val() as TasteSignature;
+      return transformSignatureKeys(snapshot.val() as TasteSignature, decodeAffinityKey);
     }
   } catch (error) {
-    console.error("getTasteSignature: read failed", userId, error);
+    if (!isPermissionDeniedError(error)) {
+      console.error("getTasteSignature: read failed", userId, error);
+    }
   }
 
   return recomputeTasteSignature(userId);
@@ -381,7 +420,13 @@ export async function getTasteSignature(userId: string): Promise<TasteSignature>
 export async function getAllTasteSignatures(): Promise<Record<string, TasteSignature>> {
   try {
     const snapshot = await get(ref(db, "taste_signatures"));
-    return snapshot.exists() ? (snapshot.val() as Record<string, TasteSignature>) : {};
+    if (!snapshot.exists()) return {};
+    return Object.fromEntries(
+      Object.entries(snapshot.val() as Record<string, TasteSignature>).map(([userId, signature]) => [
+        userId,
+        transformSignatureKeys(signature, decodeAffinityKey),
+      ])
+    );
   } catch (error) {
     if (!isPermissionDeniedError(error)) {
       console.error("getAllTasteSignatures: read failed", error);

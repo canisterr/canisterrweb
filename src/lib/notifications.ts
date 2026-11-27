@@ -1,5 +1,6 @@
-import { get, push, ref, remove, set } from "firebase/database";
+import { get, push, ref, remove, set, update } from "firebase/database";
 import { db } from "@/lib/firebase";
+import { scheduleAcceptedFollowHonoursRecalculation, scheduleHonoursRecalculation } from "@/lib/honours-client";
 import type { MovieLog, User } from "@/types";
 import { shouldDeliverNotificationToUser } from "./settings";
 import { sendPushNotification } from "./push-notifications";
@@ -17,7 +18,9 @@ export type NotificationType =
   | "log_comment"
   | "log_comment_reply"
   | "log_comment_like"
-  | "matcher_update";
+  | "matcher_update"
+  | "release_reminder"
+  | "honour_unlocked";
 
 export type NotificationItem = {
   id: string;
@@ -44,6 +47,8 @@ export type NotificationItem = {
   content?: string;
   contentId?: string | number;
   contentType?: string;
+  title?: string;
+  url?: string;
 };
 
 type NotificationActor = {
@@ -107,6 +112,8 @@ export function parseNotificationItems(raw: unknown): NotificationItem[] {
     content: entry.content as string | undefined,
     contentId: entry.contentId as string | number | undefined,
     contentType: entry.contentType as string | undefined,
+    title: entry.title as string | undefined,
+    url: entry.url as string | undefined,
   })) as NotificationItem[];
 }
 
@@ -115,6 +122,8 @@ export function sortNotificationItems(items: NotificationItem[]): NotificationIt
 }
 
 export function notificationHref(note: NotificationItem): string {
+  if (note.type === "honour_unlocked" && note.url) return note.url;
+  if (note.type === "release_reminder" && note.contentId) return `/movie/${note.contentId}`;
   if (note.type === "collaboration_request" && note.listId) return `/lists/${note.listId}`;
   if (note.type === "share_reply" && note.shareId) {
     return `/share?share_id=${note.shareId}&panel=history`;
@@ -135,6 +144,8 @@ export function notificationHref(note: NotificationItem): string {
 
 export function notificationText(note: NotificationItem): string {
   switch (note.type) {
+    case "release_reminder":
+      return `${note.title || "A tracked movie"} has reached its release date.`;
     case "follow_request":
       return "is now following you.";
     case "collaboration_request":
@@ -147,6 +158,10 @@ export function notificationText(note: NotificationItem): string {
       return note.shareTitle ? `shared ${note.shareTitle} with you.` : "shared a title with you.";
     case "log_created":
       return note.contentType === "tv" ? "logged a new show." : "logged a new movie.";
+    case "honour_unlocked":
+      return note.title?.replace(/^Honour unlocked:\s*/i, "")
+        ? `unlocked ${note.title.replace(/^Honour unlocked:\s*/i, "")}.`
+        : "unlocked a Canisterr Honour.";
     case "log_comment":
       return "commented on your log.";
     case "log_comment_reply":
@@ -197,6 +212,7 @@ export async function acceptFollowRequest(
       ...followSnapshot.val(),
       status: "accepted",
     });
+    scheduleAcceptedFollowHonoursRecalculation(note.id);
   }
 
   if (options?.keepNotification) {
@@ -230,6 +246,7 @@ export async function acceptFollowRequest(
       type: "follow_request",
       seen: false,
       followRequestState: "accepted",
+      followedBack: true,
       fromUser: {
         id: options.actorUser.id,
         username: options.actorUser.username,
@@ -291,6 +308,7 @@ export async function sendFollowRequest(
   };
 
   await set(ref(db, `follows/${followId}`), newFollow);
+  scheduleHonoursRecalculation(fromUser.id);
 
   if (await shouldDeliverNotificationToUser(targetUser.id, "follow_request")) {
     await set(
@@ -341,11 +359,19 @@ export async function followBackUser(
   const snapshot = await get(followsRef);
 
   let existingFollow: { id: string; createdAt?: string; created_at?: string } | null = null;
+  let targetAlreadyFollowsActor = false;
+  let targetFollowId: string | null = null;
   if (snapshot.exists()) {
-    existingFollow =
-      (Object.values(snapshot.val() as Record<string, any>).find(
-        (follow: any) => follow?.follower_id === fromUser.id && follow?.following_id === targetUser.id
-      ) as any) || null;
+    const allFollows = Object.entries(snapshot.val() as Record<string, any>);
+    const ownRelation = allFollows.find(([, follow]) =>
+      follow?.follower_id === fromUser.id && follow?.following_id === targetUser.id
+    );
+    if (ownRelation) existingFollow = { id: ownRelation[0], ...ownRelation[1] };
+    const reciprocalRelation = allFollows.find(([, follow]) =>
+      follow?.follower_id === targetUser.id && follow?.following_id === fromUser.id && follow?.status === "accepted"
+    );
+    targetFollowId = reciprocalRelation?.[0] || null;
+    targetAlreadyFollowsActor = Boolean(targetFollowId);
   }
 
   const followId = existingFollow?.id || `${fromUser.id}-${targetUser.id}-${Date.now()}`;
@@ -360,7 +386,14 @@ export async function followBackUser(
   };
 
   await set(ref(db, `follows/${followId}`), acceptedFollow);
-  await createFollowAcceptedNotification(targetUser.id, followId, fromUser, createdAt);
+  if (targetFollowId) {
+    const reciprocalNotificationRef = ref(db, `notifications/${targetUser.id}/${targetFollowId}`);
+    const reciprocalNotification = await get(reciprocalNotificationRef);
+    if (reciprocalNotification.exists()) {
+      await update(reciprocalNotificationRef, { followedBack: true });
+    }
+  }
+  await createFollowAcceptedNotification(targetUser.id, followId, fromUser, createdAt, targetAlreadyFollowsActor);
 }
 
 export async function createFollowRequestNotification(
@@ -374,6 +407,7 @@ export async function createFollowRequestNotification(
   },
   createdAt: string
 ): Promise<void> {
+  scheduleHonoursRecalculation(fromUser.id);
   if (!(await shouldDeliverNotificationToUser(userId, "follow_request"))) return;
 
   await set(
@@ -412,8 +446,10 @@ export async function createFollowAcceptedNotification(
     name: string;
     avatar_url?: string | null;
   },
-  createdAt: string
+  createdAt: string,
+  followedBack = false
 ): Promise<void> {
+  scheduleHonoursRecalculation(fromUser.id);
   if (!(await shouldDeliverNotificationToUser(userId, "follow_request"))) return;
 
   await set(
@@ -422,6 +458,7 @@ export async function createFollowAcceptedNotification(
       type: "follow_request",
       seen: false,
       followRequestState: "accepted",
+      followedBack,
       fromUser: {
         id: fromUser.id,
         username: fromUser.username,

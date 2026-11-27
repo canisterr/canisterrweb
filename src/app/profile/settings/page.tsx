@@ -1,18 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, UserRoundCog, Upload, Shield, Bell, Users, KeyRound, LifeBuoy, UserCircle2 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "./settings-shared";
 
 const sections = [
-  { href: "/profile/settings/profile", icon: UserRoundCog, title: "Profile", desc: "Photo, name, username and bio.", color: "bg-[#0a84ff]" },
-  { href: "/profile/settings/import", icon: Upload, title: "Import", desc: "Letterboxd CSV and data export.", color: "bg-[#30b0c7]" },
-  { href: "/profile/settings/privacy", icon: Shield, title: "Privacy", desc: "Profile, list and log visibility.", color: "bg-[#34c759]" },
-  { href: "/profile/settings/notifications", icon: Bell, title: "Notifications", desc: "Follow, comment and email alerts.", color: "bg-[#ff9500]" },
-  { href: "/profile/settings/social", icon: Users, title: "Social", desc: "Blocked users and collaborations.", color: "bg-[#af52de]" },
-  { href: "/profile/settings/account", icon: KeyRound, title: "Account", desc: "Password, deactivate and delete profile.", color: "bg-[#ff3b30]" },
-  { href: "mailto:support@canisterr.com", icon: LifeBuoy, title: "Support", desc: "Help, bug reports and contact.", color: "bg-[#5e5ce6]" },
+  { href: "/profile/settings/import", title: "Import", desc: "Letterboxd CSV and data export." },
+  { href: "/profile/settings/privacy", title: "Privacy", desc: "Profile, list and log visibility." },
+  { href: "/profile/settings/notifications", title: "Notifications", desc: "Follow, comment and email alerts." },
+  { href: "/profile/settings/social", title: "Social", desc: "Blocked users and collaborations." },
+  { href: "/profile/settings/account", title: "Account", desc: "Password and account access." },
+  { href: "mailto:support@canisterr.com", title: "Support", desc: "Help and contact." },
 ];
 
 const legalLinks = [
@@ -35,14 +34,14 @@ export default function ProfileSettingsIndexPage() {
       loading={loading}
       onSignOut={handleSignOut}
       title="Settings"
-      description="Manage your profile, privacy, alerts and account details."
+      description="Privacy, alerts and account details."
       backHref="/profile"
     >
-      <div className="space-y-8">
-        <section className="rounded-[2rem] border border-white/10 bg-[#151515] p-4 shadow-[0_24px_90px_rgba(0,0,0,0.28)] sm:p-5">
-          <div className="flex items-center gap-4 rounded-[1.6rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] px-4 py-4 sm:px-5">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-[#f5f0de] text-[#0a0a0a] shadow-[inset_0_1px_1px_rgba(255,255,255,0.65)]">
-              <UserCircle2 className="h-8 w-8" />
+      <div className="space-y-5">
+        <section className="rounded-xl border border-white/10 bg-[#111] p-3 sm:p-4">
+          <div className="flex items-center gap-4 px-2 py-2 sm:px-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-[#242424] text-[#f5f0de]">
+              {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : user?.name?.charAt(0).toUpperCase() || "?"}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-lg font-semibold text-[#f5f0de]">{user?.name || "User"}</p>
@@ -50,13 +49,10 @@ export default function ProfileSettingsIndexPage() {
             </div>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-[1.6rem] border border-white/8 bg-[#0f0f0f]">
+          <div className="mt-3 overflow-hidden rounded-lg border border-white/10 bg-black/30">
             {sections.map((section, index) => {
               const content = (
                 <>
-                  <span className={`flex h-10 w-10 items-center justify-center rounded-[0.95rem] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] ${section.color}`}>
-                    <section.icon className="h-4.5 w-4.5" />
-                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-semibold text-[#f5f0de]">{section.title}</span>
                     <span className="mt-0.5 block text-xs text-white/45">{section.desc}</span>
@@ -65,7 +61,7 @@ export default function ProfileSettingsIndexPage() {
                 </>
               );
 
-              const className = `flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/[0.04] sm:px-5 ${index !== sections.length - 1 ? "border-b border-white/7" : ""}`;
+              const className = `flex items-center gap-3 px-3 py-3 transition hover:bg-white/[0.04] sm:px-4 ${index !== sections.length - 1 ? "border-b border-white/7" : ""}`;
 
               return section.href.startsWith("mailto:") ? (
                 <a key={section.title} href={section.href} className={className}>
@@ -81,8 +77,8 @@ export default function ProfileSettingsIndexPage() {
         </section>
 
         <section>
-          <p className="mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.22em] text-white/34">More</p>
-          <div className="overflow-hidden rounded-[1.6rem] border border-white/8 bg-[#151515] shadow-[0_20px_70px_rgba(0,0,0,0.24)]">
+          <p className="mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#ff9b52]">More</p>
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111]">
             {legalLinks.map((link, index) =>
               link.external ? (
                 <a
@@ -111,6 +107,15 @@ export default function ProfileSettingsIndexPage() {
               )
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              void handleSignOut();
+            }}
+            className="mt-3 flex h-14 w-full items-center justify-center rounded-xl border border-white/15 bg-[#111] text-base font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/50 hover:bg-[#1a1511]"
+          >
+            Sign out
+          </button>
         </section>
       </div>
     </SettingsPageFrame>

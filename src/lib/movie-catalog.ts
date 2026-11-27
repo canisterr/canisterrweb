@@ -1,4 +1,4 @@
-import { endAt, get, limitToFirst, orderByChild, query, ref, set, startAt } from "firebase/database";
+import { endAt, get, limitToFirst, orderByChild, query, ref, startAt, update } from "firebase/database";
 import { auth, db } from "@/lib/firebase";
 import type { TMDBMovie } from "@/types";
 
@@ -108,6 +108,17 @@ function hasAuthenticatedUser() {
   return typeof window !== "undefined" && Boolean(auth.currentUser);
 }
 
+export async function getMovieCatalogById(movieId: number): Promise<TMDBMovie | null> {
+  if (movieCatalogReadsDisabled || !hasAuthenticatedUser()) return null;
+  try {
+    const snapshot = await get(ref(db, `movies/${movieId}`));
+    if (!snapshot.exists()) return null;
+    return normalizeCatalogMovie(String(movieId), snapshot.val() as Record<string, unknown>);
+  } catch {
+    return null;
+  }
+}
+
 export async function searchMovieCatalog(queryText: string, limit: number = MOVIE_CATALOG_LIMIT): Promise<TMDBMovie[]> {
   if (movieCatalogReadsDisabled || !hasAuthenticatedUser()) {
     return [];
@@ -193,7 +204,7 @@ export async function upsertMovieCatalog(movies: TMDBMovie[]): Promise<void> {
 
   if (movieCatalogWriteInFlight) {
     await movieCatalogWriteInFlight;
-    return;
+    if (movieCatalogWritesDisabled) return;
   }
 
   const uniqueMovies = Array.from(new Map(movies.map((movie) => [movie.id, movie])).values());
@@ -204,23 +215,10 @@ export async function upsertMovieCatalog(movies: TMDBMovie[]): Promise<void> {
   const timestamp = new Date().toISOString();
   const writePromise = (async () => {
     try {
-      const results = await Promise.allSettled(
-        uniqueMovies.map((movie) => set(ref(db, `movies/${movie.id}`), toMovieCatalogRecord(movie, timestamp)))
+      const updates = Object.fromEntries(
+        uniqueMovies.map((movie) => [`movies/${movie.id}`, toMovieCatalogRecord(movie, timestamp)])
       );
-
-      const permissionDenied = results.some((result) => {
-        if (result.status !== "rejected") return false;
-        return isPermissionDenied(result.reason);
-      });
-
-      if (permissionDenied) {
-        movieCatalogWritesDisabled = true;
-        persistFlag(MOVIE_CATALOG_WRITES_DISABLED_KEY);
-        if (!writeWarningLogged) {
-          writeWarningLogged = true;
-          console.warn("Movie catalog writes are unavailable until Firebase rules allow the movies table.");
-        }
-      }
+      await update(ref(db), updates);
     } catch (error) {
       movieCatalogWritesDisabled = true;
       persistFlag(MOVIE_CATALOG_WRITES_DISABLED_KEY);

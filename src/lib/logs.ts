@@ -8,14 +8,18 @@ import {
   query,
   orderByChild,
   equalTo,
+  update,
 } from "firebase/database";
 import { MovieLog, MovieLogWithContent, MovieReactionValue, User, Content, Movie } from "@/types";
 import { getMovieDetails } from "./tmdb";
-import { getShowDetails } from "./tvmaze";
+import { getShowCardSummary, getShowDetails } from "./tvmaze";
 import { removeWatchedMovieSource, upsertWatchedMovie } from "./watched-movies";
 import { createFallbackUser, getUserProfile } from "./users";
+import { findOnThisDayMemories, type OnThisDayMemory } from "./on-this-day";
 import { lsGet, lsSet } from "./local-cache";
 import { createLogCreatedNotifications } from "./notifications";
+import { getTmdbPosterUrl } from "./performance";
+import { scheduleHonoursRecalculation } from "@/lib/honours-client";
 
 const IMPORTED_RATINGS_CSV_NOTE = "Imported from ratings CSV";
 let userLogPermissionWarningShown = false;
@@ -104,7 +108,54 @@ function createFallbackContentForLog(log: MovieLog): Content {
   return createFallbackMovieContent(log.content_id) as Content;
 }
 
-async function getContentForLog(log: MovieLog): Promise<Content> {
+async function getContentForLog(log: MovieLog, summaryOnly = false): Promise<Content> {
+  if (summaryOnly) {
+    if (log.content_summary?.title) {
+      return { ...createFallbackContentForLog(log), ...log.content_summary };
+    }
+    if (log.title_snapshot) {
+      return {
+        ...createFallbackContentForLog(log),
+        title: log.title_snapshot,
+        poster_url: log.poster_url_snapshot || null,
+      };
+    }
+    const cacheKey = `friend_log_summary_v1_${log.content_type}_${log.content_id}`;
+    const summaryTtl = 30 * 24 * 60 * 60 * 1000;
+    const cached = lsGet<{ title: string; poster_url: string | null }>(cacheKey, summaryTtl);
+    if (cached?.title) return { ...createFallbackContentForLog(log), ...cached };
+
+    if (log.content_type === "tv") {
+      const summary = await getShowCardSummary(log.content_id);
+      if (summary) {
+        lsSet(cacheKey, summary, summaryTtl);
+        return { ...createFallbackContentForLog(log), ...summary };
+      }
+    } else {
+      try {
+        const snapshot = await get(ref(db, `movies/${log.content_id}`));
+        if (snapshot.exists()) {
+          const movie = snapshot.val() as { title?: string; poster_path?: string | null; poster_url?: string | null };
+          if (movie.title) {
+            const summary = {
+              title: movie.title,
+              poster_url: getTmdbPosterUrl(movie.poster_url || movie.poster_path, "w500"),
+            };
+            lsSet(cacheKey, summary, summaryTtl);
+            return { ...createFallbackContentForLog(log), ...summary };
+          }
+        }
+      } catch {
+        // Older logs may have no catalog entry; show the fallback summary.
+      }
+    }
+
+    // Summary consumers (profile feeds, calendars, and list previews) only need a
+    // title and poster. Falling through here used to fetch the full TMDB payload
+    // with credits, videos, images, and providers for every uncached log.
+    return createFallbackContentForLog(log);
+  }
+
   if (log.content_type === "tv") {
     const show = await getShowDetails(log.content_id);
     if (show) return show as unknown as Content;
@@ -139,24 +190,49 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-async function getContentMapForLogs(logs: MovieLog[]): Promise<Map<string, Content>> {
+async function getContentMapForLogs(logs: MovieLog[], summaryOnly = false): Promise<Map<string, Content>> {
   const uniqueLogs = Array.from(
     new Map(logs.map((log) => [`${log.content_type}-${log.content_id}`, log])).values()
   );
   const contentEntries = await mapWithConcurrency(uniqueLogs, 4, async (log) => {
     const key = `${log.content_type}-${log.content_id}`;
-    const content = await getContentForLog(log);
+    const content = await getContentForLog(log, summaryOnly);
     return [key, content] as const;
   });
 
   return new Map(contentEntries);
 }
 
-async function getLogsForUser(userId: string): Promise<MovieLog[]> {
-  const logsQuery = query(ref(db, "movie_logs"), orderByChild("user_id"), equalTo(userId));
-  const snapshot = await get(logsQuery);
-  if (!snapshot.exists()) return [];
-  return Object.values(snapshot.val()) as MovieLog[];
+const USER_LOG_CACHE_TTL_MS = 20_000;
+const userLogCache = new Map<string, { expiresAt: number; logs: MovieLog[] }>();
+const userLogRequests = new Map<string, Promise<MovieLog[]>>();
+
+export function invalidateUserLogsCache(userId: string): void {
+  userLogCache.delete(userId);
+}
+
+export async function getLogsForUser(userId: string): Promise<MovieLog[]> {
+  const cached = userLogCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.logs;
+  const existingRequest = userLogRequests.get(userId);
+  if (existingRequest) return existingRequest;
+
+  const request = (async () => {
+    const logsQuery = query(ref(db, "movie_logs"), orderByChild("user_id"), equalTo(userId));
+    const snapshot = await get(logsQuery);
+    const logs = snapshot.exists() ? Object.values(snapshot.val()) as MovieLog[] : [];
+    userLogCache.set(userId, { expiresAt: Date.now() + USER_LOG_CACHE_TTL_MS, logs });
+    return logs;
+  })();
+  userLogRequests.set(userId, request);
+  try {
+    return await request;
+  } catch (error) {
+    userLogCache.delete(userId);
+    throw error;
+  } finally {
+    if (userLogRequests.get(userId) === request) userLogRequests.delete(userId);
+  }
 }
 
 /**
@@ -180,7 +256,8 @@ export async function createMovieLog(
   season?: number,
   episode?: number,
   episodeTitle?: string,
-  containsSpoiler?: boolean
+  containsSpoiler?: boolean,
+  contentSummary?: { title: string; poster_url: string | null }
 ): Promise<MovieLog> {
   const logRef = push(ref(db, "movie_logs"));
   const logId = logRef.key;
@@ -224,6 +301,10 @@ export async function createMovieLog(
     newLog.imported_from_csv = true;
   }
 
+  if (contentSummary?.title) {
+    newLog.content_summary = contentSummary;
+  }
+
   if (contentType === "tv" && typeof season === "number" && Number.isFinite(season)) {
     newLog.season = season;
   }
@@ -237,6 +318,8 @@ export async function createMovieLog(
   }
 
   await set(logRef, newLog);
+  invalidateUserLogsCache(userId);
+  scheduleHonoursRecalculation(userId);
   try {
     await upsertWatchedMovie(userId, contentId, contentType, "log");
   } catch (error) {
@@ -287,9 +370,29 @@ export async function updateMovieLog(
     ...currentLog,
     ...updates,
     updated_at: new Date().toISOString(),
-  };
+  } as MovieLog;
 
-  await set(logRef, mergedLog);
+  // RTDB rejects `undefined` anywhere in a value passed to set(). Treat an
+  // undefined patch as a request to clear that optional field, and strip any
+  // nested undefined values before writing (for example, when mood is cleared
+  // while editing a log).
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined) delete (mergedLog as unknown as Record<string, unknown>)[key];
+  }
+  const removeUndefined = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.filter((child) => child !== undefined).map(removeUndefined);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value).filter(([, child]) => child !== undefined).map(([key, child]) => [key, removeUndefined(child)])
+      );
+    }
+    return value;
+  };
+  const safeLog = removeUndefined(mergedLog);
+
+  await set(logRef, safeLog as MovieLog);
+  invalidateUserLogsCache(mergedLog.user_id);
+  scheduleHonoursRecalculation(mergedLog.user_id);
 
   if (mergedLog.watched_date && !mergedLog.watch_later) {
     await upsertWatchedMovie(
@@ -315,6 +418,8 @@ export async function deleteMovieLog(logId: string): Promise<void> {
       await removeWatchedMovieSource(log.user_id, log.content_id, log.content_type, "log");
     }
     await remove(logRef);
+    invalidateUserLogsCache(log.user_id);
+    scheduleHonoursRecalculation(log.user_id);
     triggerTasteSignatureRefresh(log.user_id);
     return;
   }
@@ -327,38 +432,73 @@ export async function deleteMovieLog(logId: string): Promise<void> {
 export async function getUserMovieLogs(
   userId: string,
   limit: number = 50,
-  currentUser?: User | null
+  currentUser?: User | null,
+  options: { fresh?: boolean; summaryOnly?: boolean; contentType?: "movie" | "tv"; startDate?: string; endDate?: string } = {}
 ): Promise<MovieLogWithContent[]> {
-  const cacheKey = `logs_${userId}_${limit}`;
+  const cacheKey = `logs_v2_${userId}_${limit}${options.summaryOnly ? "_summary" : ""}${options.contentType ? `_${options.contentType}` : ""}_${options.startDate || ""}_${options.endDate || ""}`;
   const TTL = 5 * 60 * 1000; // 5 minutes
 
   const cached = lsGet<MovieLogWithContent[]>(cacheKey, TTL);
-  if (cached && cached.length > 0) {
-    // Return cache immediately and refresh in background
-    getUserMovieLogsFromNetwork(userId, limit, currentUser).then((fresh) => {
-      if (fresh.length > 0) lsSet(cacheKey, fresh, TTL);
-    }).catch(() => {});
+  if (!options.fresh && cached && cached.length > 0) {
+    if (!options.summaryOnly && !options.startDate && !options.endDate) {
+      // Full-detail consumers keep the existing background refresh behavior.
+      getUserMovieLogsFromNetwork(userId, limit, currentUser, false, options.contentType).then((fresh) => {
+        if (fresh.length > 0) lsSet(cacheKey, fresh, TTL);
+      }).catch(() => {});
+    }
     return cached;
   }
 
-  const fresh = await getUserMovieLogsFromNetwork(userId, limit, currentUser);
+  const fresh = await getUserMovieLogsFromNetwork(userId, limit, currentUser, options.summaryOnly, options.contentType, options.startDate, options.endDate);
   if (fresh.length > 0) lsSet(cacheKey, fresh, TTL);
   return fresh;
+}
+
+/** Load only today's matching logs before looking up content details. */
+export async function getOnThisDayMemories(
+  userId: string,
+  today: Date,
+  currentUser: User,
+  userLogs?: MovieLog[]
+): Promise<OnThisDayMemory[]> {
+  const logs = userLogs ?? await getLogsForUser(userId);
+  const matches = findOnThisDayMemories(logs, today).slice(0, 1);
+  if (matches.length === 0) return [];
+
+  const contentMap = await getContentMapForLogs(matches.map(({ log }) => log));
+  return matches.map(({ log, yearsAgo }) => ({
+    yearsAgo,
+    log: {
+      ...log,
+      notes: getVisibleLogNotes(log),
+      content: contentMap.get(`${log.content_type}-${log.content_id}`) || createFallbackContentForLog(log),
+      user: currentUser,
+    },
+  }));
 }
 
 async function getUserMovieLogsFromNetwork(
   userId: string,
   limit: number,
-  currentUser?: User | null
+  currentUser?: User | null,
+  summaryOnly = false,
+  contentType?: "movie" | "tv",
+  startDate?: string,
+  endDate?: string
 ): Promise<MovieLogWithContent[]> {
   try {
     const userLogs = await getLogsForUser(userId);
     const recentLogs = userLogs
+      .filter((log) =>
+        (!contentType || (log.content_type === contentType && !log.watch_later && Boolean(log.watched_date))) &&
+        (!startDate || (Boolean(log.watched_date) && log.watched_date >= startDate)) &&
+        (!endDate || (Boolean(log.watched_date) && log.watched_date <= endDate))
+      )
       .sort((a, b) => new Date(b.watched_date).getTime() - new Date(a.watched_date).getTime())
       .slice(0, limit);
 
     const [contentMap, user] = await Promise.all([
-      getContentMapForLogs(recentLogs),
+      getContentMapForLogs(recentLogs, summaryOnly),
       currentUser ? Promise.resolve(currentUser) : getUserProfile(userId),
     ]);
 
@@ -426,7 +566,11 @@ export async function getLogsForContent(
   limit: number = 20
 ): Promise<MovieLogWithContent[]> {
   try {
-    const snapshot = await get(ref(db, "movie_logs"));
+    const snapshot = await get(query(
+      ref(db, "movie_logs"),
+      orderByChild("content_id"),
+      equalTo(contentId)
+    ));
 
     if (!snapshot.exists()) return [];
 
@@ -608,9 +752,30 @@ export async function quickRateMovie(
 export async function addToWatchlist(
   userId: string,
   contentId: number,
-  contentType: "movie" | "tv"
+  contentType: "movie" | "tv",
+  details?: { title?: string; poster_url?: string | null; release_date?: string | null }
 ): Promise<MovieLog> {
   try {
+    const existing = (await getLogsForUser(userId)).find(
+      (log) => log.watch_later && log.content_id === contentId && log.content_type === contentType
+    );
+    const releaseDate = details?.release_date || null;
+    const releaseNotify = contentType === "movie" && Boolean(releaseDate && releaseDate > new Date().toISOString().slice(0, 10));
+    const snapshotFields = {
+      ...(details?.title ? { title_snapshot: details.title } : {}),
+      ...(details?.poster_url ? { poster_url_snapshot: details.poster_url } : {}),
+      ...(releaseDate ? { release_date_snapshot: releaseDate } : {}),
+      ...(releaseNotify ? { release_notify: true } : {}),
+    };
+    if (existing) {
+      if (Object.keys(snapshotFields).length) {
+        await update(ref(db, `movie_logs/${existing.id}`), snapshotFields);
+        invalidateUserLogsCache(userId);
+        scheduleHonoursRecalculation(userId);
+      }
+      return { ...existing, ...snapshotFields };
+    }
+
     const logRef = push(ref(db, "movie_logs"));
     const logId = logRef.key;
 
@@ -625,17 +790,29 @@ export async function addToWatchlist(
       reaction: 0, // No reaction yet
       notes: "",
       watch_later: true, // Mark as watch later
+      release_notify: releaseNotify,
+      ...snapshotFields,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
     await set(logRef, newLog);
+    invalidateUserLogsCache(userId);
+    scheduleHonoursRecalculation(userId);
     console.log("Added to watchlist:", contentId);
     return newLog;
   } catch (error) {
     console.error("Error adding to watchlist:", error);
     throw error;
   }
+}
+
+export async function removeFromWatchlist(log: Pick<MovieLog, "id">): Promise<void> {
+  const snapshot = await get(ref(db, `movie_logs/${log.id}`));
+  const userId = snapshot.exists() ? (snapshot.val() as MovieLog).user_id : null;
+  await remove(ref(db, `movie_logs/${log.id}`));
+  if (userId) invalidateUserLogsCache(userId);
+  if (userId) scheduleHonoursRecalculation(userId);
 }
 
 /**

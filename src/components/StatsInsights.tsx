@@ -1,208 +1,250 @@
 "use client";
 
-import {
-  ChevronRight,
-  Clock3,
-  Film,
-  Flame,
-  Languages,
-  Repeat2,
-  Star,
-  Tv,
-  UserRound,
-  Video,
-} from "lucide-react";
-import ReactionDistributionBar from "./ReactionDistributionBar";
+import { useEffect, useState, type ReactNode } from "react";
+import { X } from "lucide-react";
 import { getReactionAverageLabel, type DetailedUserStats, type StatDistributionItem } from "@/lib/profile";
-import { formatWatchDuration as formatDuration } from "@/lib/format";
+import { formatWatchDuration } from "@/lib/format";
+import styles from "./home/HomeStatsBento.module.css";
 
 interface StatsInsightsProps {
   stats: DetailedUserStats;
   onStatClick?: (type: "all" | "movie" | "tv" | "masterpiece" | "good" | "average" | "bad") => void;
   onTasteClick?: (type: "genre" | "actor" | "director" | "language", value: string) => void;
+  filterAction?: ReactNode;
 }
 
-type StatClick = StatsInsightsProps["onStatClick"];
+const CARD = "min-w-0 overflow-hidden rounded-xl border sm:rounded-2xl";
+const SURFACE = {
+  carbon: "border-[#f5f0de]/15 bg-[#0e0d0b]",
+  charcoal: "border-[#f5f0de]/10 bg-[#1c1a17]",
+  orange: "border-[#c45b2a] bg-[#c45b2a]",
+  cream: "border-[#f5f0de] bg-[#f5f0de]",
+};
+const LABEL = "text-[10px] font-black uppercase tracking-[0.2em] text-[#f5f0de]/45 sm:text-xs";
 
-function SectionTitle({ eyebrow, title, detail }: { eyebrow: string; title: string; detail?: string }) {
-  return (
-    <div className="mb-4 flex items-end justify-between gap-4">
-      <div>
-        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#ff7a1a]">{eyebrow}</p>
-        <h3 className="mt-1 text-xl font-black tracking-tight text-[#f5f0de] sm:text-2xl">{title}</h3>
-      </div>
-      {detail ? <p className="hidden max-w-xs text-right text-xs leading-5 text-white/35 sm:block">{detail}</p> : null}
+type StatsTone = keyof typeof SURFACE;
+
+function MetricCard({ label, value, tone, onClick }: { label: string; value: string | number; tone: StatsTone; onClick?: () => void }) {
+  const className = `flex h-28 flex-col items-center justify-center p-2 text-center transition-colors sm:h-32 sm:p-3 lg:h-36 ${onClick ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c45b2a]" : ""}`;
+  const content = <>
+    <span className={`text-[9px] font-black uppercase tracking-[0.14em] sm:text-[10px] sm:tracking-[0.18em] ${tone === "orange" ? "text-[#ff7a1a]" : "text-[#f5f0de]/50"}`}>{label}</span>
+    <span className={`mt-2 text-3xl font-black leading-none tracking-normal sm:text-5xl ${tone === "orange" ? "text-[#ff7a1a]" : "text-[#f5f0de]"}`}>{value}</span>
+  </>;
+  return onClick ? <button type="button" onClick={onClick} className={className}>{content}</button> : <div className={className}>{content}</div>;
+}
+
+function RatingDistribution({ stats, onStatClick }: { stats: DetailedUserStats; onStatClick?: StatsInsightsProps["onStatClick"] }) {
+  const categories = [
+    { label: "Bad", key: "bad" as const, count: stats.badCount, color: "#595959", text: "text-[#777]" },
+    { label: "Average", key: "average" as const, count: stats.averageCount, color: "#918a7c", text: "text-[#a49d90]" },
+    { label: "Good", key: "good" as const, count: stats.goodCount, color: "#f5f0de", text: "text-[#f5f0de]" },
+    { label: "Masterpiece", key: "masterpiece" as const, count: stats.masterpieceCount, color: "#c45b2a", text: "text-[#c45b2a]" },
+  ];
+  const total = categories.reduce((sum, item) => sum + item.count, 0);
+  const segmentCount = 40;
+  const segments = categories.map((item) => {
+    const exact = total ? (item.count / total) * segmentCount : 0;
+    const count = total ? Math.floor(exact) : 0;
+    return { ...item, segments: count, percentage: total ? Math.round((item.count / total) * 100) : 0 };
+  });
+
+  // Distribute leftover segments by largest fractional remainder so the strip always fills evenly.
+  if (total) {
+    const remaining = segmentCount - segments.reduce((sum, item) => sum + item.segments, 0);
+    const ranked = categories.map((item, index) => ({ index, remainder: ((item.count / total) * segmentCount) % 1 }))
+      .sort((a, b) => b.remainder - a.remainder);
+    for (let index = 0; index < remaining; index += 1) segments[ranked[index % ranked.length].index].segments += 1;
+  }
+
+  const bars = total
+    ? segments.flatMap((item) => Array.from({ length: item.segments }, (_, index) => <span key={`${item.key}-${index}`} className="h-10 rounded-[2px] sm:h-14" style={{ backgroundColor: item.color }} />))
+    : Array.from({ length: segmentCount }, (_, index) => <span key={index} className="h-10 rounded-[2px] bg-[#f5f0de]/10 sm:h-14" />);
+
+  return <div className="col-span-3 min-w-0 py-4 sm:py-6">
+    <div className="grid gap-1 sm:gap-2" style={{ gridTemplateColumns: `repeat(${segmentCount}, minmax(0, 1fr))` }} role="img" aria-label={`Rating distribution across ${total} rated logs`}>
+      {bars}
     </div>
-  );
+    <div className="mt-4 grid grid-cols-4 gap-2 sm:mt-6 sm:gap-4">
+      {segments.map((item) => <button key={item.key} type="button" onClick={onStatClick ? () => onStatClick(item.key) : undefined} className={`min-w-0 text-left ${onStatClick ? "focus-visible:outline-2 focus-visible:outline-[#c45b2a]" : "cursor-default"}`}>
+        <span className={`block text-xl font-black tabular-nums sm:text-3xl ${item.text}`}>{item.percentage}%</span>
+        <span className="mt-1 block truncate text-xs text-[#f5f0de]/55 sm:mt-2 sm:text-base">{item.label}</span>
+      </button>)}
+    </div>
+  </div>;
 }
 
-function HeroMetric({ stats, onStatClick }: { stats: DetailedUserStats; onStatClick?: StatClick }) {
-  const body = (
-    <div className="group relative min-h-[230px] overflow-hidden rounded-[2rem] border border-[#ff7a1a]/35 bg-[#101010] p-6 text-left shadow-[0_22px_70px_rgba(0,0,0,0.32)] sm:p-8">
-      <div className="absolute -right-12 -top-14 h-44 w-44 rounded-full bg-[#ff7a1a]/15 blur-3xl transition group-hover:bg-[#ff7a1a]/25" />
-      <div className="absolute right-5 top-5 flex h-12 w-12 rotate-6 items-center justify-center rounded-2xl bg-[#ff7a1a] text-black shadow-[0_10px_30px_rgba(255,122,26,0.3)] transition group-hover:rotate-12">
-        <Film className="h-6 w-6" />
-      </div>
-      <div className="relative flex h-full flex-col justify-between">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/40">All-time diary</p>
-          <p className="mt-4 text-6xl font-black leading-none tracking-[-0.06em] text-[#f5f0de] sm:text-7xl">{stats.totalLogged}</p>
-          <p className="mt-2 text-sm font-semibold text-[#ff9b52]">titles logged and counting</p>
+function TopGenres({ items, onItemClick }: { items: StatDistributionItem[]; onItemClick?: (value: string) => void }) {
+  const top = items.slice(0, 5);
+  return <div className={`${CARD} ${SURFACE.orange} col-span-2 flex min-h-64 flex-col p-3 sm:min-h-72 sm:p-7`}>
+    <h3 className="text-lg font-black tracking-tight text-[#0e0d0b] sm:text-2xl">Top genres</h3>
+    {top.length ? <div className="mt-5 flex flex-1 items-center">
+      <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-2 sm:gap-8">
+        <button type="button" onClick={onItemClick ? () => onItemClick(top[0].label) : undefined} className="min-w-0 text-left focus-visible:outline-2 focus-visible:outline-[#c45b2a]">
+          <span className="block break-words text-2xl font-black leading-tight text-[#0e0d0b] sm:text-4xl">{top[0].label}</span>
+          <span className="mt-2 block text-4xl font-black leading-none tracking-normal text-[#0e0d0b] sm:text-6xl">{top[0].percentage}%</span>
+        </button>
+        <div className="space-y-2 sm:space-y-3">
+          {top.slice(1).map((item) => <button key={item.label} type="button" onClick={onItemClick ? () => onItemClick(item.label) : undefined} className="flex w-full items-center justify-between gap-1 text-left focus-visible:outline-2 focus-visible:outline-[#c45b2a] sm:gap-3">
+            <span className="min-w-0 break-words text-[11px] font-bold leading-tight text-[#0e0d0b]/85 sm:text-lg">{item.label}</span>
+            <span className="shrink-0 text-base font-bold leading-none tracking-normal text-[#0e0d0b] sm:text-3xl">{item.percentage}%</span>
+          </button>)}
         </div>
-        <div className="mt-8 flex items-center justify-between border-t border-white/10 pt-4">
-          <span className="text-sm text-white/45">Open the complete diary</span>
-          <ChevronRight className="h-5 w-5 text-[#ff7a1a] transition group-hover:translate-x-1" />
-        </div>
       </div>
-    </div>
-  );
-
-  return onStatClick ? (
-    <button type="button" onClick={() => onStatClick("all")} className="h-full w-full">{body}</button>
-  ) : body;
+    </div> : <p className="mt-8 text-sm text-[#0e0d0b]/55">Genres will appear as you log titles.</p>}
+  </div>;
 }
 
-function FunMetric({ icon, label, value, caption, onClick, featured = false, tilt = "" }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string | number;
-  caption: string;
-  onClick?: () => void;
-  featured?: boolean;
-  tilt?: string;
-}) {
-  const content = (
-    <div className={`group h-full min-h-[150px] rounded-[1.65rem] border p-5 text-left transition duration-300 hover:-translate-y-1 hover:rotate-0 ${tilt} ${featured ? "border-[#ff7a1a] bg-[#ff7a1a] text-black shadow-[0_18px_42px_rgba(255,122,26,0.18)]" : "border-white/10 bg-[#151515] text-[#f5f0de] hover:border-[#ff7a1a]/45"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${featured ? "text-black/55" : "text-white/35"}`}>{label}</p>
-        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${featured ? "bg-black/12" : "bg-[#ff7a1a]/12 text-[#ff8d3b]"}`}>{icon}</span>
-      </div>
-      <p className="mt-4 text-3xl font-black tracking-[-0.04em] sm:text-4xl">{value}</p>
-      <p className={`mt-2 text-xs ${featured ? "text-black/60" : "text-white/40"}`}>{caption}</p>
-    </div>
-  );
+function SmallMetric({ label, value, tone }: { label: string; value: string | number; tone: StatsTone }) {
+  const isLight = tone === "orange" || tone === "cream";
+  return <div className={`${CARD} ${SURFACE[tone]} flex min-h-32 flex-col items-center justify-center p-3 text-center sm:p-5`}>
+    <p className={isLight ? "text-[10px] font-black uppercase tracking-[0.2em] text-[#0e0d0b]/60 sm:text-xs" : LABEL}>{label}</p>
+    <p className={`mt-3 text-2xl font-black leading-none tracking-normal sm:text-4xl ${isLight ? "text-[#0e0d0b]" : "text-[#d46b35]"}`}>{value}</p>
+  </div>;
+}
 
-  return onClick ? <button type="button" onClick={onClick} className="h-full w-full">{content}</button> : content;
+function VerdictCard({ stats, onStatClick }: { stats: DetailedUserStats; onStatClick?: StatsInsightsProps["onStatClick"] }) {
+  const overallVerdict = getReactionAverageLabel(stats);
+  const verdicts = [
+    { label: "Bad", count: stats.badCount, key: "bad" as const },
+    { label: "Average", count: stats.averageCount, key: "average" as const },
+    { label: "Good", count: stats.goodCount, key: "good" as const },
+    { label: "Masterpiece", count: stats.masterpieceCount, key: "masterpiece" as const },
+  ];
+  return <div className={`${CARD} ${SURFACE.cream} col-span-2 flex min-h-44 flex-col p-4 text-[#0e0d0b] sm:p-6`}>
+    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0e0d0b]/55 sm:text-xs">Your verdict</p>
+    <div className="mt-5 grid flex-1 grid-cols-1 gap-5 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] sm:items-center sm:gap-8">
+      <h3 className="text-4xl font-black leading-none text-[#0e0d0b] sm:text-6xl">{overallVerdict}</h3>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-6 sm:gap-y-5">
+        {verdicts.map((item) => <button key={item.key} type="button" onClick={onStatClick ? () => onStatClick(item.key) : undefined} className="min-w-0 text-left focus-visible:outline-2 focus-visible:outline-[#c45b2a]">
+          <span className={`block text-2xl font-black leading-none tabular-nums sm:text-3xl ${item.label === overallVerdict ? "text-[#0e0d0b]" : "text-[#0e0d0b]/80"}`}>{item.count}</span>
+          <span className="mt-1 block break-words text-[10px] font-bold uppercase leading-tight tracking-wide text-[#0e0d0b]/55 sm:text-xs">{item.label}</span>
+        </button>)}
+      </div>
+    </div>
+  </div>;
 }
 
 function MonthCard({ stats }: { stats: DetailedUserStats }) {
-  return (
-    <div className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#0e0e0e] p-5 sm:p-6">
-      <div className="absolute left-8 top-0 h-2 w-16 rounded-b-full bg-[#ff7a1a]" />
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/35">This month</p>
-          <p className="mt-1 text-base font-bold text-[#f5f0de]">Your current watch mix</p>
-        </div>
-        <Flame className="h-5 w-5 text-[#ff7a1a]" />
-      </div>
-      <div className="mt-5 grid grid-cols-2 divide-x divide-white/10 rounded-2xl bg-white/[0.045] py-4">
-        <div className="px-4"><p className="text-3xl font-black text-[#f5f0de]">{stats.movieCountThisMonth}</p><p className="mt-1 text-xs text-white/40">Movies</p></div>
-        <div className="px-4"><p className="text-3xl font-black text-[#f5f0de]">{stats.tvCountThisMonth}</p><p className="mt-1 text-xs text-white/40">TV shows</p></div>
-      </div>
+  return <div className={`${CARD} ${SURFACE.charcoal} flex min-h-44 flex-col items-center justify-center p-3 text-center sm:p-5`}>
+    <h3 className={LABEL}>This month</h3>
+    <div className="mt-5 grid w-full grid-cols-2 gap-2">
+      <div><p className="text-3xl font-black leading-none text-[#d46b35] sm:text-4xl">{stats.movieCountThisMonth}</p><p className="mt-2 text-xs font-bold text-[#f5f0de]/50">Movies</p></div>
+      <div><p className="text-3xl font-black leading-none text-[#d46b35] sm:text-4xl">{stats.tvCountThisMonth}</p><p className="mt-2 text-xs font-bold text-[#f5f0de]/50">TV shows</p></div>
     </div>
-  );
+  </div>;
 }
 
-function VerdictBoard({ stats, onStatClick }: { stats: DetailedUserStats; onStatClick?: StatClick }) {
-  const verdicts: Array<{ label: string; value: number; key: "bad" | "average" | "good" | "masterpiece" }> = [
-    { label: "Bad", value: stats.badCount, key: "bad" },
-    { label: "Average", value: stats.averageCount, key: "average" },
-    { label: "Good", value: stats.goodCount, key: "good" },
-    { label: "Masterpiece", value: stats.masterpieceCount, key: "masterpiece" },
-  ];
+function TheatreRunRate({ stats }: { stats: DetailedUserStats }) {
+  const percentage = stats.movieWatchCount > 0
+    ? Math.round((stats.theatreWatchCount / stats.movieWatchCount) * 100)
+    : null;
 
-  return (
-    <div className="rounded-[2rem] border border-white/10 bg-[#101010] p-5 sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div><p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/35">Your verdict</p><p className="mt-2 text-2xl font-black tracking-tight text-[#f5f0de]">{getReactionAverageLabel(stats)}</p></div>
-        <span className="flex h-11 w-11 -rotate-6 items-center justify-center rounded-2xl border border-[#ff7a1a]/25 bg-[#ff7a1a]/10 text-[#ff7a1a]"><Star className="h-5 w-5" /></span>
+  return <div className={`${CARD} ${SURFACE.carbon} col-span-3 px-4 py-4 sm:px-6 sm:py-5`}>
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <h3 className={LABEL}>Theatre run rate</h3>
+        <p className="mt-1 text-xs text-[#f5f0de]/45 sm:text-sm">{stats.theatreWatchCount} of {stats.movieWatchCount} movie watches in theatre</p>
       </div>
-      <div className="mt-6 grid grid-cols-2 gap-2">
-        {verdicts.map((item) => (
-          <button key={item.key} type="button" onClick={onStatClick ? () => onStatClick(item.key) : undefined} className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${item.key === "masterpiece" ? "border-[#ff7a1a]/45 bg-[#ff7a1a]/12" : "border-white/[0.07] bg-white/[0.035] hover:border-white/15"}`}>
-            <p className="text-2xl font-black text-[#f5f0de]">{item.value}</p>
-            <p className={`mt-1 text-[10px] font-bold uppercase tracking-[0.16em] ${item.key === "masterpiece" ? "text-[#ff8d3b]" : "text-white/35"}`}>{item.label}</p>
-          </button>
-        ))}
-      </div>
-      <div className="mt-6 border-t border-white/10 pt-5">
-        <ReactionDistributionBar badCount={stats.badCount} averageCount={stats.averageCount} goodCount={stats.goodCount} masterpieceCount={stats.masterpieceCount} showLabels={false} theme="dark" onSegmentClick={onStatClick} />
-      </div>
+      <span className="text-3xl font-black tabular-nums text-[#f5f0de] sm:text-4xl">{percentage === null ? "—" : `${percentage}%`}</span>
     </div>
-  );
+    <div className="mt-4 h-1 overflow-hidden rounded-full bg-[#f5f0de]/10" aria-hidden="true">
+      <div className="h-full rounded-full bg-[#c45b2a]" style={{ width: `${percentage ?? 0}%` }} />
+    </div>
+  </div>;
 }
 
-function TasteCard({ title, icon, items, onItemClick, showPortrait = false }: {
-  title: string;
-  icon: React.ReactNode;
-  items: StatDistributionItem[];
-  onItemClick?: (value: string) => void;
-  showPortrait?: boolean;
-}) {
-  const rows = items.slice(0, 5);
-  return (
-    <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#111111] p-5 transition hover:border-[#ff7a1a]/25 sm:p-6">
-      <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
-        <h4 className="text-base font-black text-[#f5f0de]">{title}</h4>
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#ff7a1a]/12 text-[#ff8d3b]">{icon}</span>
-      </div>
-      <div className="mt-2">
-        {rows.length ? rows.map((item, index) => {
-          const row = (
-            <>
-              <span className="flex min-w-0 items-center gap-3">
-                <span className="w-4 shrink-0 text-[10px] font-black text-white/25">0{index + 1}</span>
-                {showPortrait ? (item.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-full border border-white/10 object-cover grayscale transition group-hover:grayscale-0" />
-                ) : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-xs font-black text-white/45">{item.label.charAt(0)}</span>) : null}
-                <span className="truncate text-sm font-semibold text-white/70 transition group-hover:text-[#f5f0de]">{item.label}</span>
-              </span>
-              <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-xs font-bold text-[#ff9b52]">{item.count}</span>
-            </>
-          );
-          return onItemClick ? <button key={item.label} type="button" onClick={() => onItemClick(item.label)} className="group flex w-full items-center justify-between gap-3 border-b border-white/[0.06] py-3 text-left last:border-0">{row}</button> : <div key={item.label} className="group flex items-center justify-between gap-3 border-b border-white/[0.06] py-3 last:border-0">{row}</div>;
-        }) : <p className="py-8 text-center text-sm text-white/35">Log a few titles to unlock this.</p>}
-      </div>
-    </div>
-  );
+function PeopleCard({ title, items, tone, onItemClick, onViewMore }: { title: string; items: StatDistributionItem[]; tone: StatsTone; onItemClick?: (value: string) => void; onViewMore: () => void }) {
+  const top = items.slice(0, 3);
+  const isCream = tone === "cream";
+  return <div className={`${CARD} ${SURFACE[tone]} flex min-h-48 flex-col p-2 text-center sm:min-h-72 sm:p-6 lg:min-h-80`}>
+    <h3 className={`text-[10px] font-black uppercase tracking-[0.22em] ${isCream ? "text-[#c45b2a]" : "text-[#d46b35]"}`}>{title}</h3>
+    {top.length ? <div className="mt-4 grid grid-cols-3 sm:mt-6">
+      {top.map((item) => <button key={item.label} type="button" onClick={onItemClick ? () => onItemClick(item.label) : undefined} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 focus-visible:outline-2 focus-visible:outline-[#c45b2a] sm:gap-2 sm:px-2">
+        <span className="relative flex aspect-[2/3] w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#f5f0de]/10 bg-[#25211d] text-sm font-black text-[#d46b35] sm:w-16 sm:text-lg lg:w-20">
+          {item.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+          ) : item.label.slice(0, 1).toUpperCase()}
+        </span>
+        <span className={`flex min-h-8 min-w-0 items-center justify-center text-[9px] font-bold leading-tight sm:min-h-10 sm:text-sm sm:leading-snug ${isCream ? "text-[#0e0d0b]" : "text-[#f5f0de]"}`}><span className="line-clamp-2 break-words">{item.label}</span></span>
+        <span className={`text-[11px] font-semibold tabular-nums ${isCream ? "text-[#c45b2a]" : "text-[#d46b35]"}`}>{item.count}</span>
+      </button>)}
+    </div> : <p className={`mt-5 text-sm ${isCream ? "text-[#0e0d0b]/50" : "text-[#f5f0de]/40"}`}>People will appear as you log titles.</p>}
+    {items.length > 0 && <button type="button" onClick={onViewMore} className={`mt-auto self-center pt-4 text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-[#c45b2a] ${isCream ? "text-[#c45b2a]" : "text-[#d46b35]"}`}>View more</button>}
+  </div>;
 }
 
-export default function StatsInsights({ stats, onStatClick, onTasteClick }: StatsInsightsProps) {
-  return (
-    <div className="mb-10 px-1 py-4 sm:px-4 sm:py-6">
-      <div className="mb-8 text-center">
-        <h2 className="text-3xl font-black tracking-[-0.04em] text-[#f5f0de] sm:text-4xl">The story behind your screen time.</h2>
-        <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-white/40">A playful snapshot of what you watch, love, and return to.</p>
+function PeopleRankingModal({ title, items, onClose, onItemClick }: { title: string; items: StatDistributionItem[]; onClose: () => void; onItemClick?: (value: string) => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm sm:items-center" role="presentation">
+    <button type="button" className="absolute inset-0" onClick={onClose} aria-label="Close ranking" />
+    <div role="dialog" aria-modal="true" aria-label={`${title} ranking`} className="relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#f5f0de]/15 bg-[#1c1a17] text-[#f5f0de] shadow-2xl">
+      <div className="flex items-center justify-between border-b border-[#f5f0de]/10 p-4 sm:p-5">
+        <div><h3 className="text-lg font-bold">{title}</h3><p className="text-xs text-[#f5f0de]/45">Full ranking · {items.length} people</p></div>
+        <button type="button" onClick={onClose} aria-label="Close ranking" className="rounded-full p-2 text-[#f5f0de]/60 hover:bg-[#f5f0de]/10 hover:text-white"><X className="h-5 w-5" /></button>
       </div>
-
-      <section>
-        <SectionTitle eyebrow="Overview" title="At a glance" detail="Your lifetime activity and this month’s momentum." />
-        <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <HeroMetric stats={stats} onStatClick={onStatClick} />
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <FunMetric icon={<Clock3 className="h-4 w-4" />} label="Watch time" value={formatDuration(stats.estimatedWatchTimeMinutes)} caption="Estimated runtime" tilt="sm:-rotate-1" />
-            <FunMetric icon={<Repeat2 className="h-4 w-4" />} label="Rewatches" value={stats.rewatchCount} caption="Worth another go" tilt="sm:rotate-1" />
-            <FunMetric icon={<Film className="h-4 w-4" />} label="Movies" value={stats.movieCount} caption="Feature films" onClick={onStatClick ? () => onStatClick("movie") : undefined} />
-            <FunMetric icon={<Tv className="h-4 w-4" />} label="TV shows" value={stats.tvCount} caption="Series tracked" featured onClick={onStatClick ? () => onStatClick("tv") : undefined} />
-          </div>
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-          <MonthCard stats={stats} />
-          <VerdictBoard stats={stats} onStatClick={onStatClick} />
-        </div>
-      </section>
-
-      <section className="mt-10 border-t border-white/10 pt-8">
-        <SectionTitle eyebrow="Taste map" title="Your recurring favorites" detail="The people, genres, and languages shaping your diary." />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <TasteCard title="Genres" icon={<Flame className="h-4 w-4" />} items={stats.genreDistribution} onItemClick={onTasteClick ? (value) => onTasteClick("genre", value) : undefined} />
-          <TasteCard title="Actors" icon={<UserRound className="h-4 w-4" />} items={stats.topActors} showPortrait onItemClick={onTasteClick ? (value) => onTasteClick("actor", value) : undefined} />
-          <TasteCard title="Directors" icon={<Video className="h-4 w-4" />} items={stats.topDirectors} showPortrait onItemClick={onTasteClick ? (value) => onTasteClick("director", value) : undefined} />
-          <TasteCard title="Languages" icon={<Languages className="h-4 w-4" />} items={stats.languageDistribution} onItemClick={onTasteClick ? (value) => onTasteClick("language", value) : undefined} />
-        </div>
-      </section>
+      <div className="overflow-y-auto p-3 sm:p-4">
+        {items.map((item, index) => <button key={item.label} type="button" onClick={onItemClick ? () => onItemClick(item.label) : undefined} className="flex w-full items-center gap-3 border-b border-[#f5f0de]/10 px-2 py-3 text-left last:border-0 hover:bg-[#f5f0de]/5 focus-visible:outline-2 focus-visible:outline-[#c45b2a]">
+          <span className="w-7 shrink-0 text-sm font-bold text-[#d46b35]">{index + 1}</span>
+          <span className="flex h-12 w-9 shrink-0 items-center justify-center overflow-hidden rounded border border-[#f5f0de]/10 bg-[#25211d] text-sm font-bold text-[#d46b35]">
+            {item.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+            ) : item.label.slice(0, 1).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.label}</span>
+          <span className="shrink-0 text-sm text-[#f5f0de]/50">{item.count} {item.count === 1 ? "title" : "titles"}</span>
+        </button>)}
+      </div>
     </div>
-  );
+  </div>;
+}
+
+function LanguagesCard({ items, onItemClick }: { items: StatDistributionItem[]; onItemClick?: (value: string) => void }) {
+  return <div className={`${CARD} ${SURFACE.orange} p-4 sm:p-7`}>
+    <h3 className="text-lg font-black text-[#0e0d0b] sm:text-2xl">Top languages</h3>
+    {items.length ? <div className="mt-5 flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-5 sm:gap-5 sm:overflow-visible sm:pb-0">
+      {items.slice(0, 5).map((item) => <button key={item.label} type="button" onClick={onItemClick ? () => onItemClick(item.label) : undefined} className="w-28 shrink-0 text-left focus-visible:outline-2 focus-visible:outline-[#c45b2a] sm:w-auto sm:min-w-0">
+        <span className="block break-words text-base font-black leading-tight text-[#0e0d0b] sm:text-lg">{item.label}</span>
+        <span className="mt-1 block text-xl font-bold text-[#c45b2a] sm:text-2xl">{item.count}</span>
+      </button>)}
+    </div> : <p className="mt-5 text-sm text-[#0e0d0b]/50">Languages will appear as you log titles.</p>}
+  </div>;
+}
+
+export default function StatsInsights({ stats, onStatClick, onTasteClick, filterAction }: StatsInsightsProps) {
+  const [openRanking, setOpenRanking] = useState<"director" | "actor" | null>(null);
+  const watchTime = stats.runtimeCoverage
+    ? `${formatWatchDuration(stats.estimatedWatchTimeMinutes)}${stats.runtimeCoverage < stats.watchedCount ? "+" : ""}`
+    : "—";
+  return <section className={`${styles.storyFont} mb-10 rounded-2xl bg-[#0e0d0b] px-3 py-4 sm:px-5 sm:py-6`} aria-labelledby="profile-stats-heading">
+    <div className="mb-5 flex items-center justify-between gap-3"><h2 id="profile-stats-heading" className="text-xl font-black tracking-[-0.04em] text-[#f5f0de] sm:text-2xl">Your screen story</h2>{filterAction}</div>
+    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <MetricCard label="Total logs" value={stats.totalLogged} tone="carbon" onClick={onStatClick ? () => onStatClick("all") : undefined} />
+      <MetricCard label="Movies" value={stats.movieCount} tone="charcoal" onClick={onStatClick ? () => onStatClick("movie") : undefined} />
+      <MetricCard label="TV shows" value={stats.tvCount} tone="orange" onClick={onStatClick ? () => onStatClick("tv") : undefined} />
+      <RatingDistribution stats={stats} onStatClick={onStatClick} />
+      <TopGenres items={stats.genreDistribution} onItemClick={onTasteClick ? (value) => onTasteClick("genre", value) : undefined} />
+      <div className="grid grid-rows-2 gap-2 sm:gap-4">
+        <SmallMetric label="Total watch time" value={watchTime} tone="charcoal" />
+        <SmallMetric label="Rewatches" value={stats.rewatchCount} tone="orange" />
+      </div>
+      <VerdictCard stats={stats} onStatClick={onStatClick} />
+      <MonthCard stats={stats} />
+      <TheatreRunRate stats={stats} />
+      <div className="col-span-3 grid grid-cols-2 gap-2 sm:gap-4">
+        <PeopleCard title="Top directors" items={stats.topDirectors} tone="charcoal" onItemClick={onTasteClick ? (value) => onTasteClick("director", value) : undefined} onViewMore={() => setOpenRanking("director")} />
+        <PeopleCard title="Top actors" items={stats.topActors} tone="cream" onItemClick={onTasteClick ? (value) => onTasteClick("actor", value) : undefined} onViewMore={() => setOpenRanking("actor")} />
+      </div>
+      <div className="col-span-3"><LanguagesCard items={stats.languageDistribution} onItemClick={onTasteClick ? (value) => onTasteClick("language", value) : undefined} /></div>
+    </div>
+    {openRanking && <PeopleRankingModal title={openRanking === "actor" ? "Top actors" : "Top directors"} items={openRanking === "actor" ? stats.topActors : stats.topDirectors} onClose={() => setOpenRanking(null)} onItemClick={onTasteClick ? (value) => onTasteClick(openRanking, value) : undefined} />}
+  </section>;
 }

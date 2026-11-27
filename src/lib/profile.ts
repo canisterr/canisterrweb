@@ -9,6 +9,10 @@ import { equalTo, get, limitToFirst, orderByChild, query, ref, set } from "fireb
 import { User, MovieLog, Content, Follow } from "@/types";
 import { getMovieDetails } from "./tmdb";
 import { getShowDetails } from "./tvmaze";
+import { getLogsForUser } from "./logs";
+import { readBrowserCacheEntry } from "./browser-cache";
+import { getAuthorizedListData } from "./authorized-list-data";
+import { scheduleHonoursRecalculation } from "@/lib/honours-client";
 
 export interface StatDistributionItem {
   label: string;
@@ -33,7 +37,10 @@ export interface DetailedUserStats {
   movieCountThisMonth: number;
   tvCountThisMonth: number;
   estimatedWatchTimeMinutes: number;
+  runtimeCoverage?: number;
   rewatchCount: number;
+  theatreWatchCount: number;
+  movieWatchCount: number;
   masterpieceCount: number;
   averageCount: number;
   goodCount: number;
@@ -44,7 +51,6 @@ export interface DetailedUserStats {
   badPercentage: number;
   averageRating: number;
   mostCommonMood?: string;
-  totalFriends: number;
   genreDistribution: StatDistributionItem[];
   topActors: StatDistributionItem[];
   topDirectors: StatDistributionItem[];
@@ -71,26 +77,6 @@ export interface DetailedUserStats {
 export type FollowRecord = Follow & {
   createdAt?: string;
 };
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const currentIndex = nextIndex;
-      nextIndex += 1;
-      results[currentIndex] = await mapper(items[currentIndex]);
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
-  return results;
-}
 
 function normalizeFollowRecord(id: string, raw: Record<string, any>): FollowRecord {
   return {
@@ -285,20 +271,6 @@ export function getReactionAverageLabel({
   return "Masterpiece";
 }
 
-async function getContentForStatLog(log: MovieLog): Promise<Content | null> {
-  try {
-    if (log.content_type === "tv") {
-      const show = await getShowDetails(log.content_id);
-      return show as unknown as Content;
-    }
-
-    const movie = await getMovieDetails(log.content_id);
-    return movie as unknown as Content;
-  } catch {
-    return null;
-  }
-}
-
 async function getMovieLogsForUser(userId: string): Promise<MovieLog[]> {
   const snapshot = await get(ref(db, "movie_logs"));
 
@@ -473,9 +445,30 @@ export async function getUserStats(userId: string): Promise<{
   }
 }
 
-export async function getDetailedUserStats(userId: string): Promise<DetailedUserStats> {
+type DetailedStatsSource = { logs: MovieLog[]; sharedDetails: Record<string, Content> | null };
+const detailedStatsSourceCache = new Map<string, { expiresAt: number; promise: Promise<DetailedStatsSource> }>();
+
+function getDetailedStatsSource(userId: string, fresh = false): Promise<DetailedStatsSource> {
+  const cached = detailedStatsSourceCache.get(userId);
+  if (!fresh && cached && cached.expiresAt > Date.now()) return cached.promise;
+
+  const promise = Promise.all([
+    getLogsForUser(userId),
+    get(ref(db, `watched_movies_meta/${userId}/story_details`))
+      .then((snapshot) => (snapshot.val() || {}) as Record<string, Content>)
+      .catch(() => null),
+  ]).then(([logs, sharedDetails]) => ({ logs, sharedDetails }));
+  detailedStatsSourceCache.set(userId, { expiresAt: Date.now() + 5 * 60 * 1000, promise });
+  promise.catch(() => detailedStatsSourceCache.delete(userId));
+  return promise;
+}
+
+export async function getDetailedUserStats(
+  userId: string,
+  options: { startDate?: string; endDate?: string; fresh?: boolean } = {}
+): Promise<DetailedUserStats> {
   try {
-    const userLogs = await getMovieLogsForUser(userId);
+    const { logs: userLogs, sharedDetails } = await getDetailedStatsSource(userId, options.fresh);
 
     let totalLogged = 0;
     let watchedCount = 0;
@@ -485,7 +478,10 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
     let tvCountThisMonth = 0;
     let moviesWatchedThisMonth = 0;
     let estimatedWatchTimeMinutes = 0;
+    let runtimeCoverage = 0;
     let rewatchCount = 0;
+    let theatreWatchCount = 0;
+    let movieWatchCount = 0;
     let masterpieceCount = 0;
     let averageCount = 0;
     let goodCount = 0;
@@ -504,10 +500,15 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
     const decadeCounts: Record<string, number> = {};
     const releaseYearCounts: Record<string, number> = {};
 
-    totalLogged = userLogs.length;
-
-    const watchedLogs = userLogs.filter((log) => !log.watch_later && Boolean(log.watched_date));
+    const watchedLogs = userLogs.filter((log) =>
+      !log.watch_later && Boolean(log.watched_date) &&
+      (!options.startDate || log.watched_date >= options.startDate) &&
+      (!options.endDate || log.watched_date <= options.endDate)
+    );
     watchedCount = watchedLogs.length;
+    totalLogged = watchedCount;
+    const uniqueMovieIds = new Set<number>();
+    const uniqueShowIds = new Set<number>();
 
     const now = new Date();
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -527,9 +528,18 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
     let highestRatedScore: number | null = null;
     let lowestRatedScore: number | null = null;
 
-    const contentEntries = await mapWithConcurrency(watchedLogs, 4, async (log) => {
-      const content = await getContentForStatLog(log);
-      return { log, content };
+    const contentByKey = new Map<string, Content | null>();
+    const contentEntries = watchedLogs.map((log) => {
+      const key = `${log.content_type}-${log.content_id}`;
+      if (!contentByKey.has(key)) {
+        const cacheKey = log.content_type === "tv"
+          ? `tv:show-details:v1:${log.content_id}`
+          : `tmdb:movie-details:v1:${log.content_id}`;
+        contentByKey.set(key, sharedDetails
+          ? sharedDetails[`${log.content_type}_${log.content_id}`] || null
+          : readBrowserCacheEntry<Content>(cacheKey)?.value ?? null);
+      }
+      return { log, content: contentByKey.get(key) ?? null };
     });
 
     for (const { log, content } of contentEntries) {
@@ -537,12 +547,16 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
       duplicateCounts.set(key, (duplicateCounts.get(key) || 0) + 1);
 
       if (log.content_type === "movie") {
-        movieCount += 1;
+        movieWatchCount += 1;
+        if (/^(theatre|theater|cinema)$/i.test(log.context_log?.location?.trim() || "")) {
+          theatreWatchCount += 1;
+        }
+        uniqueMovieIds.add(log.content_id);
         if (String(log.watched_date || "").slice(0, 7) === currentMonthKey) {
           movieCountThisMonth += 1;
         }
       } else {
-        tvCount += 1;
+        uniqueShowIds.add(log.content_id);
         if (String(log.watched_date || "").slice(0, 7) === currentMonthKey) {
           tvCountThisMonth += 1;
         }
@@ -571,6 +585,7 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
         const runtime = Number(content.runtime);
         if (Number.isFinite(runtime) && runtime > 0) {
           estimatedWatchTimeMinutes += runtime;
+          runtimeCoverage += 1;
         }
 
         (content.genres || []).forEach((genre) => {
@@ -580,10 +595,6 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
         (content.actors || []).forEach((actor) => {
           actorCounts[actor] = (actorCounts[actor] || 0) + 1;
         });
-
-        if (content.director) {
-          directorCounts[content.director] = (directorCounts[content.director] || 0) + 1;
-        }
 
         const castDetails = ((content as any).cast_details || []) as Array<{ name?: string | null; profile_url?: string | null }>;
         castDetails.forEach((person) => {
@@ -607,9 +618,18 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
             directorImageUrls[crewName] = person.profile_url;
           }
         });
+        const directors = new Set([
+          content.director?.trim(),
+          ...crewDetails.filter((person) => person.job === "Director").map((person) => person.name?.trim()),
+        ].filter((name): name is string => Boolean(name)));
+        directors.forEach((director) => {
+          directorCounts[director] = (directorCounts[director] || 0) + 1;
+        });
 
         const languageLabel = formatLanguageName(content.language || null);
-        languageCounts[languageLabel] = (languageCounts[languageLabel] || 0) + 1;
+        if (languageLabel !== "Unknown") {
+          languageCounts[languageLabel] = (languageCounts[languageLabel] || 0) + 1;
+        }
 
         if (log.content_type === "movie") {
           const releaseYear = getReleaseYear(content.release_date);
@@ -685,17 +705,14 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
     }
 
     rewatchCount = Array.from(duplicateCounts.values()).reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+    movieCount = uniqueMovieIds.size;
+    tvCount = uniqueShowIds.size;
 
     const mostCommonMood = Object.entries(moodCounts).sort(([, a], [, b]) => b - a)[0]?.[0];
     const masterpiecePercentage = watchedCount > 0 ? (masterpieceCount / watchedCount) * 100 : 0;
     const averagePercentage = watchedCount > 0 ? (averageCount / watchedCount) * 100 : 0;
     const goodPercentage = watchedCount > 0 ? (goodCount / watchedCount) * 100 : 0;
     const badPercentage = watchedCount > 0 ? (badCount / watchedCount) * 100 : 0;
-
-    const [followersCount, followingCount] = await Promise.all([
-      getAcceptedFollowCountByRelation("following_id", userId),
-      getAcceptedFollowCountByRelation("follower_id", userId),
-    ]);
 
     return {
       totalLogged,
@@ -706,7 +723,10 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
       movieCountThisMonth,
       tvCountThisMonth,
       estimatedWatchTimeMinutes,
+      runtimeCoverage,
       rewatchCount,
+      theatreWatchCount,
+      movieWatchCount,
       masterpieceCount,
       averageCount,
       goodCount,
@@ -717,10 +737,9 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
       badPercentage,
       averageRating: ratingCount > 0 ? ratingTotal / ratingCount : 0,
       mostCommonMood,
-      totalFriends: followersCount + followingCount,
       genreDistribution: createDistribution(genreCounts),
-      topActors: createDistribution(actorCounts, 5, actorImageUrls),
-      topDirectors: createDistribution(directorCounts, 5, directorImageUrls),
+      topActors: createDistribution(actorCounts, Number.MAX_SAFE_INTEGER, actorImageUrls),
+      topDirectors: createDistribution(directorCounts, Number.MAX_SAFE_INTEGER, directorImageUrls),
       languageDistribution: createDistribution(languageCounts),
       passportCountryDistribution: createDistribution(countryCounts, 999),
       passportLanguageDistribution: createDistribution(movieLanguageCounts, 999),
@@ -751,7 +770,10 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
       movieCountThisMonth: 0,
       tvCountThisMonth: 0,
       estimatedWatchTimeMinutes: 0,
+      runtimeCoverage: 0,
       rewatchCount: 0,
+      theatreWatchCount: 0,
+      movieWatchCount: 0,
       masterpieceCount: 0,
       averageCount: 0,
       goodCount: 0,
@@ -761,7 +783,6 @@ export async function getDetailedUserStats(userId: string): Promise<DetailedUser
       goodPercentage: 0,
       badPercentage: 0,
       averageRating: 0,
-      totalFriends: 0,
       genreDistribution: [],
       topActors: [],
       topDirectors: [],
@@ -866,6 +887,7 @@ export async function updateUserProfile(
     }
 
     await set(userRef, updateObj);
+    scheduleHonoursRecalculation(userId);
 
     if (typeof updates.username === "string" && updates.username.trim()) {
       const previousUsername = normalizeUsernameKey(currentUser.username || "");
@@ -1222,12 +1244,7 @@ export async function calculateAchievements(userId: string): Promise<string[]> {
  */
 export async function getPublicListsForUser(userId: string): Promise<any[]> {
   try {
-    const listsRef = ref(db, "lists");
-    const listsSnapshot = await get(listsRef);
-
-    if (!listsSnapshot.exists()) return [];
-
-    const allLists = listsSnapshot.val();
+    const { lists: allLists } = await getAuthorizedListData();
     const publicLists = Object.values(allLists)
       .filter((list: any) => list.owner_id === userId && list.privacy === "public")
       .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());

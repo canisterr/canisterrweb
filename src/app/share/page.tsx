@@ -1,9 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
-import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 import SearchBar from "@/components/SearchBar";
 import ShareModal from "@/components/ShareModal";
 import TopActionBanner from "@/components/TopActionBanner";
@@ -12,11 +11,10 @@ import { Content, ShareWithDetails, TMDBMovie, User } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
 import { onAuthStateChanged } from "firebase/auth";
-import { equalTo, get, onValue, orderByChild, query, ref, set } from "firebase/database";
+import { equalTo, get, onValue, orderByChild, query, ref, set, update } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import { getMovieDetails, searchMovies } from "@/lib/tmdb";
 import { getShowDetails, searchShows, ShowDetails } from "@/lib/tvmaze";
-import { hasUserWatchedContent } from "@/lib/watched-movies";
 import { isUsernameBlocked, mergeSettings } from "@/lib/settings";
 import { createShareReceivedNotification } from "@/lib/notifications";
 import { getUsersByIds } from "@/lib/users";
@@ -129,6 +127,27 @@ function createShowContent(show: ShowDetails, createdAt: string): Content {
   };
 }
 
+function contentFromSearchResult(item: SearchResultItem): Content | null {
+  if (!item.originalId || !item.type) return null;
+  const base = {
+    id: item.originalId,
+    title: item.title,
+    poster_url: item.image?.replace("/w92/", "/w500/") || null,
+    genres: [],
+    release_date: item.year && item.year !== "N/A" ? `${item.year}-01-01` : null,
+    overview: null,
+    runtime: null,
+    rating: null,
+    created_at: new Date().toISOString(),
+  };
+  if (item.type === "tv") return { ...base, name: item.title, status: null, type: "tv" };
+  return { ...base, platforms: [], director: null, type: "movie" };
+}
+
+function contentKey(content: Content): string {
+  return `${content.type === "tv" ? "tv" : "movie"}:${content.id}`;
+}
+
 function SharePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -149,7 +168,7 @@ function SharePageContent() {
   );
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
+  const [selectedContents, setSelectedContents] = useState<Content[]>([]);
   const [selectedRecipients, setSelectedRecipients] = useState<User[]>([]);
   const [followers, setFollowers] = useState<User[]>([]);
   const [followersSearchQuery, setFollowersSearchQuery] = useState("");
@@ -158,10 +177,13 @@ function SharePageContent() {
   const [yearFilter, setYearFilter] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [sentShares, setSentShares] = useState<ShareWithDetails[]>([]);
+  const [receivedShares, setReceivedShares] = useState<ShareWithDetails[]>([]);
+  const [historyDirection, setHistoryDirection] = useState<"sent" | "received">("sent");
   const [selectedShare, setSelectedShare] = useState<ShareWithDetails | null>(null);
   const [showWatchConflictModal, setShowWatchConflictModal] = useState(false);
   const [pendingShareRecipients, setPendingShareRecipients] = useState<User[]>([]);
-  const [watchConflictRecipients, setWatchConflictRecipients] = useState<User[]>([]);
+  const [watchConflicts, setWatchConflicts] = useState<{ recipient: User; content: Content }[]>([]);
+  const [sending, setSending] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const hasInitializedFromParams = useRef(false);
   const recipientPriority = useMemo(
@@ -172,6 +194,7 @@ function SharePageContent() {
   useEffect(() => {
     let unsubscribeFollowers = () => {};
     let unsubscribeShares = () => {};
+    let unsubscribeReceivedShares = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -219,7 +242,7 @@ function SharePageContent() {
               try {
                 const movie = await getMovieDetails(movieId);
                 if (movie) {
-                  setSelectedContent(createMovieContent(movie, new Date().toISOString()));
+                  setSelectedContents((prev) => [...prev, createMovieContent(movie, new Date().toISOString())!]);
                   setCurrentStep(2);
                 }
               } catch (error) {
@@ -232,7 +255,7 @@ function SharePageContent() {
               try {
                 const show = await getShowDetails(showId);
                 if (show) {
-                  setSelectedContent(createShowContent(show, new Date().toISOString()));
+                  setSelectedContents((prev) => [...prev, createShowContent(show, new Date().toISOString())]);
                   setCurrentStep(2);
                 }
               } catch (error) {
@@ -246,13 +269,13 @@ function SharePageContent() {
                 if (typeParam === "tv") {
                   const show = await getShowDetails(contentId);
                   if (show) {
-                    setSelectedContent(createShowContent(show, new Date().toISOString()));
+                    setSelectedContents((prev) => [...prev, createShowContent(show, new Date().toISOString())]);
                     setCurrentStep(2);
                   }
                 } else {
                   const movie = await getMovieDetails(contentId);
                   if (movie) {
-                    setSelectedContent(createMovieContent(movie, new Date().toISOString()));
+                    setSelectedContents((prev) => [...prev, createMovieContent(movie, new Date().toISOString())!]);
                     setCurrentStep(2);
                   }
                 }
@@ -375,6 +398,54 @@ function SharePageContent() {
             setSentShares([]);
           }
         );
+
+        const receivedSharesRef = query(
+          ref(db, "shares"),
+          orderByChild("receiver_id"),
+          equalTo(currentUser.id)
+        );
+        unsubscribeReceivedShares = onValue(
+          receivedSharesRef,
+          (snapshot) => {
+            if (!snapshot.exists()) {
+              setReceivedShares([]);
+              return;
+            }
+
+            try {
+              const sharesData = snapshot.val() as Record<string, ShareRecord>;
+              const received = Object.entries(sharesData)
+                .map(([id, data]) => ({ id, ...data }))
+                .filter((share) => share.receiver_id === currentUser.id)
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+              void (async () => {
+                const userIds = Array.from(new Set(received.map((share) => share.sender_id)));
+                const usersById = await getUsersByIds(userIds);
+                const receivedWithDetails = received.map((share) => ({
+                  ...share,
+                  movie: share.movie || null,
+                  content: share.content || share.movie || null,
+                  sender: usersById[share.sender_id],
+                }));
+                setReceivedShares(receivedWithDetails as ShareWithDetails[]);
+              })();
+            } catch (error) {
+              console.error("Error fetching received shares:", error);
+              setReceivedShares([]);
+            }
+          },
+          (error) => {
+            if (isPermissionDeniedError(error)) {
+              console.warn("Received shares listener is unavailable with the current Firebase permissions.");
+              setReceivedShares([]);
+              return;
+            }
+
+            console.error("Received shares listener failed:", error);
+            setReceivedShares([]);
+          }
+        );
       } catch (error) {
         console.error("Error fetching user:", error);
         setLoading(false);
@@ -384,6 +455,7 @@ function SharePageContent() {
     return () => {
       unsubscribeFollowers();
       unsubscribeShares();
+      unsubscribeReceivedShares();
       unsubscribeAuth();
     };
   }, [
@@ -476,7 +548,8 @@ function SharePageContent() {
       });
   }, [followers, followersSearchQuery, recipientPriority]);
 
-  const filteredSentShares = sentShares.filter((share) => {
+  const historyShares = historyDirection === "sent" ? sentShares : receivedShares;
+  const filteredHistoryShares = historyShares.filter((share) => {
     const query = sharedSearchQuery.trim().toLowerCase();
     if (!query) {
       return true;
@@ -484,12 +557,12 @@ function SharePageContent() {
 
     const item = share.movie || share.content;
     const title = item?.title?.toLowerCase() || "";
-    const receiverUsername = share.receiver?.username?.toLowerCase() || "";
+    const otherUsername = (historyDirection === "sent" ? share.receiver?.username : share.sender?.username)?.toLowerCase() || "";
     const note = share.note?.toLowerCase() || "";
 
     return (
       title.includes(query) ||
-      receiverUsername.includes(query) ||
+      otherUsername.includes(query) ||
       note.includes(query)
     );
   });
@@ -503,7 +576,7 @@ function SharePageContent() {
     .sort()
     .reverse();
 
-  const handleMovieSearch = async (query: string): Promise<SearchResultItem[]> => {
+  const handleMovieSearch = useCallback(async (query: string): Promise<SearchResultItem[]> => {
     try {
       const [movies, shows] = await Promise.all([
         contentTypeFilter === "all" || contentTypeFilter === "movies"
@@ -545,28 +618,14 @@ function SharePageContent() {
       setSearchResults([]);
       return [];
     }
-  };
+  }, [contentTypeFilter]);
 
-  const handleSelectContent = async (item: SearchResultItem) => {
-    if (!item.originalId || !item.type) {
-      return;
-    }
-
-    try {
-        if (item.type === "tv") {
-          const showDetails = await getShowDetails(item.originalId);
-          if (showDetails) {
-            setSelectedContent(createShowContent(showDetails, new Date().toISOString()));
-          }
-        } else {
-          const movieDetails = await getMovieDetails(item.originalId);
-          if (movieDetails) {
-            setSelectedContent(createMovieContent(movieDetails, new Date().toISOString()));
-          }
-        }
-    } catch (error) {
-      console.error("Error selecting content:", error);
-    }
+  const handleSelectContent = (item: SearchResultItem) => {
+    const content = contentFromSearchResult(item);
+    if (!content) return;
+    setSelectedContents((prev) => prev.some((existing) => contentKey(existing) === contentKey(content))
+      ? prev.filter((existing) => contentKey(existing) !== contentKey(content))
+      : [...prev, content]);
   };
 
   const handleAddRecipient = (recipientId: string) => {
@@ -590,91 +649,106 @@ function SharePageContent() {
 
   const resetShareFlow = () => {
     setCurrentStep(1);
-    setSelectedContent(null);
+    setSelectedContents([]);
     setSelectedRecipients([]);
     setShareNote("");
     setFollowersSearchQuery("");
     setContentTypeFilter("all");
     setYearFilter("");
     setSearchResults([]);
-    setWatchConflictRecipients([]);
+    setWatchConflicts([]);
     setPendingShareRecipients([]);
     setShowWatchConflictModal(false);
   };
 
-  const sendSharesToRecipients = async (recipients: User[]) => {
-    if (!selectedContent || recipients.length === 0 || !user) return;
-
-    const contentType = selectedContent.type === "tv" ? "tv" : "movie";
-    for (const recipient of recipients) {
-      const shareId = `share-${user.id}-${recipient.id}-${contentType}-${selectedContent.id}-${Date.now()}`;
-      const createdAt = new Date().toISOString();
-
-      await set(ref(db, `shares/${shareId}`), {
-        id: shareId,
-        sender_id: user.id,
-        receiver_id: recipient.id,
-        content_id: selectedContent.id,
-        content_type: contentType,
-        movie: selectedContent,
-        content: selectedContent,
-        note: shareNote || null,
-        created_at: createdAt,
-      });
-
-      try {
-        await createShareReceivedNotification(
-          recipient.id,
-          shareId,
-          selectedContent.type === "tv"
-            ? selectedContent.name || selectedContent.title || "a title"
-            : selectedContent.title || "a title",
-          contentType,
-          user,
-          createdAt,
-          shareNote || null
-        );
-      } catch (notificationError) {
-        console.warn("Share notification could not be created:", notificationError);
-      }
-    }
-
-    setBannerMessage(contentType === "tv" ? "Show shared" : "Movie shared");
-  };
-
-  const handleShare = async () => {
-    if (!selectedContent || selectedRecipients.length === 0 || !user) {
+  const sendSharesToRecipients = async (recipients: User[], skipWatched = false) => {
+    if (!selectedContents.length || !recipients.length || !user) return;
+    const conflicts = new Set(watchConflicts.map(({ recipient, content }) => `${recipient.id}:${contentKey(content)}`));
+    const pairs = recipients.flatMap((recipient) => selectedContents
+      .filter((content) => !skipWatched || !conflicts.has(`${recipient.id}:${contentKey(content)}`))
+      .map((content) => ({ recipient, content })));
+    if (!pairs.length) {
+      resetShareFlow();
       return;
     }
 
+    setSending(true);
     try {
-      const contentType = selectedContent.type === "tv" ? "tv" : "movie";
-      const watchResults = await Promise.all(
-        selectedRecipients.map(async (recipient) => {
-          const watched = await hasUserWatchedContent(recipient.id, selectedContent.id, contentType);
-          return { recipient, watched: Boolean(watched) };
-        })
-      );
+      const createdAt = new Date().toISOString();
+      const shares = pairs.map(({ recipient, content }, index) => {
+        const contentType: "movie" | "tv" = content.type === "tv" ? "tv" : "movie";
+        const shareId = `share-${user.id}-${recipient.id}-${contentType}-${content.id}-${Date.now()}-${index}`;
+        return {
+          recipient, content, contentType, shareId,
+          record: {
+            id: shareId,
+            sender_id: user.id,
+            receiver_id: recipient.id,
+            content_id: content.id,
+            content_type: contentType,
+            content,
+            note: shareNote || null,
+            created_at: createdAt,
+          },
+        };
+      });
+      await update(ref(db), Object.fromEntries(shares.map(({ shareId, record }) => [`shares/${shareId}`, record])));
+      const firstShareByRecipient = new Map<string, typeof shares>();
+      for (const share of shares) {
+        const recipientShares = firstShareByRecipient.get(share.recipient.id) || [];
+        recipientShares.push(share);
+        firstShareByRecipient.set(share.recipient.id, recipientShares);
+      }
+      await Promise.all(Array.from(firstShareByRecipient.values()).map(async (recipientShares) => {
+        const { recipient, content, contentType, shareId } = recipientShares[0];
+        try {
+          await createShareReceivedNotification(
+            recipient.id, shareId,
+            recipientShares.length === 1 ? content.title || "a title" : `${content.title} and ${recipientShares.length - 1} more`,
+            contentType, user, createdAt, shareNote || null
+          );
+        } catch (notificationError) {
+          console.warn("Share notification could not be created:", notificationError);
+        }
+      }));
+      setBannerMessage(`${shares.length} title${shares.length === 1 ? "" : "s"} shared`);
+      resetShareFlow();
+    } finally {
+      setSending(false);
+    }
+  };
 
-      const watchedRecipients = watchResults.filter((result) => result.watched).map((result) => result.recipient);
-      if (watchedRecipients.length > 0) {
+  const handleShare = async () => {
+    if (!selectedContents.length || !selectedRecipients.length || !user || sending) return;
+    setSending(true);
+    try {
+      // One database read covers every selected title and recipient.
+      const snapshot = await get(ref(db, "watched_movies"));
+      const watched = (snapshot.val() || {}) as Record<string, { logged?: boolean; list_marked?: boolean }>;
+      const conflicts = selectedRecipients.flatMap((recipient) => selectedContents
+        .filter((content) => {
+          const type = content.type === "tv" ? "tv" : "movie";
+          const record = watched[`${recipient.id}__${type}__${content.id}`];
+          return Boolean(record?.logged || record?.list_marked);
+        })
+        .map((content) => ({ recipient, content })));
+      if (conflicts.length) {
         setPendingShareRecipients(selectedRecipients);
-        setWatchConflictRecipients(watchedRecipients);
+        setWatchConflicts(conflicts);
         setShowWatchConflictModal(true);
         return;
       }
-
       await sendSharesToRecipients(selectedRecipients);
-      resetShareFlow();
     } catch (error) {
       console.error("Error sharing content:", error);
+    } finally {
+      setSending(false);
     }
   };
 
   const handleSendAnyway = async () => {
     try {
       await sendSharesToRecipients(pendingShareRecipients);
-      resetShareFlow();
     } catch (error) {
       console.error("Error sharing content:", error);
     }
@@ -682,14 +756,7 @@ function SharePageContent() {
 
   const handleSendOnlyUnwatched = async () => {
     try {
-      const unwatchedRecipients = pendingShareRecipients.filter(
-        (recipient) => !watchConflictRecipients.some((watched) => watched.id === recipient.id)
-      );
-
-      if (unwatchedRecipients.length > 0) {
-        await sendSharesToRecipients(unwatchedRecipients);
-      }
-      resetShareFlow();
+      await sendSharesToRecipients(pendingShareRecipients, true);
     } catch (error) {
       console.error("Error sharing content:", error);
     }
@@ -699,6 +766,7 @@ function SharePageContent() {
     try {
       await set(ref(db, `shares/${shareId}`), null);
       setSentShares((prev) => prev.filter((share) => share.id !== shareId));
+      setReceivedShares((prev) => prev.filter((share) => share.id !== shareId));
     } catch (error) {
       console.error("Error removing share:", error);
     }
@@ -719,26 +787,26 @@ function SharePageContent() {
   };
 
   if (loading) {
-    return <RouteLoadingSkeleton title="Share" description="Loading shared items" />;
+    return null;
   }
 
   if (!user) {
-    return <RouteLoadingSkeleton title="Share" description="Preparing your share space" />;
+    return null;
   }
 
   return (
     <PageLayout user={user} onSignOut={handleSignOut} theme="brutalist">
       <TopActionBanner message={bannerMessage} />
-      <div className="min-h-screen px-4 pb-8 pt-4 sm:px-8 sm:pt-6">
-        <div className="mx-auto w-full max-w-6xl">
-          <div className="mb-5 flex items-center justify-center gap-2 border-b border-white/10 pb-4">
+      <div className="min-h-screen px-3 pb-6 pt-3 sm:px-6 sm:pt-5">
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="mb-5 flex items-center justify-center gap-2.5 sm:mb-6 sm:gap-3">
             <button
               type="button"
               onClick={() => setActivePanel("share")}
-              className={`inline-flex items-center gap-2 border px-4 py-2 text-sm font-semibold transition ${
+              className={`inline-flex items-center justify-center rounded-[20px] border px-5 py-2.5 text-sm font-bold transition sm:px-7 sm:py-3.5 sm:text-xl ${
                 activePanel === "share"
-                  ? "border-[#ff7a1a] bg-[#ff7a1a] text-[#0a0a0a]"
-                  : "border-white/10 bg-white/5 text-[#f5f0de] hover:bg-white/[0.08]"
+                  ? "border-[#ff7a1a] bg-[#ff7a1a] text-black"
+                  : "border-[#292929] bg-[#171717] text-[#f5f0de] hover:border-white/20 hover:bg-[#1c1c1c]"
               }`}
             >
               Share
@@ -746,10 +814,10 @@ function SharePageContent() {
             <button
               type="button"
               onClick={() => setActivePanel("history")}
-              className={`inline-flex items-center gap-2 border px-4 py-2 text-sm font-semibold transition ${
+              className={`inline-flex items-center justify-center rounded-[20px] border px-5 py-2.5 text-sm font-bold transition sm:px-7 sm:py-3.5 sm:text-xl ${
                 activePanel === "history"
-                  ? "border-[#ff7a1a] bg-[#ff7a1a] text-[#0a0a0a]"
-                  : "border-white/10 bg-white/5 text-[#f5f0de] hover:bg-white/[0.08]"
+                  ? "border-[#ff7a1a] bg-[#ff7a1a] text-black"
+                  : "border-[#292929] bg-[#171717] text-[#f5f0de] hover:border-white/20 hover:bg-[#1c1c1c]"
               }`}
             >
               History
@@ -764,8 +832,8 @@ function SharePageContent() {
                     currentStep === 1 ? "opacity-100 translate-x-0" : "opacity-0 translate-x-6"
                   } ${currentStep !== 1 ? "hidden" : ""}`}
                 >
-                  <h3 className="text-xl font-semibold text-[#f5f0de] sm:text-2xl">Select a Movie or Show</h3>
-                  <p className="mt-1 text-sm text-white/65">Find the right title first, then continue.</p>
+                  <h3 className="text-xl font-semibold text-[#f5f0de] sm:text-2xl">Select Movies and Shows</h3>
+                  <p className="mt-1 text-sm text-white/65">Choose as many titles as you want, then continue.</p>
 
                   <div className="mt-6 w-full rounded-[14px] border border-white/10 bg-[#111111] p-[3px]">
                     <AnimatedBackground
@@ -773,7 +841,6 @@ function SharePageContent() {
                       value={contentTypeFilter}
                       onValueChange={(value) => {
                         setContentTypeFilter(value as "all" | "movies" | "tv");
-                        setSelectedContent(null);
                         setSearchResults([]);
                         setYearFilter("");
                       }}
@@ -822,8 +889,10 @@ function SharePageContent() {
                         }
                         handleSelectContent(item as SearchResultItem);
                       }}
-                      minChars={1}
+                      minChars={2}
+                      debounceMs={450}
                       theme="brutalist"
+                      selectedIds={selectedContents.map((content) => `${content.type}-${content.id}`)}
                     />
                   </div>
 
@@ -859,6 +928,7 @@ function SharePageContent() {
                           <button
                             key={item.id}
                             onClick={() => handleSelectContent(item)}
+                            aria-pressed={selectedContents.some((content) => contentKey(content) === `${item.type}:${item.originalId}`)}
                             className="group flex w-full items-center gap-3 border-b border-white/10 px-0 py-2 text-left transition-colors hover:border-white/20"
                           >
                             {item.image && (
@@ -872,44 +942,25 @@ function SharePageContent() {
                               <p className="truncate text-sm font-semibold text-[#f5f0de]">{item.title}</p>
                               <p className="truncate text-xs text-white/55">{item.subtitle}</p>
                           </div>
+                          <span className="text-[#ff7a1a]">{selectedContents.some((content) => contentKey(content) === `${item.type}:${item.originalId}`) ? "✓" : "+"}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {selectedContent && (
-                  <div className="mt-5 border border-white/10 bg-white/[0.03] p-4 sm:mt-6">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                        {selectedContent.poster_url && (
-                          <img
-                            src={selectedContent.poster_url}
-                            alt={selectedContent.title}
-                            className="h-40 w-24 rounded-lg object-cover sm:h-44 sm:w-28"
-                          />
-                        )}
-
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-lg font-semibold text-[#f5f0de]">✓ {selectedContent.title}</p>
-                            <span className="rounded-full bg-[#ff7a1a] px-2.5 py-1 text-xs font-semibold text-[#0a0a0a]">
-                              {selectedContent.type === "tv" ? "TV Show" : "Movie"}
-                            </span>
-                          </div>
-
-                          <p className="mt-2 text-sm text-white/65">
-                            {selectedContent.release_date?.split("-")[0]} • {selectedContent.runtime} min
-                          </p>
-
-                          <p className="mt-3 line-clamp-3 text-sm text-white/65">{selectedContent.overview}</p>
-
-                          <button
-                            onClick={() => setSelectedContent(null)}
-                            className="mt-4 text-sm font-semibold text-[#ffb36b] underline underline-offset-2 hover:text-[#f5f0de]"
-                          >
-                            Choose something else
+                  {selectedContents.length > 0 && (
+                    <div className="mt-5 border border-white/10 bg-white/[0.03] p-4 sm:mt-6">
+                      <p className="mb-3 text-sm font-semibold text-[#f5f0de]">Selected: {selectedContents.length} title{selectedContents.length === 1 ? "" : "s"}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedContents.map((content) => (
+                          <button key={contentKey(content)} type="button"
+                            onClick={() => setSelectedContents((prev) => prev.filter((item) => contentKey(item) !== contentKey(content)))}
+                            className="rounded-full border border-[#ff7a1a]/50 px-3 py-1.5 text-sm text-[#f5f0de] hover:bg-white/5"
+                            aria-label={`Remove ${content.title}`}>
+                            {content.title} <span className="text-[#ff7a1a]">×</span>
                           </button>
-                        </div>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -923,23 +974,10 @@ function SharePageContent() {
                   <h3 className="text-xl font-semibold text-[#f5f0de] sm:text-2xl">Send to Friends</h3>
                   <p className="mt-1 text-sm text-white/65">Pick recipients and attach a short note.</p>
 
-                  {selectedContent && (
-                    <div className="mt-5 flex items-center gap-3 border border-white/10 bg-white/[0.03] p-3">
-                      {selectedContent.poster_url && (
-                        <img
-                          src={selectedContent.poster_url}
-                          alt={selectedContent.title}
-                          className="h-16 w-12 rounded object-cover"
-                        />
-                      )}
-                      <div>
-                        <p className="text-sm font-semibold text-[#f5f0de]">{selectedContent.title}</p>
-                        <p className="text-xs text-white/55">
-                          {selectedContent.type === "tv" ? "TV Show" : "Movie"} • ready to share
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  <div className="mt-5 border border-white/10 bg-white/[0.03] p-3">
+                    <p className="text-sm font-semibold text-[#f5f0de]">{selectedContents.length} selected title{selectedContents.length === 1 ? "" : "s"}</p>
+                    <p className="mt-1 text-xs text-white/55">{selectedContents.map((content) => content.title).join(", ")}</p>
+                  </div>
 
                   <div className="mt-4">
                     <input
@@ -1037,8 +1075,8 @@ function SharePageContent() {
                   {currentStep === 1 && (
                     <button
                       onClick={() => setCurrentStep(2)}
-                      disabled={!selectedContent}
-                      className={`action-primary gap-2 ${!selectedContent ? "cursor-not-allowed opacity-40" : ""}`}
+                      disabled={selectedContents.length === 0}
+                      className={`action-primary gap-2 ${selectedContents.length === 0 ? "cursor-not-allowed opacity-40" : ""}`}
                     >
                       Next
                       <ChevronRight className="h-4 w-4" />
@@ -1048,9 +1086,9 @@ function SharePageContent() {
                   {currentStep === 2 && (
                     <button
                       onClick={handleShare}
-                      disabled={selectedRecipients.length === 0}
+                      disabled={selectedRecipients.length === 0 || sending}
                       className={`action-primary gap-2 ${
-                        selectedRecipients.length === 0 ? "cursor-not-allowed opacity-40" : ""
+                        selectedRecipients.length === 0 || sending ? "cursor-not-allowed opacity-40" : ""
                       }`}
                     >
                       <SendHorizontal className="h-4 w-4" />
@@ -1062,85 +1100,97 @@ function SharePageContent() {
             </section>
           ) : (
             <section>
-              <div className="border-b border-white/10 pb-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Share History</p>
-                <h2 className="mt-1 text-xl font-semibold text-[#f5f0de] sm:text-2xl">Titles You Shared</h2>
+              <div className="pb-5">
+                <h2 className="mt-1 text-lg font-black tracking-tight text-[#f5f0de] sm:text-2xl">
+                  {historyDirection === "sent" ? "Sent to Others" : "Received from Others"}
+                </h2>
               </div>
 
               <div className="pt-5">
+                <div className="mb-4 flex w-fit gap-1 rounded-[20px] border border-[#292929] bg-[#111111] p-1">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryDirection("sent")}
+                    className={`rounded-[16px] px-5 py-2.5 text-xs font-bold transition sm:px-7 sm:py-3 sm:text-base ${
+                      historyDirection === "sent" ? "bg-[#ff7a1a] text-black" : "text-white/50 hover:text-[#f5f0de]"
+                    }`}
+                  >
+                    Sent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryDirection("received")}
+                    className={`rounded-[16px] px-5 py-2.5 text-xs font-bold transition sm:px-7 sm:py-3 sm:text-base ${
+                      historyDirection === "received" ? "bg-[#ff7a1a] text-black" : "text-white/50 hover:text-[#f5f0de]"
+                    }`}
+                  >
+                    Received
+                  </button>
+                </div>
                 <input
                   type="text"
-                  placeholder="Search shared titles..."
+                  placeholder={`Search ${historyDirection === "sent" ? "sent" : "received"} titles...`}
                   value={sharedSearchQuery}
                   onChange={(e) => setSharedSearchQuery(e.target.value)}
-                  className="field mb-4"
+                  className="mb-4 w-full rounded-lg border border-white/10 bg-[#111111] px-3.5 py-2.5 text-sm text-[#f5f0de] outline-none placeholder:text-white/35 focus:border-[#ff7a1a]/60"
                 />
 
-                {filteredSentShares.length > 0 ? (
-                  <div className="max-h-[50rem] divide-y divide-white/10 overflow-y-auto pr-1">
-                    {filteredSentShares.map((share) => {
+                {filteredHistoryShares.length > 0 ? (
+                  <div className="grid max-h-[50rem] grid-cols-2 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+                    {filteredHistoryShares.map((share) => {
                       const item = share.movie || share.content;
+                      const otherUser = historyDirection === "sent" ? share.receiver : share.sender;
 
                       return (
                         <div
                           key={share.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openShareDetails(share)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              openShareDetails(share);
-                            }
-                          }}
-                          className="group flex w-full items-start gap-3 py-3 text-left"
+                          className="group relative overflow-hidden rounded-xl border border-white/10 bg-[#0b0d10] transition hover:border-[#ff7a1a]/50 hover:bg-[#111111]"
                         >
-                          {item?.poster_url && (
-                            <img
-                              src={item.poster_url}
-                              alt={item.title}
-                              className="h-16 w-12 flex-shrink-0 object-cover"
-                            />
-                          )}
-
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-[#f5f0de]">{item?.title || "Unknown"}</p>
-                            <p className="mt-1 text-xs text-white/55">To @{share.receiver?.username}</p>
-
-                            {share.content_type && (
-                              <p className="mt-1 text-xs font-medium text-white/55">
-                                {share.content_type === "tv" ? "TV Show" : "Movie"}
+                          <button type="button" onClick={() => openShareDetails(share)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff7a1a]">
+                            <div className="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-[#1a1a1a]">
+                              {item?.poster_url ? (
+                                <img src={item.poster_url} alt={item.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-xs text-white/35">No poster</div>
+                              )}
+                              {share.content_type && (
+                                <span className="absolute left-2 top-2 rounded-md border border-white/15 bg-black/80 px-2 py-1 text-[8px] font-black uppercase tracking-[0.14em] text-[#ffb36b] sm:text-[10px]">
+                                  {share.content_type === "tv" ? "TV Show" : "Movie"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-h-24 rounded-b-xl border-t border-white/10 p-2.5 sm:p-3">
+                              <p className="truncate text-[10px] font-bold text-[#f5f0de] sm:text-sm">{item?.title || "Unknown"}</p>
+                              <p className="mt-1 truncate text-xs font-medium text-white/65 sm:text-sm">
+                                {historyDirection === "sent" ? "To" : "From"} @{otherUser?.username || "unknown"}
                               </p>
-                            )}
-
-                            {share.note && (
-                              <p className="mt-2 pl-2 text-xs italic text-white/65">
-                                &quot;{share.note}&quot;
-                              </p>
-                            )}
-
-                            <p className="mt-1 text-xs text-white/40">
-                              {new Date(share.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleRemoveShare(share.id);
-                            }}
-                            className="rounded-md p-1 text-white/45 transition-colors hover:bg-white/5 hover:text-[#ff7a1a]"
-                          >
-                            <Trash2 className="h-4 w-4" />
+                              {share.note && <p className="mt-2 line-clamp-2 text-[9px] italic text-white/55 sm:text-xs">&quot;{share.note}&quot;</p>}
+                              <p className="mt-2 text-xs font-medium text-white/65 sm:text-sm">{new Date(share.created_at).toLocaleDateString()}</p>
+                            </div>
                           </button>
+                          <div className="absolute right-2 top-2">
+                            <button
+                              type="button"
+                              aria-label={`Delete ${historyDirection === "sent" ? "sent" : "received"} share of ${item?.title || "title"}`}
+                              title="Delete share"
+                              onClick={() => handleRemoveShare(share.id)}
+                              className="rounded-lg border border-white/15 bg-black/75 p-1.5 text-white/70 transition hover:border-[#ff7a1a]/60 hover:text-[#ff9b52]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="py-12 text-center">
-                    <p className="text-[#f5f0de]">No shares yet</p>
-                    <p className="mt-1 text-sm text-white/45">Share your first title!</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#111111] px-5 py-12 text-center">
+                    <p className="font-bold text-[#f5f0de]">
+                      {historyDirection === "sent" ? "No titles sent yet" : "No titles received yet"}
+                    </p>
+                    <p className="mt-1 text-sm text-white/45">
+                      {historyDirection === "sent" ? "Share a title with a friend to see it here." : "Titles your friends share with you will appear here."}
+                    </p>
                   </div>
                 )}
               </div>
@@ -1163,27 +1213,12 @@ function SharePageContent() {
       {showWatchConflictModal && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center">
           <div className="w-full max-w-lg rounded-t-[2rem] border border-white/10 bg-[#111111] p-4 text-[#f5f0de] shadow-2xl sm:rounded-[2rem] sm:p-6">
-            <h3 className="text-lg font-semibold text-[#f5f0de] sm:text-xl">They already watched this</h3>
-            <p className="mt-2 text-sm text-white/65">
-              {watchConflictRecipients.length === 1
-                ? `${watchConflictRecipients[0].name} has already watched this title. Do you still want to send it?`
-                : `${watchConflictRecipients.map((recipient) => recipient.name).join(", ")} have already watched this title. Do you still want to send it to everyone?`}
-            </p>
-
-            <div className="mt-4 rounded-2xl bg-white/5 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                Watched recipients
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {watchConflictRecipients.map((recipient) => (
-                  <span
-                    key={recipient.id}
-                    className="rounded-full bg-black px-3 py-1 text-sm font-medium text-[#f5f0de] shadow-sm ring-1 ring-white/10"
-                  >
-                    @{recipient.username}
-                  </span>
-                ))}
-              </div>
+            <h3 className="text-lg font-semibold text-[#f5f0de] sm:text-xl">Some titles were already watched</h3>
+            <p className="mt-2 text-sm text-white/65">These friends have already watched these titles. You can send everything or skip those pairs.</p>
+            <div className="mt-4 max-h-48 overflow-y-auto rounded-2xl bg-white/5 p-3">
+              {watchConflicts.map(({ recipient, content }) => (
+                <p key={`${recipient.id}:${contentKey(content)}`} className="py-1 text-sm text-[#f5f0de]">@{recipient.username} — {content.title}</p>
+              ))}
             </div>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -1192,7 +1227,7 @@ function SharePageContent() {
                 onClick={() => {
                   setShowWatchConflictModal(false);
                   setPendingShareRecipients([]);
-                  setWatchConflictRecipients([]);
+                  setWatchConflicts([]);
                 }}
                 className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-medium text-[#f5f0de] hover:bg-white/5"
               >
@@ -1203,7 +1238,7 @@ function SharePageContent() {
                 onClick={handleSendOnlyUnwatched}
                 className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-medium text-[#f5f0de] hover:bg-white/5"
               >
-                Send only unwatched
+                Skip watched titles
               </button>
               <button
                 type="button"

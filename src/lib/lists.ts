@@ -1,10 +1,11 @@
 import { auth, db } from "@/lib/firebase";
-import { ref, set, get, push, remove } from "firebase/database";
+import { ref, set, get, push, remove, update } from "firebase/database";
 import { List, ListItem, ListCollaborator, ListWithItems, ListItemWithContent, ListCollaboratorWithUser, User, Content } from "@/types";
 import { getMovieDetails } from "./tmdb";
 import { getShowDetails } from "./tvmaze";
 import { normalizeListIdParam } from "./list-ids";
 import { createFallbackUser, getUsersByIds } from "./users";
+import { getAuthorizedListData, type AuthorizedListData } from "./authorized-list-data";
 
 /**
  * Create a new list
@@ -63,30 +64,26 @@ export async function syncListCollaboratorIds(listId: string, collaboratorIds: s
 /**
  * Get user's own lists (owned) + collaborative lists
  */
-export async function getUserLists(userId: string): Promise<List[]> {
+export async function getUserLists(userId: string, suppliedData?: AuthorizedListData): Promise<List[]> {
   try {
-    if (!auth.currentUser) return [];
+    const viewerId = auth.currentUser?.uid;
+    if (!viewerId) return [];
 
-    // Get all lists
-    const listsRef = ref(db, "lists");
-    const listsSnapshot = await get(listsRef);
-
-    if (!listsSnapshot.exists()) return [];
-
-    const allLists = listsSnapshot.val();
+    const { lists: allLists, collaborators: allCollaborators } = suppliedData || await getAuthorizedListData();
 
     // Get lists where user is owner
     const ownedLists = Object.values(allLists).filter(
-      (list: any) => list.owner_id === userId
+      (list: any) => list.owner_id === userId && (viewerId === userId || list.privacy === "public")
     ) as List[];
 
+    // Another person's profile can show their public lists, not their private collaborations.
+    if (viewerId !== userId) {
+      return ownedLists.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    }
+
     // Get lists where user is a collaborator
-    const collaboratorsRef = ref(db, "list_collaborators");
-    const collaboratorsSnapshot = await get(collaboratorsRef);
-    
     const collaborativeLists: List[] = [];
-    if (collaboratorsSnapshot.exists()) {
-      const allCollaborators = collaboratorsSnapshot.val();
+    if (Object.keys(allCollaborators).length > 0) {
       Object.values(allCollaborators).forEach((collab: any) => {
         if (collab.user_id === userId && allLists[collab.list_id]) {
           const list = allLists[collab.list_id] as List;
@@ -114,11 +111,7 @@ export async function getPublicLists(limit: number = 20): Promise<List[]> {
   try {
     if (!auth.currentUser) return [];
 
-    const snapshot = await get(ref(db, "lists"));
-
-    if (!snapshot.exists()) return [];
-
-    const allLists = snapshot.val();
+    const { lists: allLists } = await getAuthorizedListData();
     const publicLists = Object.values(allLists)
       .filter((list: any) => list.privacy === "public")
       .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
@@ -141,28 +134,25 @@ export async function getListWithDetails(listId: string, allUsers?: Record<strin
     const safeListId = normalizeListIdParam(listId);
     if (!safeListId) return null;
 
-    const listRef = ref(db, `lists/${safeListId}`);
-    const listSnapshot = await get(listRef);
+    const { lists, items, collaborators } = await getAuthorizedListData();
+    const list = lists[safeListId];
+    if (!list) return null;
 
-    if (!listSnapshot.exists()) return null;
-
-    const list = listSnapshot.val() as List;
+    // A private link is only usable by the owner or someone on the collaborator list.
+    const listCollaborators = Object.values(collaborators).filter(
+      (collab) => collab.list_id === safeListId
+    );
+    const viewerId = auth.currentUser.uid;
+    if (list.privacy !== "public" && list.owner_id !== viewerId &&
+        !list.collaborator_ids?.[viewerId] &&
+        !listCollaborators.some((collab) => collab.user_id === viewerId)) {
+      return null;
+    }
 
     // Fetch items
-    const itemsRef = ref(db, "list_items");
-    const itemsSnapshot = await get(itemsRef);
-    const allItems = itemsSnapshot.exists() ? itemsSnapshot.val() : {};
-    const listItems = Object.values(allItems)
-      .filter((item: any) => item.list_id === safeListId)
-      .sort((a: any, b: any) => (a.position || 0) - (b.position || 0)) as ListItem[];
-
-    // Fetch collaborators
-    const collaboratorsRef = ref(db, "list_collaborators");
-    const collaboratorsSnapshot = await get(collaboratorsRef);
-    const allCollaborators = collaboratorsSnapshot.exists() ? collaboratorsSnapshot.val() : {};
-    const listCollaborators = Object.values(allCollaborators).filter(
-      (collab: any) => collab.list_id === safeListId
-    ) as ListCollaborator[];
+    const listItems = Object.values(items)
+      .filter((item) => item.list_id === safeListId)
+      .sort((a, b) => (a.position || 0) - (b.position || 0));
 
     const requiredUserIds = Array.from(
       new Set([
@@ -170,14 +160,34 @@ export async function getListWithDetails(listId: string, allUsers?: Record<strin
         ...listCollaborators.map((collab) => collab.user_id),
       ])
     );
-    const usersData =
-      allUsers && Object.keys(allUsers).length > 0 ? allUsers : await getUsersByIds(requiredUserIds);
+    const usersData: Record<string, User> = {
+      ...(allUsers && Object.keys(allUsers).length > 0 ? allUsers : await getUsersByIds(requiredUserIds)),
+      canisterr: {
+        id: "canisterr", username: "canisterr", name: "Canisterr", avatar_url: "/logo.png",
+        created_at: new Date(0).toISOString(),
+      },
+    };
 
     // Enrich items with content and user info
     const enrichedItems: ListItemWithContent[] = await Promise.all(
       listItems.map(async (item) => {
         let content: Content;
-        if (item.content_type === "tv") {
+        if (item.content_summary?.title) {
+          const base = {
+            id: item.content_id,
+            title: item.content_summary.title,
+            poster_url: item.content_summary.poster_url || item.poster_url_snapshot || null,
+            genres: [],
+            release_date: item.content_summary.release_year ? `${item.content_summary.release_year}-01-01` : null,
+            overview: null,
+            runtime: null,
+            rating: null,
+            created_at: item.added_at,
+          };
+          content = (item.content_type === "tv"
+            ? { ...base, name: base.title, status: null, type: "tv" }
+            : { ...base, platforms: [], director: null, type: "movie" }) as Content;
+        } else if (item.content_type === "tv") {
           const show = await getShowDetails(item.content_id);
           content = show as unknown as Content;
         } else {
@@ -228,10 +238,8 @@ export async function addItemToList(
   if (!itemId) throw new Error("Failed to generate item ID");
 
   // Get the count of existing items to set position
-  const itemsRef = ref(db, "list_items");
-  const itemsSnapshot = await get(itemsRef);
-  const allItems = itemsSnapshot.exists() ? itemsSnapshot.val() : {};
-  const listItems = Object.values(allItems).filter((item: any) => item.list_id === listId) as ListItem[];
+  const { items } = await getAuthorizedListData();
+  const listItems = Object.values(items).filter((item) => item.list_id === listId);
   const position = listItems.length;
 
   const newItem: ListItem = {
@@ -273,8 +281,7 @@ export async function addCollaborator(
 ): Promise<ListCollaborator> {
   // Check if already a collaborator
   const collaboratorsRef = ref(db, "list_collaborators");
-  const snapshot = await get(collaboratorsRef);
-  const allCollaborators = snapshot.exists() ? snapshot.val() : {};
+  const { collaborators: allCollaborators } = await getAuthorizedListData();
 
   const existing = Object.entries(allCollaborators).find(
     ([_, collab]: any) => collab.list_id === listId && collab.user_id === userId
@@ -297,8 +304,11 @@ export async function addCollaborator(
     joined_at: new Date().toISOString(),
   };
 
-  await set(collabRef, newCollaborator);
-  await set(ref(db, `lists/${listId}/collaborator_ids/${userId}`), true);
+  await update(ref(db), {
+    [`list_collaborators/${collabId}`]: newCollaborator,
+    [`lists/${listId}/collaborator_ids/${userId}`]: true,
+    [`lists/${listId}/updated_at`]: new Date().toISOString(),
+  });
 
   return newCollaborator;
 }
@@ -310,14 +320,12 @@ export async function removeCollaborator(collaboratorId: string, listId: string)
   const collaboratorSnapshot = await get(ref(db, `list_collaborators/${collaboratorId}`));
   const collaboratorUserId = collaboratorSnapshot.exists() ? collaboratorSnapshot.val()?.user_id : null;
 
-  await remove(ref(db, `list_collaborators/${collaboratorId}`));
-
-  if (collaboratorUserId) {
-    await remove(ref(db, `lists/${listId}/collaborator_ids/${collaboratorUserId}`));
-  }
-
-  // Update list updated_at
-  await set(ref(db, `lists/${listId}/updated_at`), new Date().toISOString());
+  if (!collaboratorUserId) return;
+  await update(ref(db), {
+    [`list_collaborators/${collaboratorId}`]: null,
+    [`lists/${listId}/collaborator_ids/${collaboratorUserId}`]: null,
+    [`lists/${listId}/updated_at`]: new Date().toISOString(),
+  });
 }
 
 /**
@@ -327,8 +335,11 @@ export async function updateList(
   listId: string,
   updates: Partial<List>
 ): Promise<void> {
+  const current = (await get(ref(db, `lists/${listId}`))).val() as List | null;
+  if (!current) throw new Error("List not found");
+  if (current.owner_id !== auth.currentUser?.uid) throw new Error("Only the list owner can edit list details");
   await set(ref(db, `lists/${listId}`), {
-    ...(await get(ref(db, `lists/${listId}`)).then((snap) => snap.val())),
+    ...current,
     ...updates,
     updated_at: new Date().toISOString(),
   });
@@ -348,28 +359,15 @@ export async function deleteList(listId: string, userId: string): Promise<void> 
   if (list.owner_id !== currentUserId) throw new Error("Only list owner can delete the list");
 
   // Delete all items in list
-  const itemsRef = ref(db, "list_items");
-  const itemsSnapshot = await get(itemsRef);
-  if (itemsSnapshot.exists()) {
-    const allItems = itemsSnapshot.val();
-    Object.entries(allItems).forEach(([itemId, item]: any) => {
-      if (item.list_id === listId) {
-        remove(ref(db, `list_items/${itemId}`));
-      }
-    });
-  }
+  const { items: allItems, collaborators: allCollaborators } = await getAuthorizedListData();
+  await Promise.all(Object.entries(allItems)
+    .filter(([, item]) => item.list_id === listId)
+    .map(([itemId]) => remove(ref(db, `list_items/${itemId}`))));
 
   // Delete all collaborators
-  const collaboratorsRef = ref(db, "list_collaborators");
-  const collaboratorsSnapshot = await get(collaboratorsRef);
-  if (collaboratorsSnapshot.exists()) {
-    const allCollaborators = collaboratorsSnapshot.val();
-    Object.entries(allCollaborators).forEach(([collabId, collab]: any) => {
-      if (collab.list_id === listId) {
-        remove(ref(db, `list_collaborators/${collabId}`));
-      }
-    });
-  }
+  await Promise.all(Object.entries(allCollaborators)
+    .filter(([, collaborator]) => collaborator.list_id === listId)
+    .map(([collabId]) => remove(ref(db, `list_collaborators/${collabId}`))));
 
   // Delete list
   await remove(listRef);
@@ -382,12 +380,7 @@ export async function getListCoverImages(listId: string): Promise<string[]> {
   try {
     if (!auth.currentUser) return [];
 
-    const itemsRef = ref(db, "list_items");
-    const snapshot = await get(itemsRef);
-
-    if (!snapshot.exists()) return [];
-
-    const allItems = snapshot.val();
+    const { items: allItems } = await getAuthorizedListData();
     const listItems = Object.values(allItems)
       .filter((item: any) => item.list_id === listId)
       .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
@@ -423,12 +416,7 @@ export async function isUserCollaborator(listId: string, userId: string): Promis
   try {
     if (!auth.currentUser) return false;
 
-    const collaboratorsRef = ref(db, "list_collaborators");
-    const snapshot = await get(collaboratorsRef);
-
-    if (!snapshot.exists()) return false;
-
-    const allCollaborators = snapshot.val();
+    const { collaborators: allCollaborators } = await getAuthorizedListData();
     return Object.values(allCollaborators).some(
       (collab: any) => collab.list_id === listId && collab.user_id === userId
     );
@@ -445,12 +433,7 @@ export async function isItemInList(listId: string, contentId: number, contentTyp
   try {
     if (!auth.currentUser) return false;
 
-    const itemsRef = ref(db, "list_items");
-    const snapshot = await get(itemsRef);
-
-    if (!snapshot.exists()) return false;
-
-    const allItems = snapshot.val();
+    const { items: allItems } = await getAuthorizedListData();
     return Object.values(allItems).some(
       (item: any) => item.list_id === listId && item.content_id === contentId && item.content_type === contentType
     );

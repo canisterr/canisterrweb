@@ -1,20 +1,21 @@
-import Link from "next/link";
+import LegalDocument from "@/components/LegalDocument";
+import { TERMS_VERSION } from "@/lib/legal-versions";
 
-const effectiveDate = "April 27, 2026";
+const effectiveDate = "November 26, 2026";
 
 const sections = [
   {
-    title: "1. Acceptance of these terms",
+    title: "1. Agreement and eligibility",
     body: [
-      "By accessing or using Canisterr, you agree to these Terms and Conditions and to any additional rules or policies we publish from time to time.",
-      "If you do not agree, do not use the service.",
+      "By creating an account or using Canisterr, you agree to these Terms and the Privacy Policy. If you do not agree, do not create an account or use account features.",
+      "Canisterr accounts are limited to people aged 18 or older. By accepting these Terms and creating an account, you confirm that you meet this age requirement. Do not create an account on behalf of a person under 18.",
     ],
   },
   {
     title: "2. Who can use Canisterr",
     body: [
-      "You must be able to form a legally binding contract under the laws that apply to you.",
-      "You are responsible for keeping your account information accurate and for maintaining the security of your login credentials.",
+      "You must provide accurate account details and keep your login credentials secure. You are responsible for activity under your account until you tell us it may be compromised.",
+      "You may delete your account and request an export of your Canisterr data from Account settings.",
     ],
   },
   {
@@ -27,8 +28,8 @@ const sections = [
   {
     title: "4. User content",
     body: [
-      "You may post logs, comments, lists, follow requests, messages, tags, and other content through the service.",
-      "You retain ownership of the content you create, but you grant Canisterr a worldwide, non-exclusive, royalty-free license to host, store, reproduce, display, distribute, and process that content as needed to operate and improve the service.",
+      "You keep ownership of content you create, such as logs, reviews, comments, lists, and messages. You give Canisterr a non-exclusive, worldwide, royalty-free license to host, store, reproduce, display, transmit, and format that content only as needed to provide, secure, and maintain the features you use.",
+      "This license ends when the content is removed from Canisterr, except for copies retained in backups, records required by law, or content already shared or copied by other users. We do not claim ownership of your writing or images.",
     ],
   },
   {
@@ -36,6 +37,8 @@ const sections = [
     items: [
       "Use the service in a way that breaks the law or violates another person’s rights.",
       "Post hateful, harassing, abusive, threatening, sexually explicit, or otherwise harmful content.",
+      "Share another person’s private information or content outside the audience they selected.",
+      "Post material you do not have permission to use, including copyrighted posters, photographs, or text you upload yourself.",
       "Attempt to scrape, reverse engineer, attack, disrupt, or overload the service.",
       "Upload malware or anything designed to harm users, devices, or data.",
       "Use automation or bots in a way that interferes with normal use.",
@@ -44,114 +47,56 @@ const sections = [
   {
     title: "6. Social features",
     body: [
-      "Canisterr includes follows, lists, comments, shares, and notifications. Those features are designed to help people discover and discuss film and television.",
-      "You are responsible for how you use those features, including who you follow, what you share, and the visibility settings you choose.",
+      "Use privacy settings to control the audience for your profile, logs, lists, and activity. Do not assume that content set to public is confidential.",
+      "We may review reports, remove content, limit features, suspend accounts, or preserve information when necessary to enforce these Terms, protect users, respond to valid legal requests, or meet legal duties. We will provide notice or a review path where required by law.",
     ],
   },
   {
-    title: "7. Third-party services",
+    title: "7. Reports and copyright complaints",
     body: [
-      "Canisterr may rely on third-party services for media metadata, authentication, analytics, notifications, or storage.",
-      "Those services are governed by their own terms and privacy practices.",
+      "Report abuse, privacy issues, or illegal content to support@canisterr.com. Include the page or account involved, the relevant link or log ID, and enough detail for us to review it. We will acknowledge and handle complaints within applicable legal deadlines.",
+      "For copyright complaints, identify the protected work and the Canisterr URL or content at issue, explain why you believe it infringes your rights, include your contact details, and confirm that your report is accurate and authorized. We may remove or restrict access to reported material and may restrict repeat infringers. A counter-notice or appeal can be sent to the same address.",
+      "Canisterr uses third-party catalogs and services. Movie and television data and images may be supplied by TMDB or TVmaze; provider availability data is supplied via TMDB and JustWatch. These providers retain their own rights and terms. See the Credits page. This product uses the TMDB API but is not endorsed or certified by TMDB.",
     ],
   },
   {
     title: "8. Service changes and availability",
     body: [
-      "We may update, change, suspend, or discontinue any part of the service at any time.",
+      "We may update, change, suspend, or discontinue features for security, legal, or operational reasons, with notice where required.",
       "We do not guarantee that the service will always be available, uninterrupted, secure, or error free.",
     ],
   },
   {
     title: "9. Termination",
     body: [
-      "We may suspend or terminate access to the service if we believe you have violated these terms, created risk, or misused the platform.",
-      "You may stop using the service at any time.",
+      "You may stop using Canisterr at any time and delete your account in settings. We may restrict or terminate access for serious or repeated violations, security risks, or legal requirements. You may contact support to challenge an enforcement decision.",
     ],
   },
   {
     title: "10. Disclaimers and liability",
     body: [
-      "The service is provided on an \"as is\" and \"as available\" basis.",
-      "To the fullest extent allowed by law, Canisterr is not liable for indirect, incidental, special, consequential, or punitive damages, or for loss of data, revenue, goodwill, or reputation arising from your use of the service.",
+      "Canisterr is provided on an \"as available\" basis. Movie metadata, ratings, credits, images, and streaming availability can be incomplete, delayed, or incorrect; streaming catalogs and prices are controlled by third parties.",
+      "Nothing in these Terms excludes rights or remedies that cannot legally be excluded. Any limitation of liability applies only to the extent permitted by the law that applies to you.",
     ],
   },
   {
-    title: "11. Changes to these terms",
+    title: "11. Contact and updates",
     body: [
-      "We may update these terms from time to time. When we do, we will revise the effective date above and/or provide additional notice when appropriate.",
-      "Continued use of Canisterr after a change becomes effective means you accept the updated terms.",
+      "For support, grievance, abuse, or copyright reports, contact support@canisterr.com. We will route reports to the Canisterr team responsible for review.",
+      `These Terms version ${TERMS_VERSION} may be updated as Canisterr or applicable law changes. We will update the date and provide additional notice or ask for renewed acceptance where required.`,
     ],
   },
 ];
 
 export default function TermsPage() {
   return (
-    <main className="min-h-dvh bg-[#090909] px-4 py-8 text-[#f5f0de] sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl">
-        <Link
-          href="/profile/settings"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-white/55 transition hover:text-[#ffb36b]"
-        >
-          Back to settings
-        </Link>
-
-        <section className="mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <div className="border-b border-white/10 px-5 py-5 sm:px-8 sm:py-6">
-            <p className="text-[11px] font-black uppercase tracking-[0.32em] text-[#ffb36b]/80">Terms of Service</p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">Canisterr Terms and Conditions</h1>
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/65 sm:text-base">
-              Effective {effectiveDate}. These terms explain the rules for using Canisterr, including our social
-              features, user content, and account responsibilities.
-            </p>
-          </div>
-
-          <div className="space-y-6 px-5 py-6 sm:px-8 sm:py-8">
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/70">
-              Canisterr is a movie and TV social platform. We keep these terms practical and readable, but you should
-              still review them carefully. If you need help understanding anything here, contact{" "}
-              <a href="mailto:support@canisterr.com" className="font-semibold text-[#ffb36b] hover:text-[#ff8d3b]">
-                support@canisterr.com
-              </a>
-              .
-            </div>
-
-            {sections.map((section) => (
-              <section key={section.title} className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-                <h2 className="text-xl font-black tracking-tight text-[#f5f0de]">{section.title}</h2>
-                {"body" in section && section.body ? (
-                  <div className="mt-4 space-y-4 text-sm leading-7 text-white/68 sm:text-base">
-                    {section.body.map((paragraph) => (
-                      <p key={paragraph}>{paragraph}</p>
-                    ))}
-                  </div>
-                ) : null}
-                {"items" in section && section.items ? (
-                  <ul className="mt-4 space-y-3 text-sm leading-7 text-white/68 sm:text-base">
-                    {section.items.map((item) => (
-                      <li key={item} className="flex gap-3">
-                        <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-[#ff7a1a]" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </section>
-            ))}
-
-            <section className="rounded-3xl border border-white/10 bg-[#ff7a1a]/10 p-5 sm:p-6">
-              <h2 className="text-xl font-black text-[#f5f0de]">Contact</h2>
-              <p className="mt-3 text-sm leading-7 text-white/70 sm:text-base">
-                Questions about these terms, account issues, or abuse reports can be sent to{" "}
-                <a href="mailto:support@canisterr.com" className="font-semibold text-[#ffb36b] hover:text-[#ff8d3b]">
-                  support@canisterr.com
-                </a>
-                .
-              </p>
-            </section>
-          </div>
-        </section>
-      </div>
-    </main>
+    <LegalDocument
+      current="terms"
+      title="Terms & Conditions"
+      intro="These terms set out the rules for using Canisterr, including accounts, social features, and content you share."
+      effectiveDate={effectiveDate}
+      version={TERMS_VERSION}
+      sections={sections}
+    />
   );
 }

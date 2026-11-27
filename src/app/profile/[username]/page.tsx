@@ -13,17 +13,21 @@ import DOMPurify from 'dompurify';
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { get, ref, set } from "firebase/database";
-import { ArrowLeft, Ban, Bell, Loader2, MoreVertical, Share2, Upload } from "lucide-react";
+import { ArrowLeft, Ban, Bell, Filter, Loader2, MoreVertical, Plus, Share2, Upload, X } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import StatsInsights from "@/components/StatsInsights";
+import HonoursPanel from "@/components/profile/HonoursPanel";
 import { readBrowserCache, writeBrowserCache } from "@/lib/browser-cache";
 import { db } from "@/lib/firebase";
+import { scheduleHonoursRecalculation } from "@/lib/honours-client";
 import { createMovieLog, getUserMovieLogs, getVisibleLogNotes } from "@/lib/logs";
 import { getListWithDetails, getUserLists } from "@/lib/lists";
-import { searchMovies } from "@/lib/tmdb";
+import { getAuthorizedListData, type AuthorizedListData } from "@/lib/authorized-list-data";
+import { getMovieCardSummary, searchMovies } from "@/lib/tmdb";
+import { getShowCardSummary } from "@/lib/tvmaze";
 import { getDisplayUserHandle } from "@/lib/users";
-import { getLogEngagementBatch, type LogEngagementSnapshot } from "@/lib/log-engagement";
+import { getEmptyLogEngagement, getLogEngagementBatch, type LogEngagementSnapshot } from "@/lib/log-engagement";
 import LogFeedCard from "@/components/LogFeedCard";
 import {
   DEFAULT_SETTINGS,
@@ -50,9 +54,62 @@ import {
   createFollowAcceptedNotification,
 } from "@/lib/notifications";
 import { signOut as authSignOut } from "@/lib/auth";
-import type { List, ListWithItems, MovieLogWithContent, User } from "@/types";
+import type { List, ListItem, ListWithItems, MovieLogWithContent, User } from "@/types";
 
 type FollowModalType = "followers" | "following";
+type DateRangePreset = "all" | "month" | "year" | "custom";
+
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+const listShelfColors = ["#f6a43a", "#47a9ff", "#64d2a3", "#ff7f6e", "#a88bff"];
+
+function ProfileListShelfCard({ list, owner, covers, itemCount }: { list: List; owner: User; covers: string[]; itemCount: number }) {
+  const accentIndex = Array.from(list.id).reduce((sum, character) => sum + character.charCodeAt(0), 0) % listShelfColors.length;
+  const accent = listShelfColors[accentIndex];
+  const posters = list.cover_type === "custom" && list.cover_image_url
+    ? [list.cover_image_url, ...covers].slice(0, 4)
+    : covers;
+
+  return <Link href={`/lists/${list.id}`} className="group mx-auto block w-full max-w-[920px] py-2 sm:py-3">
+    <div className="mb-2 flex items-center gap-2">
+      <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 text-[10px] font-bold text-[#f5f0de]">
+        {owner.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={owner.avatar_url} alt="" className="h-full w-full object-cover" />
+        ) : owner.name.charAt(0).toUpperCase()}
+      </span>
+      <span className="text-xs font-medium text-[#f5f0de] sm:text-sm">{owner.name}{list.owner_id === owner.id ? "" : " · collaborator"}</span>
+    </div>
+    <h3 className="mb-2 line-clamp-2 text-base font-semibold text-[#f5f0de] group-hover:text-[#ffb36b] sm:text-lg">{list.name}</h3>
+    <div className="relative isolate h-[190px] overflow-hidden px-3 pt-3 sm:h-[280px] lg:h-[290px]">
+      {posters.length ? (
+        <div className="absolute inset-x-5 bottom-[1.7rem] top-2 z-10 mx-auto flex max-w-[760px] items-end lg:bottom-[2.2rem] lg:top-0">
+          <div className="flex w-full items-end gap-3 lg:gap-8">
+            {posters.map((url, index) => <div key={`${list.id}-${index}`} className="w-[calc((100%-2.25rem)/4)] shrink-0 lg:w-[calc((100%-6rem)/4)]">
+              <div className="overflow-hidden border border-white/10 bg-[#050505] shadow-[0_10px_18px_rgba(0,0,0,0.18)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`${list.name} poster ${index + 1}`} loading="lazy" className="aspect-[2/3] w-full object-contain" />
+              </div>
+            </div>)}
+          </div>
+        </div>
+      ) : (
+        <div className="absolute inset-x-5 bottom-[1.7rem] top-2 z-10 flex items-end justify-center lg:bottom-[2.2rem] lg:top-0">
+          <div className="flex w-full max-w-[760px] items-end justify-center gap-3 lg:gap-8">
+            {[0, 1, 2, 3].map((index) => <div key={index} className="flex aspect-[2/3] w-[22%] items-center justify-center border border-white/10 bg-[#111111] shadow-[0_10px_18px_rgba(0,0,0,0.16)] lg:w-[18.5%]"><Plus className="h-7 w-7 text-white/25" /></div>)}
+          </div>
+        </div>
+      )}
+      <div className="absolute inset-x-4 bottom-3 z-30 h-[2.1rem] border border-white/28 opacity-60 backdrop-blur-[10px] lg:h-[2.7rem]" style={{ background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 52%, white 28%), color-mix(in srgb, ${accent} 62%, transparent 18%))` }} />
+      <div className="absolute inset-x-5 bottom-[2.6rem] z-40 h-px bg-white/55 lg:bottom-[3.15rem]" />
+      <div className="absolute bottom-2 left-7 z-40 h-4 w-4 -translate-x-1/2 rounded-full border border-white/35 bg-[#bec5cf] shadow-sm" />
+      <div className="absolute bottom-2 right-7 z-40 h-4 w-4 translate-x-1/2 rounded-full border border-white/35 bg-[#bec5cf] shadow-sm" />
+    </div>
+    <p className="mt-1 text-xs text-white/45">{itemCount} {itemCount === 1 ? "title" : "titles"}{list.description ? ` · ${list.description}` : ""}</p>
+  </Link>;
+}
 
 type ProfileBootstrapCache = {
   profileUser: User;
@@ -65,12 +122,6 @@ type ProfileBootstrapCache = {
   displayList: ListWithItems | null;
   selectedDisplayListId: string;
   recentMoodGenres: string[];
-};
-
-type RankedTasteValue = {
-  count: number;
-  firstSeen: number;
-  label: string;
 };
 
 function formatCompactCount(count: number): string {
@@ -110,14 +161,14 @@ function getCurrentMoodGenres(logs: MovieLogWithContent[]): string[] {
     .filter((log) => log.content_type === "movie" && !log.watch_later && Boolean(log.watched_date))
     .sort(
       (a, b) =>
-        new Date(b.created_at || b.updated_at || b.watched_date).getTime() -
-        new Date(a.created_at || a.updated_at || a.watched_date).getTime()
+        new Date(b.watched_date).getTime() -
+        new Date(a.watched_date).getTime()
     )
     .slice(0, 2);
 
   if (recentMovieLogs.length === 0) return [];
 
-  return getRecentMoodGenres(recentMovieLogs, 1);
+  return getRecentMoodGenres(recentMovieLogs, 2);
 }
 
 function isFallbackProfileName(value?: string | null): boolean {
@@ -142,99 +193,6 @@ function getFollowListDisplayName(user: Pick<User, "id" | "username" | "name">):
 function shouldShowFollowListHandle(user: Pick<User, "id" | "username" | "name">): boolean {
   const name = user.name?.trim();
   return Boolean(name && !isFallbackProfileName(name));
-}
-
-function formatCinemaCardLanguage(language: string | null | undefined): string | null {
-  const cleaned = language?.trim();
-  if (!cleaned) return null;
-
-  const normalized = cleaned.toLowerCase();
-  if (/^[a-z]{2,3}(-[a-z]{2})?$/.test(normalized) && typeof Intl !== "undefined" && "DisplayNames" in Intl) {
-    try {
-      const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
-      const label = displayNames.of(normalized);
-      if (label) return label;
-    } catch {
-      // Ignore locale formatting failures and fall through to the raw label.
-    }
-  }
-
-  if (cleaned === normalized) {
-    return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
-  }
-
-  return cleaned;
-}
-
-function addRankedTasteValue(
-  collection: Map<string, RankedTasteValue>,
-  value: string | null | undefined,
-  index: number
-) {
-  const cleaned = value?.trim().replace(/\s+/g, " ");
-  if (!cleaned) return;
-
-  const key = cleaned.toLowerCase();
-  const existing = collection.get(key);
-  if (existing) {
-    existing.count += 1;
-    return;
-  }
-
-  collection.set(key, {
-    count: 1,
-    firstSeen: index,
-    label: cleaned,
-  });
-}
-
-function getTopRankedTasteValues(collection: Map<string, RankedTasteValue>, limit: number): string[] {
-  return Array.from(collection.values())
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return a.firstSeen - b.firstSeen;
-    })
-    .slice(0, limit)
-    .map((entry) => entry.label);
-}
-
-function buildCinemaCardSummary(logs: MovieLogWithContent[]): CinemaCardSummary {
-  const watchedLogs = logs.filter((log) => !log.watch_later && Boolean(log.watched_date));
-  const genreCounts = new Map<string, RankedTasteValue>();
-  const directorCounts = new Map<string, RankedTasteValue>();
-  const actorCounts = new Map<string, RankedTasteValue>();
-  const languageCounts = new Map<string, RankedTasteValue>();
-  let movieRuntimeTotal = 0;
-  let movieRuntimeCount = 0;
-
-  watchedLogs.forEach((log, index) => {
-    const content = log.content;
-
-    (content.genres || []).forEach((genre) => addRankedTasteValue(genreCounts, genre, index));
-    addRankedTasteValue(directorCounts, content.director || null, index);
-
-    const leadActor =
-      (Array.isArray(content.actors) && content.actors.length > 0 ? content.actors[0] : null) ||
-      (Array.isArray(content.cast) && content.cast.length > 0 ? content.cast[0] : null);
-    addRankedTasteValue(actorCounts, leadActor, index);
-
-    addRankedTasteValue(languageCounts, formatCinemaCardLanguage(content.language), index);
-
-    if (log.content_type === "movie" && Number.isFinite(content.runtime || 0) && (content.runtime || 0) > 0) {
-      movieRuntimeTotal += Number(content.runtime);
-      movieRuntimeCount += 1;
-    }
-  });
-
-  return {
-    topGenres: getTopRankedTasteValues(genreCounts, 2),
-    topDirector: getTopRankedTasteValues(directorCounts, 1)[0] || null,
-    topActor: getTopRankedTasteValues(actorCounts, 1)[0] || null,
-    topLanguage: getTopRankedTasteValues(languageCounts, 1)[0] || null,
-    averageRuntimeMinutes: movieRuntimeCount ? Math.round(movieRuntimeTotal / movieRuntimeCount) : null,
-    totalLoggedTitles: watchedLogs.length,
-    totalMovieLogs: movieRuntimeCount,
-  };
 }
 
 function ProfilePageInner() {
@@ -265,6 +223,10 @@ function ProfilePageInner() {
   const [followingCount, setFollowingCount] = useState(0);
   const [recentMoodGenres, setRecentMoodGenres] = useState<string[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("all");
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [listsLoading, setListsLoading] = useState(false);
   const [profileLogs, setProfileLogs] = useState<MovieLogWithContent[]>([]);
   const [profileLogsLoading, setProfileLogsLoading] = useState(false);
@@ -286,6 +248,8 @@ function ProfilePageInner() {
   const [ownerPublicLists, setOwnerPublicLists] = useState<any[]>([]);
   const [ownerPublicListsLoading, setOwnerPublicListsLoading] = useState(false);
   const [profileLists, setProfileLists] = useState<List[]>([]);
+  const [profileListCovers, setProfileListCovers] = useState<Record<string, string[]>>({});
+  const [profileListCounts, setProfileListCounts] = useState<Record<string, number>>({});
   const [selectedDisplayListId, setSelectedDisplayListId] = useState("");
   const [updatingDisplayList, setUpdatingDisplayList] = useState(false);
   const [displayListMenuOpen, setDisplayListMenuOpen] = useState(false);
@@ -295,8 +259,39 @@ function ProfilePageInner() {
   const [notificationUpdateLoading, setNotificationUpdateLoading] = useState(false);
   const displayListMenuRef = useRef<HTMLDivElement | null>(null);
   const profileActionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const profileListAccessDataRef = useRef<Promise<AuthorizedListData> | null>(null);
+
+  const getProfileListAccessData = () => {
+    if (!profileListAccessDataRef.current) {
+      profileListAccessDataRef.current = getAuthorizedListData().catch((error) => {
+        profileListAccessDataRef.current = null;
+        throw error;
+      });
+    }
+    return profileListAccessDataRef.current;
+  };
 
   // --- End state declarations ---
+  const emptyLogEngagement = useMemo(() => getEmptyLogEngagement(), []);
+
+  const dateRange = useMemo(() => {
+    const today = new Date();
+    if (dateRangePreset === "month") {
+      return { startDate: localDateKey(new Date(today.getFullYear(), today.getMonth(), 1)), endDate: localDateKey(today) };
+    }
+    if (dateRangePreset === "year") {
+      return { startDate: `${today.getFullYear()}-01-01`, endDate: localDateKey(today) };
+    }
+    if (dateRangePreset === "custom") {
+      return { startDate: customStartDate || undefined, endDate: customEndDate || undefined };
+    }
+    return { startDate: undefined, endDate: undefined };
+  }, [customEndDate, customStartDate, dateRangePreset]);
+  const invalidDateRange = Boolean(dateRange.startDate && dateRange.endDate && dateRange.startDate > dateRange.endDate);
+  const visibleProfileLogs = useMemo(() => profileLogs.filter((log) =>
+    (!dateRange.startDate || log.watched_date >= dateRange.startDate) &&
+    (!dateRange.endDate || log.watched_date <= dateRange.endDate)
+  ), [dateRange.endDate, dateRange.startDate, profileLogs]);
 
   const displayListTitleClass = displayList
     ? displayList.name.length > 36
@@ -367,6 +362,7 @@ function ProfilePageInner() {
   };
 
   const [activeTab, setActiveTab] = useState<string>("stats");
+  const activeProfileTab = activeTab === "logs" ? "stats" : activeTab;
   const [followModalType, setFollowModalType] = useState<FollowModalType>("followers");
   const [isFollowModalOpen, setIsFollowModalOpen] = useState(false);
   const [followSearch, setFollowSearch] = useState("");
@@ -382,6 +378,23 @@ function ProfilePageInner() {
 
   const visibleUsername =
     profileUser?.username?.trim() || normalizedUsername || profileUser?.id || "user";
+
+  useEffect(() => {
+    if (!isFollowModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsFollowModalOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isFollowModalOpen]);
 
   useEffect(() => {
     if (!displayListMenuOpen) return;
@@ -610,6 +623,9 @@ function ProfilePageInner() {
   }, [followUsersLoaded, followerIds, followingIds, isFollowModalOpen]);
 
   const isOwnProfile = !!currentUser && !!profileUser && currentUser.id === profileUser.id;
+  useEffect(() => {
+    if (!isOwnProfile && activeTab === "honours") setActiveTab("stats");
+  }, [activeTab, isOwnProfile]);
   const notificationTargetName = profileUser?.name || "this person";
 
   const getNotificationToggleState = (key: "shareNotifications" | "logNotifications") => {
@@ -628,11 +644,10 @@ function ProfilePageInner() {
 
   const viewerToProfileFollow = useMemo(() => {
     if (!currentUser || !profileUser) return null;
-    return (
-      allFollows.find(
-        (follow) => follow.follower_id === currentUser.id && follow.following_id === profileUser.id
-      ) || null
+    const matching = allFollows.filter(
+      (follow) => follow.follower_id === currentUser.id && follow.following_id === profileUser.id
     );
+    return matching.find((follow) => follow.status === "accepted") || matching[0] || null;
   }, [allFollows, currentUser, profileUser]);
 
   const isFollowingProfile = viewerToProfileFollow?.status === "accepted";
@@ -682,7 +697,10 @@ function ProfilePageInner() {
 
     const loadMoodGenres = async () => {
       try {
-        const recentLogs = await getUserMovieLogs(profileUser.id, 4);
+        const recentLogs = await getUserMovieLogs(profileUser.id, 2, profileUser, {
+          contentType: "movie",
+          summaryOnly: true,
+        });
         if (cancelled) return;
         setRecentMoodGenres(getCurrentMoodGenres(recentLogs));
       } catch (error) {
@@ -737,14 +755,28 @@ function ProfilePageInner() {
   ]);
 
   useEffect(() => {
-    if (!profileUser || activeTab !== "stats" || !canAccessActivity) return;
+    if (!profileUser || activeProfileTab !== "stats" || !canAccessActivity || invalidDateRange) return;
 
     let cancelled = false;
 
     const loadStats = async () => {
       try {
         setStatsLoading(true);
-        const statsObj = await getDetailedUserStats(profileUser.id);
+        const dirtyKey = `profile-stats-dirty:${profileUser.id}`;
+        let fresh = false;
+        try {
+          fresh = window.sessionStorage.getItem(dirtyKey) === "true";
+        } catch {
+          // Stats still load when browser storage is unavailable.
+        }
+        const statsObj = await getDetailedUserStats(profileUser.id, { ...dateRange, fresh });
+        if (fresh) {
+          try {
+            window.sessionStorage.removeItem(dirtyKey);
+          } catch {
+            // The refreshed result is already available.
+          }
+        }
 
         if (cancelled) return;
         setStats(statsObj);
@@ -762,17 +794,20 @@ function ProfilePageInner() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, canAccessActivity, profileUser]);
+  }, [activeProfileTab, canAccessActivity, dateRange, invalidDateRange, profileUser]);
 
   useEffect(() => {
-    if (!profileUser || activeTab !== "logs" || !canAccessActivity) return;
+    if (!profileUser || activeProfileTab !== "logs" || !canAccessActivity || invalidDateRange) return;
 
     let cancelled = false;
 
     (async () => {
       try {
         setProfileLogsLoading(true);
-        const rawLogs = await getUserMovieLogs(profileUser.id, profileLogsLimit);
+        const rawLogs = await getUserMovieLogs(profileUser.id, profileLogsLimit, profileUser, {
+          ...dateRange,
+          summaryOnly: true,
+        });
         if (cancelled) return;
 
         const withNotes = rawLogs.filter((log) => getVisibleLogNotes(log).trim().length > 0);
@@ -781,7 +816,8 @@ function ProfilePageInner() {
 
         const engagement = await getLogEngagementBatch(
           withNotes.map((log) => log.id),
-          currentUser?.id
+          currentUser?.id,
+          { includeSaves: false }
         );
         if (!cancelled) setProfileLogsEngagement(engagement);
       } catch (error) {
@@ -794,29 +830,58 @@ function ProfilePageInner() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, canAccessActivity, profileUser, profileLogsLimit, currentUser?.id]);
+  }, [activeProfileTab, canAccessActivity, profileUser, profileLogsLimit, currentUser?.id, dateRange, invalidDateRange]);
 
   useEffect(() => {
-    if (!profileUser || activeTab !== "lists" || !canAccessLists) return;
+    if (!profileUser || activeProfileTab !== "lists" || !canAccessLists) return;
 
     let cancelled = false;
 
     const loadLists = async () => {
       try {
         setListsLoading(true);
-        const lists = await getUserLists(profileUser.id);
+        const listAccessData = await getProfileListAccessData();
+        const lists = await getUserLists(profileUser.id, listAccessData);
         if (cancelled) return;
 
-        if (isOwnProfile) {
-          setProfileLists(lists);
-        } else {
-          setProfileLists(
-            lists.filter(
-              (list: List) =>
-                list.privacy === "public" &&
-                Boolean(profileUserSettings.social.shareListsPublicly)
-            )
-          );
+        const visibleLists = isOwnProfile
+          ? lists
+          : lists.filter((list: List) => list.privacy === "public" && Boolean(profileUserSettings.social.shareListsPublicly));
+        setProfileLists(visibleLists);
+        setListsLoading(false);
+        setProfileListCovers({});
+        setProfileListCounts({});
+        if (!visibleLists.length) return;
+
+        // One list-item read serves all shelves. Poster lookups are capped and shared by content ID.
+        const allItems = Object.values(listAccessData.items) as Array<ListItem & { poster_url_snapshot?: string | null }>;
+        const posterRequests = new Map<string, Promise<string | null>>();
+        const nextCovers: Record<string, string[]> = {};
+        const nextCounts: Record<string, number> = {};
+        await Promise.all(visibleLists.map(async (list) => {
+          const items = allItems.filter((item) => item.list_id === list.id)
+            .sort((a, b) => (a.position || 0) - (b.position || 0));
+          nextCounts[list.id] = items.length;
+          const posters = await Promise.all(items.slice(0, 4).map(async (item) => {
+            if (item.poster_url_snapshot) return item.poster_url_snapshot;
+            const key = `${item.content_type}:${item.content_id}`;
+            if (!posterRequests.has(key)) {
+              posterRequests.set(key, (async () => {
+                try {
+                  const summary = item.content_type === "tv"
+                    ? await getShowCardSummary(item.content_id)
+                    : await getMovieCardSummary(item.content_id);
+                  return summary?.poster_url || null;
+                } catch { return null; }
+              })());
+            }
+            return posterRequests.get(key)!;
+          }));
+          nextCovers[list.id] = posters.filter((poster): poster is string => Boolean(poster));
+        }));
+        if (!cancelled) {
+          setProfileListCovers(nextCovers);
+          setProfileListCounts(nextCounts);
         }
       } catch (error) {
         console.error("[PROFILE] Error loading lists:", error);
@@ -832,7 +897,7 @@ function ProfilePageInner() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, canAccessLists, isOwnProfile, profileUser]);
+  }, [activeProfileTab, canAccessLists, isOwnProfile, profileUser, profileUserSettings.social.shareListsPublicly]);
 
   useEffect(() => {
     if (!profileUser || !isOwnProfile) return;
@@ -842,7 +907,8 @@ function ProfilePageInner() {
     const loadOwnerPublicLists = async () => {
       try {
         setOwnerPublicListsLoading(true);
-        const lists = await getUserLists(profileUser.id);
+        const listAccessData = await getProfileListAccessData();
+        const lists = await getUserLists(profileUser.id, listAccessData);
         if (cancelled) return;
         setOwnerPublicLists(lists.filter((list: List) => list.privacy === "public"));
       } catch (error) {
@@ -863,7 +929,7 @@ function ProfilePageInner() {
 
   useEffect(() => {
     setOpenFollowMenuUserId(null);
-  }, [activeTab, followModalType]);
+  }, [activeProfileTab, followModalType]);
 
   useEffect(() => {
     if (!isOwnProfile || searchParams.get("importRatings") !== "1") return;
@@ -884,17 +950,25 @@ function ProfilePageInner() {
   const shownUsers = useMemo(() => {
     const list = followModalType === "followers" ? followers : following;
     const query = followSearch.trim().toLowerCase();
-
-    if (!query) {
-      return list;
-    }
-
-    return list.filter((user) => {
+    const filtered = list.filter((user) => {
+      if (!query) return true;
       const name = user.name?.toLowerCase() || "";
       const uname = user.username?.toLowerCase() || "";
       return name.includes(query) || uname.includes(query);
     });
-  }, [followModalType, followers, following, followSearch]);
+    if (followModalType !== "followers" || !currentUser) return filtered;
+
+    const followingIds = new Set(allFollows
+      .filter((follow) => follow.follower_id === currentUser.id && follow.status === "accepted")
+      .map((follow) => follow.following_id));
+    const followerIds = new Set(allFollows
+      .filter((follow) => follow.following_id === currentUser.id)
+      .map((follow) => follow.follower_id));
+    return filtered.sort((a, b) =>
+      Number(followerIds.has(a.id) && !followingIds.has(a.id)) -
+      Number(followerIds.has(b.id) && !followingIds.has(b.id))
+    );
+  }, [followModalType, followers, following, followSearch, allFollows, currentUser]);
 
   const getMyAcceptedFollowRecordToUser = (targetUserId: string) => {
     if (!currentUser) return null;
@@ -931,6 +1005,7 @@ function ProfilePageInner() {
 
   const removeFollowRecord = async (followId: string) => {
     await set(ref(db, `follows/${followId}`), null);
+    if (currentUser) scheduleHonoursRecalculation(currentUser.id);
     setAllFollows((prev) => prev.filter((follow) => follow.id !== followId));
   };
 
@@ -953,7 +1028,10 @@ function ProfilePageInner() {
     };
 
     await set(ref(db, `follows/${followId}`), newFollow);
-    await createFollowAcceptedNotification(targetUser.id, followId, currentUser, createdAt);
+    const targetAlreadyFollowsCurrentUser = allFollows.some(
+      (follow) => follow.follower_id === targetUser.id && follow.following_id === currentUser.id && follow.status === "accepted"
+    );
+    await createFollowAcceptedNotification(targetUser.id, followId, currentUser, createdAt, targetAlreadyFollowsCurrentUser);
     setAllFollows((prev) => [...prev, newFollow]);
   };
 
@@ -975,7 +1053,10 @@ function ProfilePageInner() {
     };
 
     await set(ref(db, `follows/${followId}`), acceptedFollow);
-    await createFollowAcceptedNotification(targetUser.id, followId, currentUser, createdAt);
+    const targetAlreadyFollowsCurrentUser = allFollows.some(
+      (follow) => follow.follower_id === targetUser.id && follow.following_id === currentUser.id && follow.status === "accepted"
+    );
+    await createFollowAcceptedNotification(targetUser.id, followId, currentUser, createdAt, targetAlreadyFollowsCurrentUser);
     setAllFollows((prev) => [
       ...prev.filter(
         (follow) => !(follow.follower_id === currentUser.id && follow.following_id === targetUser.id)
@@ -1212,13 +1293,19 @@ function ProfilePageInner() {
   const handleStatDrillDown = (type: "all" | "movie" | "tv" | "masterpiece" | "good" | "average" | "bad") => {
     if (!profileUser) return;
 
+    const params = new URLSearchParams();
+    if (dateRange.startDate) params.set("from", dateRange.startDate);
+    if (dateRange.endDate) params.set("to", dateRange.endDate);
+
     if (type === "all" || type === "movie" || type === "tv") {
-      router.push(`/user/${profileUser.username}/logs?content=${type}`);
+      params.set("content", type);
+      router.push(`/user/${profileUser.username}/logs?${params.toString()}`);
       return;
     }
 
     const reaction = type === "masterpiece" ? "2" : type === "good" ? "1" : type === "average" ? "1.5" : "0";
-    router.push(`/user/${profileUser.username}/logs?reaction=${reaction}`);
+    params.set("reaction", reaction);
+    router.push(`/user/${profileUser.username}/logs?${params.toString()}`);
   };
 
   const handleTasteDrillDown = (type: "genre" | "actor" | "director" | "language", value: string) => {
@@ -1228,6 +1315,8 @@ function ProfilePageInner() {
       taste: type,
       value,
     });
+    if (dateRange.startDate) params.set("from", dateRange.startDate);
+    if (dateRange.endDate) params.set("to", dateRange.endDate);
 
     router.push(`/user/${profileUser.username}/logs?${params.toString()}`);
   };
@@ -1236,8 +1325,17 @@ function ProfilePageInner() {
     try {
       setCinemaCardLoading(true);
       setCinemaCardError(null);
-      const logs = await getUserMovieLogs(targetUser.id, Number.MAX_SAFE_INTEGER, targetUser);
-      setCinemaCardSummary(buildCinemaCardSummary(logs));
+      const stats = await getDetailedUserStats(targetUser.id);
+      const mostCommon = (items: Array<{ label: string }>) => items[0]?.label || null;
+      setCinemaCardSummary({
+        topGenres: stats.genreDistribution.slice(0, 2).map((item) => item.label),
+        topDirector: mostCommon(stats.topDirectors),
+        topActor: mostCommon(stats.topActors),
+        topLanguage: mostCommon(stats.languageDistribution),
+        averageRuntimeMinutes: null,
+        totalLoggedTitles: stats.movieCount + stats.tvCount,
+        totalMovieLogs: stats.movieCount,
+      });
     } catch (error) {
       console.error("[PROFILE] Error loading cinema card:", error);
       setCinemaCardSummary(null);
@@ -1496,7 +1594,7 @@ function ProfilePageInner() {
         skipped,
       });
 
-      const updatedStats = await getDetailedUserStats(profileUser.id);
+      const updatedStats = await getDetailedUserStats(profileUser.id, { ...dateRange, fresh: true });
       setStats(updatedStats);
     } catch (error) {
       console.error("CSV import failed:", error);
@@ -1509,6 +1607,24 @@ function ProfilePageInner() {
   if (loading || !profileUser) {
     return null;
   }
+
+  const dateFilterControl = <div className="relative flex shrink-0 items-center gap-2">
+    {dateRangePreset !== "all" && <span className="hidden text-xs font-medium text-white/50 sm:inline">{dateRangePreset === "month" ? "This month" : dateRangePreset === "year" ? "This year" : customStartDate || customEndDate ? `${customStartDate || "Start"} – ${customEndDate || "Today"}` : "Custom range"}</span>}
+    <button type="button" onClick={() => setDateFilterOpen((open) => !open)} aria-label="Filter watch dates" aria-expanded={dateFilterOpen} className={`flex h-10 w-10 items-center justify-center rounded-full border transition ${dateRangePreset !== "all" ? "border-[#ff7a1a] bg-[#ff7a1a] text-black" : "border-white/15 bg-white/[0.04] text-[#f5f0de] hover:border-white/30"}`}><Filter className="h-4 w-4" /></button>
+    {dateFilterOpen && <div className="absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-white/15 bg-[#171717] p-3 shadow-[0_18px_45px_rgba(0,0,0,0.5)]">
+      <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-[#f5f0de]">Watch dates</h3><button type="button" onClick={() => setDateFilterOpen(false)} aria-label="Close date filter" className="rounded-full p-1 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button></div>
+      <div className="space-y-1">
+        {([ ["all", "All time"], ["month", "This month"], ["year", "This year"], ["custom", "Custom range"] ] as const).map(([value, label]) => (
+          <button key={value} type="button" onClick={() => { setDateRangePreset(value); if (value !== "custom") setDateFilterOpen(false); }} aria-pressed={dateRangePreset === value} className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${dateRangePreset === value ? "bg-[#ff7a1a] font-bold text-black" : "text-[#f5f0de]/75 hover:bg-white/5 hover:text-[#f5f0de]"}`}>{label}</button>
+        ))}
+      </div>
+      {dateRangePreset === "custom" && <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
+        <label className="min-w-0 text-xs font-medium text-white/60">From<input type="date" value={customStartDate} max={customEndDate || undefined} onChange={(event) => setCustomStartDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-white/15 bg-[#111111] px-2 py-2 text-xs text-[#f5f0de] outline-none [color-scheme:dark] focus:border-[#ff7a1a]" /></label>
+        <label className="min-w-0 text-xs font-medium text-white/60">To<input type="date" value={customEndDate} min={customStartDate || undefined} onChange={(event) => setCustomEndDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-white/15 bg-[#111111] px-2 py-2 text-xs text-[#f5f0de] outline-none [color-scheme:dark] focus:border-[#ff7a1a]" /></label>
+      </div>}
+      {invalidDateRange && <p className="mt-2 text-xs text-[#ff9b52]">The end date must be on or after the start date.</p>}
+    </div>}
+  </div>;
 
   return (
     <PageLayout user={currentUser} onSignOut={handleSignOut} headerAction="settings">
@@ -1778,6 +1894,12 @@ function ProfilePageInner() {
                   >
                     Cinema Card
                   </button>
+                  <Link
+                    href="/passport"
+                    className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-[#ff7a1a]/35 bg-[#ff7a1a]/10 px-2 py-2 text-[11px] font-black text-[#ffd7b0] transition hover:bg-[#ff7a1a]/16 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
+                  >
+                    Cine Passport ↗
+                  </Link>
                 </>
               ) : (
                 <>
@@ -1954,7 +2076,8 @@ function ProfilePageInner() {
         <section className="mb-8 border-t border-white/10 pt-4">
           <div className="rounded-[18px] border border-[#ff7a1a]/25 bg-[#151515] p-[3px]">
             <AnimatedBackground
-              defaultValue={activeTab}
+              key={activeTab === "logs" ? "legacy-logs" : "profile-tabs"}
+              defaultValue={activeProfileTab}
               className="rounded-[14px] bg-[#ff7a1a]"
               transition={{
                 ease: "easeInOut",
@@ -1967,7 +2090,7 @@ function ProfilePageInner() {
                   type="button"
                   onClick={() => setActiveTab("stats")}
                   className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
-                    activeTab === "stats" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
+                    activeProfileTab === "stats" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
                   }`}
                 >
                   Stats
@@ -1979,10 +2102,22 @@ function ProfilePageInner() {
                   type="button"
                   onClick={() => setActiveTab("lists")}
                   className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
-                    activeTab === "lists" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
+                    activeProfileTab === "lists" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
                   }`}
                 >
                   Lists
+                </button>
+              )}
+              {isOwnProfile && (
+                <button
+                  data-id="honours"
+                  type="button"
+                  onClick={() => setActiveTab("honours")}
+                  className={`inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[14px] px-4 py-3 text-sm font-semibold transition active:scale-[0.98] ${
+                    activeProfileTab === "honours" ? "text-black" : "text-[#f5f0de]/70 hover:text-[#f5f0de]"
+                  }`}
+                >
+                  Honours
                 </button>
               )}
             </AnimatedBackground>
@@ -1990,32 +2125,23 @@ function ProfilePageInner() {
         </section>
 
         {isFollowModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-3 pb-[calc(8rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:items-center sm:pb-3">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-20 backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:pb-6">
             <button
               type="button"
               className="absolute inset-0 cursor-default"
               onClick={() => setIsFollowModalOpen(false)}
               aria-label="Close people list"
             />
-            <div className="relative w-full max-w-3xl overflow-hidden rounded-t-[2rem] border border-white/10 bg-[#0d0d0d] shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:rounded-[2rem]">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.18),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_30%)]" />
-              <div className="relative max-h-[78dvh] overflow-y-auto p-4 sm:max-h-[82dvh] sm:p-6">
-                <div className="mb-5 flex items-start justify-between gap-4">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-black uppercase tracking-[0.32em] text-[#ffb36b]/75">People</p>
-                    <h2 className="text-2xl font-black tracking-tight text-[#f5f0de] sm:text-3xl">
-                      {followModalType === "followers" ? "Followers" : "Following"}
-                    </h2>
-                    <p className="max-w-md text-sm leading-6 text-white/50">
-                      A cleaner view of the people connected to this profile.
-                    </p>
-                  </div>
+            <div className="relative w-full max-w-3xl rounded-[2rem] border border-white/10 bg-[#0d0d0d] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+              <div className="relative p-4 sm:p-6">
+                <div className="mb-3 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setIsFollowModalOpen(false)}
-                    className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm font-bold text-[#f5f0de] transition hover:border-[#ff7a1a]/30 hover:bg-[#ff7a1a]/10"
+                    aria-label="Close people list"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[#f5f0de] transition hover:bg-white/10"
                   >
-                    Close
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
 
@@ -2093,7 +2219,7 @@ function ProfilePageInner() {
                       return (
                         <div
                           key={listedUser.id}
-                          className="group flex items-center justify-between rounded-[1.4rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] px-4 py-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:border-[#ff7a1a]/25 hover:bg-[linear-gradient(180deg,rgba(255,122,26,0.10),rgba(255,255,255,0.03))]"
+                          className="group flex items-center justify-between rounded-[1.4rem] border border-white/10 bg-[#161616] px-4 py-4 transition hover:border-[#ff7a1a]/25 hover:bg-[#1d1d1d]"
                         >
                           <Link href={`/profile/${listedUser.username !== listedUser.id ? listedUser.username : listedUser.id}`} className="flex min-w-0 flex-1 items-center gap-3">
                             {listedUser.avatar_url ? (
@@ -2103,7 +2229,7 @@ function ProfilePageInner() {
                                 className="h-12 w-12 rounded-full object-cover ring-1 ring-white/10 shadow-[0_0_0_4px_rgba(255,255,255,0.03)]"
                               />
                             ) : (
-                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.35),rgba(17,17,17,0.95))] text-sm font-semibold text-[#f5f0de] ring-1 ring-white/10 shadow-[0_0_0_4px_rgba(255,255,255,0.03)]">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#30241d] text-sm font-semibold text-[#f5f0de] ring-1 ring-white/10">
                                 {getFollowListDisplayName(listedUser).charAt(0).toUpperCase()}
                               </div>
                             )}
@@ -2112,11 +2238,6 @@ function ProfilePageInner() {
                                 <p className="truncate text-sm font-semibold text-[#f5f0de] group-hover:text-[#ffb36b]">
                                   {getFollowListDisplayName(listedUser)}
                                 </p>
-                                {rowFollowState === "follow-back" ? (
-                                  <span className="rounded-full border border-[#ff7a1a]/30 bg-[#ff7a1a]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#ffb36b]">
-                                    Follow back
-                                  </span>
-                                ) : null}
                               </div>
                               {getDisplayUserHandle(listedUser, currentUser) ? (
                                 <p className="truncate text-xs text-white/55">{getDisplayUserHandle(listedUser, currentUser)}</p>
@@ -2227,40 +2348,40 @@ function ProfilePageInner() {
           loading={cinemaCardLoading}
           error={cinemaCardError}
         />
-        {activeTab === "stats" && canAccessActivity && (
-          <div className="space-y-6">
-            {statsLoading || !stats ? (
-              <div className="border border-white/10 bg-black p-6 text-sm text-white/55">
-                Loading stats...
-              </div>
+        {activeProfileTab === "stats" && canAccessActivity && (
+          <div className="space-y-6" aria-busy={statsLoading}>
+            {!stats ? (
+              <div><div className="mb-5 flex items-center justify-between gap-3"><h2 className="text-xl font-black text-[#f5f0de]">Your screen story</h2>{dateFilterControl}</div><div className="rounded-xl border border-white/10 bg-black p-6 text-sm text-white/55 sm:rounded-2xl">Loading stats...</div></div>
             ) : (
               <StatsInsights
                 stats={stats}
                 onStatClick={handleStatDrillDown}
                 onTasteClick={handleTasteDrillDown}
+                filterAction={dateFilterControl}
               />
             )}
           </div>
         )}
 
-        {activeTab === "logs" && canAccessActivity && (
+        {activeProfileTab === "logs" && canAccessActivity && (
           <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-black text-[#f5f0de]">Logs</h2>{dateFilterControl}</div>
             {profileLogsLoading && profileLogs.length === 0 ? (
               <div className="border border-white/10 bg-black p-6 text-sm text-white/55">
                 Loading logs...
               </div>
-            ) : profileLogs.length === 0 ? (
+            ) : visibleProfileLogs.length === 0 ? (
               <div className="border border-white/10 bg-black p-6 text-center text-sm text-white/55">
                 No written logs yet.
               </div>
             ) : (
               <>
-                {profileLogs.map((log) => (
+                {visibleProfileLogs.map((log) => (
                   <LogFeedCard
                     key={log.id}
                     log={log}
                     currentUser={currentUser}
-                    engagement={profileLogsEngagement[log.id]}
+                    engagement={profileLogsEngagement[log.id] ?? emptyLogEngagement}
                     onEngagementChange={(logId, patch) =>
                       setProfileLogsEngagement((current) => ({
                         ...current,
@@ -2288,13 +2409,13 @@ function ProfilePageInner() {
           </div>
         )}
 
-        {activeTab === "lists" && profileUser && canAccessLists && (
+        {activeProfileTab === "lists" && profileUser && canAccessLists && (
           <section className="space-y-4">
             <div className="mb-4 flex items-end justify-between gap-3">
               <div>
                 <h2 className="text-lg font-black text-[#f5f0de]">Lists</h2>
                 <p className="text-sm text-white/55">
-                  {profileUser.name}'s lists
+                  {profileUser.name}&apos;s lists
                 </p>
               </div>
               <Link
@@ -2314,40 +2435,23 @@ function ProfilePageInner() {
                 No lists yet.
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-4">
                 {profileLists.map((list) => (
-                  <Link
+                  <ProfileListShelfCard
                     key={list.id}
-                    href={`/lists/${list.id}`}
-                    className="border-b border-white/10 py-4 transition hover:border-[#ff7a1a]/30"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-black text-[#f5f0de] sm:text-base">{list.name}</h3>
-                        <p className="mt-1 line-clamp-2 text-sm leading-6 text-white/55">
-                          {list.description || "No description yet."}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-[#ff7a1a] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-black">
-                        {list.privacy}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs font-semibold text-[#f5f0de]">
-                        {list.owner_id === profileUser.id ? "Owned" : "Collaborative"}
-                      </span>
-                      {list.is_ranked && (
-                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-[#ffb36b]">
-                          Ranked
-                        </span>
-                      )}
-                    </div>
-                  </Link>
+                    list={list}
+                    owner={profileUser}
+                    covers={profileListCovers[list.id] || []}
+                    itemCount={profileListCounts[list.id] || 0}
+                  />
                 ))}
               </div>
             )}
           </section>
+        )}
+
+        {activeProfileTab === "honours" && profileUser && isOwnProfile && (
+          <HonoursPanel userId={profileUser.id} isOwnProfile={isOwnProfile} />
         )}
 
       </div>

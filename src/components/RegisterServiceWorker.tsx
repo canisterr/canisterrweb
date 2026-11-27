@@ -5,6 +5,7 @@ import { useEffect } from "react";
 export default function RegisterServiceWorker() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+    if (["localhost", "127.0.0.1"].includes(window.location.hostname)) return;
 
     const windowWithIdle = window as Window & {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;

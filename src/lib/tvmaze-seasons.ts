@@ -1,5 +1,5 @@
 import { fetchTmdb } from "./tmdb-transport";
-import { getTmdbLookupId } from "./tvmaze";
+import { getTmdbLookupId, TMDB_TV_ID_OFFSET } from "./tvmaze";
 
 // Fetch all seasons for a TV show from TVMaze, with TMDB fallback.
 // https://www.tvmaze.com/api#show-seasons
@@ -111,8 +111,10 @@ export async function getShowSeasons(showId: number, tmdbId?: number | null): Pr
   const tmdbLookupId = getTmdbLookupId(showId, tmdbId);
 
   try {
-    const response = await fetch(`https://api.tvmaze.com/shows/${showId}/seasons`);
-    if (response.ok) {
+    const response = tmdbId || (tmdbLookupId !== null && (showId >= TMDB_TV_ID_OFFSET || showId === tmdbLookupId))
+      ? null
+      : await fetch(`https://api.tvmaze.com/shows/${showId}/seasons`);
+    if (response?.ok) {
       const data = (await response.json()) as TVMazeSeasonApi[];
       const mapped = data
         .filter((season) => typeof season.number === "number" && season.number > 0)

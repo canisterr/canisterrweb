@@ -1,5 +1,7 @@
-const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
+import { unstable_cache } from "next/cache";
+import { searchTmdbMovies } from "./tmdb-data";
+
+const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 const DAY_IN_SECONDS = 86_400;
 
 export type PosterItem = {
@@ -59,22 +61,7 @@ function pickBestTmdbResult(results: TMDBSearchResult[], title: string) {
 
 export async function fetchTMDBPoster(title: string): Promise<PosterItem> {
   try {
-    const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
-
-    if (!apiKey) {
-      return emptyPoster(title, "tmdb");
-    }
-
-    const res = await fetch(
-      `${TMDB_BASE_URL}/search/movie?api_key=${apiKey}&query=${encodeURIComponent(title)}`,
-      { next: { revalidate: DAY_IN_SECONDS } }
-    );
-
-    if (!res.ok) {
-      return emptyPoster(title, "tmdb");
-    }
-
-    const data = (await res.json()) as { results?: TMDBSearchResult[] };
+    const data = await searchTmdbMovies(title);
     const movie = pickBestTmdbResult(Array.isArray(data.results) ? data.results : [], title);
 
     return {
@@ -115,9 +102,15 @@ export async function fetchTVMazePoster(title: string): Promise<PosterItem> {
   }
 }
 
-export async function getHomepagePosters(): Promise<PosterItem[]> {
-  const tmdbPosters = await Promise.all(tmdbTitles.map(fetchTMDBPoster));
-  const breakingBad = await fetchTVMazePoster("Breaking Bad");
+async function loadHomepagePosters(): Promise<PosterItem[]> {
+  const [tmdbPosters, breakingBad] = await Promise.all([
+    Promise.all(tmdbTitles.map(fetchTMDBPoster)),
+    fetchTVMazePoster("Breaking Bad"),
+  ]);
 
   return [...tmdbPosters, breakingBad];
 }
+
+export const getHomepagePosters = unstable_cache(loadHomepagePosters, ["homepage-posters-v1"], {
+  revalidate: DAY_IN_SECONDS,
+});

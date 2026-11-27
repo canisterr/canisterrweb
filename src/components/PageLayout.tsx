@@ -64,7 +64,7 @@ export default function PageLayout({
     <div className={`${isBrutalist ? "brutalist bg-[#0a0a0a]" : "app-shell"} flex min-h-dvh overflow-x-hidden`}>
       <header
         className={`fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-center backdrop-blur-md lg:left-72 ${
-          isBrutalist ? "border-b border-white/10 bg-[#0a0a0a]/95" : "bg-white/95"
+          isBrutalist ? "bg-[#0a0a0a]/95" : "bg-white/95"
         }`}
       >
         {!isPwa ? (
@@ -82,8 +82,8 @@ export default function PageLayout({
           </button>
         ) : effectiveUser ? (
           <Link
-            href="/profile"
-            className={`absolute left-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full border transition lg:hidden ${
+            href={effectiveUser.username ? `/profile/${encodeURIComponent(effectiveUser.username)}` : "/profile"}
+            className={`absolute left-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full border transition ${
               isBrutalist
                 ? "border-white/10 bg-white/5 text-[#f5f0de] hover:border-[#ff7a1a]/35 hover:bg-white/10"
                 : "border-slate-200 bg-white text-slate-900 hover:border-slate-300"

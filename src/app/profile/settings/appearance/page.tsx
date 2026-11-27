@@ -1,6 +1,5 @@
 "use client";
 
-import { MoonStar, Palette, MonitorSmartphone } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
 import { SettingLine, SmallPillButton, CompactToggle, SettingsGroup } from "../settings-ui";
@@ -17,8 +16,8 @@ export default function SettingsAppearancePage() {
       description="Theme, text size and motion in a compact layout."
     >
       <SettingsGroup>
-        <SettingLine icon={Palette} title="Theme" description="Choose system, light or dark mode.">
-          <div className="flex items-center gap-2">
+        <SettingLine title="Theme" description="Choose system, light or dark mode." stacked>
+          <div className="flex flex-wrap items-center gap-2 ">
             {(["system", "light", "dark"] as const).map((theme) => (
               <SmallPillButton
                 key={theme}
@@ -31,8 +30,8 @@ export default function SettingsAppearancePage() {
           </div>
         </SettingLine>
 
-        <SettingLine icon={MonitorSmartphone} title="Text size" description="Keep text compact or open it up a little.">
-          <div className="flex items-center gap-2">
+        <SettingLine title="Text size" description="Keep text compact or open it up a little." stacked>
+          <div className="flex flex-wrap items-center gap-2 ">
             {(["compact", "comfortable", "large"] as const).map((size) => (
               <SmallPillButton
                 key={size}
@@ -45,7 +44,7 @@ export default function SettingsAppearancePage() {
           </div>
         </SettingLine>
 
-        <SettingLine icon={MoonStar} title="Reduce motion" description="Tone down motion if you want a calmer feel.">
+        <SettingLine title="Reduce motion" description="Tone down motion if you want a calmer feel.">
           <CompactToggle
             checked={settings.appearance.reduceMotion}
             onChange={(next) => void updateSection("appearance", { reduceMotion: next })}

@@ -60,35 +60,40 @@ export default function LogFeedCard({
   const [showLikers, setShowLikers] = useState(false);
   const [likers, setLikers] = useState<User[]>([]);
   const [likersLoading, setLikersLoading] = useState(false);
+  const engagementUserId = currentUser?.id;
 
   useEffect(() => {
     if (engagementProp) {
       setEngagement(engagementProp);
       return;
     }
+    if (!engagementUserId) {
+      setEngagement(getEmptyLogEngagement());
+      return;
+    }
 
     let cancelled = false;
     (async () => {
-      const [likes, commentsCount, saves] = await Promise.all([
-        getLogLikes(localLog.id, currentUser?.id || ""),
+      const [likesResult, commentsResult, savesResult] = await Promise.allSettled([
+        getLogLikes(localLog.id, engagementUserId),
         getLogCommentCount(localLog.id),
-        currentUser ? getLogSaves(localLog.id, currentUser.id) : Promise.resolve({ count: 0, saved: false }),
+        getLogSaves(localLog.id, engagementUserId),
       ]);
       if (cancelled) return;
       setEngagement({
-        likesCount: likes.count,
-        liked: likes.liked,
+        likesCount: likesResult.status === "fulfilled" ? likesResult.value.count : 0,
+        liked: likesResult.status === "fulfilled" ? likesResult.value.liked : false,
         likerPreview: [],
-        commentsCount,
-        savesCount: saves.count,
-        saved: saves.saved,
+        commentsCount: commentsResult.status === "fulfilled" ? commentsResult.value : 0,
+        savesCount: savesResult.status === "fulfilled" ? savesResult.value.count : 0,
+        saved: savesResult.status === "fulfilled" ? savesResult.value.saved : false,
       });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [engagementProp, localLog.id, currentUser?.id]);
+  }, [engagementProp, localLog.id, engagementUserId]);
 
   const notes = getVisibleLogNotes(localLog);
   if (!notes.trim()) return null;

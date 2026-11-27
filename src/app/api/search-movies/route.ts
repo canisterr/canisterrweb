@@ -1,15 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getFirebaseAdminDatabase } from "@/lib/firebase-admin";
+import { fetchTmdb } from "@/lib/tmdb-transport";
 import type { TMDBMovie } from "@/types";
-
-// Private server-only key — never sent to the browser
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 // Entries older than this are treated as stale and re-fetched from TMDB
 const CACHE_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 const MIN_CACHED_RESULTS = 10;
 const RESULT_LIMIT = 20;
+const SEARCH_CACHE_CONTROL = "public, s-maxage=120, stale-while-revalidate=300";
 
 const LEADING_ARTICLES = new Set(["a", "an", "the"]);
 
@@ -105,15 +103,8 @@ async function queryFirebaseCache(queryText: string): Promise<TMDBMovie[]> {
 }
 
 async function fetchFromTmdb(query: string, page: number): Promise<TMDBMovie[]> {
-  if (!TMDB_API_KEY) return [];
-
-  const url = new URL(`${TMDB_BASE_URL}/search/movie`);
-  url.searchParams.set("api_key", TMDB_API_KEY);
-  url.searchParams.set("query", query);
-  url.searchParams.set("page", String(page));
-
   try {
-    const response = await fetch(url.toString());
+    const response = await fetchTmdb("search/movie", { query, page });
     if (!response.ok) return [];
     const data = (await response.json()) as { results?: TMDBMovie[] };
     return data.results ?? [];
@@ -186,7 +177,7 @@ export async function GET(request: NextRequest) {
   const cached = await queryFirebaseCache(trimmed);
 
   if (cached.length >= MIN_CACHED_RESULTS && page === 1) {
-    return NextResponse.json(cached);
+    return NextResponse.json(cached, { headers: { "Cache-Control": SEARCH_CACHE_CONTROL } });
   }
 
   // 2. Call TMDB — API key stays server-side
@@ -199,5 +190,5 @@ export async function GET(request: NextRequest) {
 
   // 4. Return merged, deduped results
   const combined = dedupeMovies([...cached, ...fresh]).slice(0, RESULT_LIMIT);
-  return NextResponse.json(combined);
+  return NextResponse.json(combined, { headers: { "Cache-Control": SEARCH_CACHE_CONTROL } });
 }

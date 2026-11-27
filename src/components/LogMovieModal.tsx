@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Content, MovieLog, MovieLogWithContent, User } from "@/types";
 import { createMovieLog, getUserMovieLogs, updateMovieLog } from "@/lib/logs";
 import { getSeasonEpisodes, getShowEpisodes, getShowSeasons, type TVMazeEpisode, type TVMazeSeason } from "@/lib/tvmaze-seasons";
@@ -94,14 +93,6 @@ function getTitleClass(title: string): string {
   return "text-[15px] sm:text-[22px]";
 }
 
-function getReactionLabel(reaction: null | 0 | 1 | 1.5 | 2): string | null {
-  if (reaction === 0) return "bad";
-  if (reaction === 1) return "good";
-  if (reaction === 1.5) return "average";
-  if (reaction === 2) return "masterpiece";
-  return null;
-}
-
 export default function LogMovieModal({
   isOpen,
   onClose,
@@ -114,7 +105,6 @@ export default function LogMovieModal({
   initialTvScope = null,
   initialTvEpisodeChoice = null,
 }: LogMovieModalProps) {
-  const router = useRouter();
   const ALL_EPISODES_VALUE = "__all__";
   const isEditMode = mode === "edit";
   const contentLabel = content.type === "tv" ? "TV show" : "Movie";
@@ -126,7 +116,6 @@ export default function LogMovieModal({
   const [reviewDraft, setReviewDraft] = useState("");
   const [showReviewEditor, setShowReviewEditor] = useState(false);
   const [containsSpoiler, setContainsSpoiler] = useState(false);
-  const [shareToFriends, setShareToFriends] = useState(false);
   const [ticketImageUrl, setTicketImageUrl] = useState<string | null>(null);
   const [tvSeasons, setTvSeasons] = useState<TVMazeSeason[]>([]);
   const [tvEpisodes, setTvEpisodes] = useState<TVMazeEpisode[]>([]);
@@ -349,7 +338,6 @@ export default function LogMovieModal({
       setContextNotes(typeof existingContext.notes === "string" ? existingContext.notes : "");
       const rewatchValue = existingContext.rewatch;
       setIsRewatch(rewatchValue === "true" || rewatchValue === true);
-      setShareToFriends(false);
       setError("");
       const hasEpisodeContext =
         typeof existingLog.season === "number" || typeof existingLog.episode === "number";
@@ -364,7 +352,6 @@ export default function LogMovieModal({
       setReviewDraft("");
       setContainsSpoiler(false);
       setShowReviewEditor(false);
-      setShareToFriends(false);
       setShowContextLog(false);
       setLocation("");
       setWatchedWith("");
@@ -415,19 +402,24 @@ export default function LogMovieModal({
 
       const contentType = content.type === "tv" ? "tv" : "movie";
 
-      // Build context log object, only including fields with values
-      const contextLog = showContextLog
-        ? Object.fromEntries(
-            Object.entries({
-              location,
-              watched_with: watchedWith,
-              mood,
-              tags: contextTags,
-              notes: contextNotes,
-              rewatch: isRewatch ? "true" : undefined,
-            }).filter(([, value]) => value)
-          )
-        : undefined;
+      // Keep the theatre choice even when the optional context fields stay closed.
+      const contextValues = showContextLog
+        ? {
+            location,
+            watched_with: watchedWith,
+            mood,
+            tags: contextTags,
+            notes: contextNotes,
+            rewatch: isRewatch ? "true" : undefined,
+          }
+        : {
+            ...(isEditMode ? existingLog?.context_log : {}),
+            location: location || undefined,
+            rewatch: isRewatch ? "true" : undefined,
+          };
+      const contextLog = Object.fromEntries(
+        Object.entries(contextValues).filter(([, value]) => value)
+      ) as MovieLog["context_log"];
       const selectedEpisode =
         selectedEpisodeId === ALL_EPISODES_VALUE
           ? null
@@ -502,9 +494,16 @@ export default function LogMovieModal({
               ? undefined
               : selectedEpisode?.name ?? undefined
             : undefined,
-          containsSpoiler
+          containsSpoiler,
+          { title: content.title || ("name" in content ? content.name : "") || "", poster_url: content.poster_url || null }
         );
 
+      }
+
+      try {
+        window.sessionStorage.setItem(`profile-stats-dirty:${user.id}`, "true");
+      } catch {
+        // Logging succeeds even when browser storage is unavailable.
       }
 
       // Reset form
@@ -514,7 +513,6 @@ export default function LogMovieModal({
       setReviewDraft("");
       setContainsSpoiler(false);
       setShowReviewEditor(false);
-      setShareToFriends(false);
       setShowContextLog(false);
       setLocation("");
       setWatchedWith("");
@@ -530,14 +528,6 @@ export default function LogMovieModal({
         onLogCreated?.(successMessage);
       }
       onClose();
-      if (!isEditMode && shareToFriends) {
-        const shareNoteParam = encodeURIComponent(defaultShareNote);
-        const shareUrl =
-          contentType === "tv"
-            ? `/share?content_id=${content.id}&type=tv&note=${shareNoteParam}`
-            : `/share?movie_id=${content.id}&note=${shareNoteParam}`;
-        router.push(shareUrl);
-      }
     } catch (err) {
       reportAppError({
         title: "Log failed",
@@ -563,19 +553,6 @@ export default function LogMovieModal({
     : isEditMode
       ? "SAVE CHANGES"
       : getSubmitLabel(content, tvLogMode);
-  const defaultShareNote = (() => {
-    const review = notes.trim();
-    if (review) return review;
-
-    const actorName = user.name?.trim() || user.username?.trim() || "Someone";
-    const reactionLabel = getReactionLabel(reaction);
-    if (reactionLabel) {
-      return `${actorName} rated this as ${reactionLabel}.`;
-    }
-
-    return `${actorName} logged this.`;
-  })();
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#050505] text-[#F5F2EA]">
       <form
@@ -750,6 +727,17 @@ export default function LogMovieModal({
                     <span className="text-[11px] font-bold sm:text-xs">Rewatch</span>
                   </button>
                 </div>
+                {!isTvContent && (
+                  <button
+                    type="button"
+                    aria-pressed={location.trim().toLowerCase() === "theatre"}
+                    onClick={() => setLocation((current) => current.trim().toLowerCase() === "theatre" ? "" : "Theatre")}
+                    className={`mt-3 inline-flex items-center gap-2 border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] transition ${location.trim().toLowerCase() === "theatre" ? "border-[#FF6A00] bg-[#FF6A00]/12 text-[#FFB36B]" : "border-white/16 text-white/58 hover:border-white/35 hover:text-[#F5F2EA]"}`}
+                  >
+                    <span aria-hidden="true" className={`h-2 w-2 rounded-full ${location.trim().toLowerCase() === "theatre" ? "bg-[#FF6A00]" : "border border-white/45"}`} />
+                    Watched in theatre
+                  </button>
+                )}
               </div>
             </div>
           </section>
@@ -1007,31 +995,6 @@ export default function LogMovieModal({
             )}
           </section>
 
-          <section className="border-t border-white/14">
-            <label className="flex items-center justify-between gap-3 border-b border-white/10 py-3 sm:py-4">
-              <span>
-                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F5F2EA] sm:text-xs sm:tracking-[0.18em]">Share as Post</span>
-                <span className="mt-1 block text-[11px] text-white/58 sm:text-xs">Open share flow with a ready post message.</span>
-              </span>
-              <input
-                type="checkbox"
-                checked={shareToFriends}
-                onChange={(event) => setShareToFriends(event.target.checked)}
-                className="sr-only"
-              />
-              <span
-                className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
-                  shareToFriends ? "border-[#FF6A00] bg-[#FF6A00]" : "border-white/35"
-                }`}
-              >
-                <span
-                  className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-[#F5F2EA] transition ${
-                    shareToFriends ? "translate-x-5" : ""
-                  }`}
-                />
-              </span>
-            </label>
-          </section>
         </main>
 
         <div className="sticky bottom-0 -mx-4 mt-5 bg-[#050505]/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-7 sm:mt-6 sm:px-7 lg:-mx-9 lg:px-9">

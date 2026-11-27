@@ -1,0 +1,10 @@
+Recover your email address
+
+A change was made to the email address on your Canisterr account. Use the secure Firebase recovery link below to restore your previous address.
+
+Recover account: {{ACTION_URL}}
+
+If this was you, no action is needed. If not, recover your account and reset your password.
+
+Questions? support@canisterr.com
+Canisterr · https://canisterr.com

@@ -1,14 +1,18 @@
 import { fetchTmdb } from "./tmdb-transport";
 import { readBrowserCacheEntry, writeBrowserCache } from "./browser-cache";
+import type { TmdbWatchProviderAppend, WatchProviderRegions } from "./watch-providers";
 
 const TVMAZE_BASE_URL = "https://api.tvmaze.com";
 export const LIKELY_TMDB_TV_ID_THRESHOLD = 100000;
 export const TMDB_TV_ID_OFFSET = 1000000000;
 const SHOW_SEARCH_CACHE_VERSION = "v2";
 const showSearchRefreshInFlight = new Map<string, Promise<ShowDetails[]>>();
+const tvmazeOnlySearchInFlight = new Map<string, Promise<ShowDetails[]>>();
 const showBrowseRefreshInFlight = new Map<string, Promise<ShowDetails[]>>();
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const BROWSE_CACHE_TTL_MS = 60 * 60 * 1000;
+const SHOW_DETAILS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const showDetailsInFlight = new Map<number, Promise<ShowDetails | null>>();
 
 export interface TVMazeShow {
   id: number;
@@ -58,6 +62,10 @@ export interface ShowDetails extends TVMazeShow {
   poster_path?: string;
   backdrop_url?: string;
   backdrop_gallery_urls?: string[];
+  origin_countries?: string[];
+  season_count?: number;
+  episode_count?: number;
+  watch_providers?: WatchProviderRegions | null;
   overview?: string;
   release_date?: string;
   language?: string;
@@ -103,7 +111,7 @@ interface TMDBTVSearchResponse {
   results: TMDBTVSearchResult[];
 }
 
-interface TMDBTVDetails {
+interface TMDBTVDetails extends TmdbWatchProviderAppend {
   id: number;
   name: string;
   poster_path: string | null;
@@ -240,12 +248,17 @@ function mergeShowDetails(primary: ShowDetails, secondary: ShowDetails | null): 
     network: primary.network?.name ? primary.network : secondary.network,
     poster_url: primary.poster_url || secondary.poster_url,
     poster_path: primary.poster_path || secondary.poster_path,
+    backdrop_url: primary.backdrop_url || secondary.backdrop_url,
     backdrop_gallery_urls: primary.backdrop_gallery_urls?.length
       ? primary.backdrop_gallery_urls
       : secondary.backdrop_gallery_urls,
     overview: primary.overview || secondary.overview || primary.summary || secondary.summary,
     release_date: primary.release_date || secondary.release_date || primary.premiered || secondary.premiered,
     language: primary.language || secondary.language,
+    origin_countries: primary.origin_countries?.length ? primary.origin_countries : secondary.origin_countries,
+    season_count: primary.season_count ?? secondary.season_count,
+    episode_count: primary.episode_count ?? secondary.episode_count,
+    watch_providers: primary.watch_providers || secondary.watch_providers,
     source: primary.source || secondary.source,
     tmdb_id: primary.tmdb_id ?? secondary.tmdb_id,
     tvmaze_id: primary.tvmaze_id ?? secondary.tvmaze_id ?? (secondary.source === "tvmaze" ? secondary.id : undefined),
@@ -363,10 +376,15 @@ function mapTMDBShowDetails(show: TMDBTVDetails): ShowDetails {
     type: "tv" as const,
     poster_url: poster || undefined,
     poster_path: poster || undefined,
+    backdrop_url: show.backdrop_path ? `https://image.tmdb.org/t/p/w780${show.backdrop_path}` : undefined,
     backdrop_gallery_urls: backdropGalleryUrls,
     overview: show.overview || "",
     release_date: show.first_air_date,
     language: show.original_language || "en",
+    origin_countries: show.origin_country || [],
+    season_count: show.number_of_seasons,
+    episode_count: show.number_of_episodes,
+    watch_providers: show["watch/providers"]?.results || null,
     source: "tmdb",
     tmdb_id: show.id,
     tvmaze_id: undefined,
@@ -527,6 +545,31 @@ async function searchTVMazeShowsRaw(query: string): Promise<ShowDetails[]> {
   return data.map(mapTVMazeSearchShow);
 }
 
+export async function searchTVMazeShowsOnly(query: string): Promise<ShowDetails[]> {
+  const trimmed = normalizeShowSearchQuery(query);
+  if (!trimmed) return [];
+  const cacheKey = `tvmaze-only:${SHOW_SEARCH_CACHE_VERSION}:${normalizeSearchText(trimmed)}`;
+  const cached = readBrowserCacheEntry<ShowDetails[]>(cacheKey);
+  if (cached && !cached.isStale) return cached.value || [];
+  const existing = tvmazeOnlySearchInFlight.get(cacheKey);
+  if (existing) return existing;
+  const request = (async () => {
+    try {
+      const results = rankShows(await searchTVMazeShowsRaw(trimmed), trimmed);
+      writeBrowserCache(cacheKey, results, SEARCH_CACHE_TTL_MS);
+      return results;
+    } catch {
+      return cached?.value || [];
+    }
+  })().finally(() => tvmazeOnlySearchInFlight.delete(cacheKey));
+  tvmazeOnlySearchInFlight.set(cacheKey, request);
+  try {
+    return await request;
+  } catch {
+    return [];
+  }
+}
+
 async function searchTMDBShowsRaw(query: string): Promise<ShowDetails[]> {
   const tmdbResponse = await fetchTmdb("search/tv", {
     query,
@@ -611,7 +654,7 @@ async function fetchTVMazeShowDetailsById(showId: number): Promise<ShowDetails |
 }
 
 async function fetchTMDBShowDetailsById(tmdbId: number): Promise<ShowDetails | null> {
-  const tmdbResponse = await fetchTmdb(`tv/${tmdbId}`, { append_to_response: "images" });
+  const tmdbResponse = await fetchTmdb(`tv/${tmdbId}`, { append_to_response: "images,watch/providers" });
   if (!tmdbResponse.ok) return null;
 
   const tmdbData: TMDBTVDetails = await tmdbResponse.json();
@@ -631,16 +674,13 @@ async function findBestTVMazeShowDetails(titleHint: string, yearHint?: string): 
 }
 
 async function findBestTMDBShowDetails(titleHint: string, yearHint?: string): Promise<ShowDetails | null> {
-  const queries = Array.from(new Set(yearHint ? [`${titleHint} ${yearHint}`, titleHint] : [titleHint]));
-  for (const query of queries) {
-    const results = await searchTMDBShowsRaw(query);
-    const match = findBestShowMatchByTitle(results, titleHint, yearHint);
-    const tmdbId = match?.tmdb_id ?? getTmdbLookupId(match?.id || 0);
-    if (tmdbId) {
-      return fetchTMDBShowDetailsById(tmdbId);
-    }
-  }
-  return null;
+  // Search by title once, then use the year to rank the returned candidates.
+  // Appending a year to the query and retrying without it doubled TMDB search
+  // traffic for titles whose first query returned no exact match.
+  const results = await searchTMDBShowsRaw(titleHint);
+  const match = findBestShowMatchByTitle(results, titleHint, yearHint);
+  const tmdbId = match?.tmdb_id ?? getTmdbLookupId(match?.id || 0);
+  return tmdbId ? fetchTMDBShowDetailsById(tmdbId) : null;
 }
 
 export async function searchShows(query: string): Promise<ShowDetails[]> {
@@ -652,6 +692,7 @@ export async function searchShows(query: string): Promise<ShowDetails[]> {
     const cachedEntry = readBrowserCacheEntry<ShowDetails[]>(cacheKey);
     if (cachedEntry) {
       const cached = cachedEntry.value ?? [];
+      if (!cachedEntry.isStale) return cached;
       if (!showSearchRefreshInFlight.has(cacheKey)) {
         const refreshPromise = (async () => {
           const [tvmazeShows, tmdbShows] = await Promise.all([
@@ -693,7 +734,36 @@ export async function searchShows(query: string): Promise<ShowDetails[]> {
   }
 }
 
-export async function getShowDetails(showId: number): Promise<ShowDetails | null> {
+/** Fetch only the fields needed for a log card, without cast, crew, or cross-provider matching. */
+export async function getShowCardSummary(showId: number): Promise<{ title: string; poster_url: string | null } | null> {
+  const cacheKey = `tv:show-card-summary:v1:${showId}`;
+  const cached = readBrowserCacheEntry<{ title: string; poster_url: string | null }>(cacheKey);
+  if (cached?.value && !cached.isStale) return cached.value;
+  try {
+    const tmdbId = getTmdbLookupId(showId);
+    if (tmdbId) {
+      const response = await fetchTmdb(`tv/${tmdbId}`);
+      if (!response.ok) return null;
+      const show = (await response.json()) as { name?: string; poster_path?: string | null };
+      if (!show.name) return null;
+      const summary = { title: show.name, poster_url: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null };
+      writeBrowserCache(cacheKey, summary, 30 * 24 * 60 * 60 * 1000);
+      return summary;
+    }
+
+    const response = await fetch(`${TVMAZE_BASE_URL}/shows/${showId}`);
+    if (!response.ok) return null;
+    const show = (await response.json()) as TVMazeShow;
+    if (!show.name) return null;
+    const summary = { title: show.name, poster_url: show.image?.original || show.image?.medium || null };
+    writeBrowserCache(cacheKey, summary, 30 * 24 * 60 * 60 * 1000);
+    return summary;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveShowDetails(showId: number): Promise<ShowDetails | null> {
   try {
     const tmdbLookupId = getTmdbLookupId(showId);
     if (tmdbLookupId) {
@@ -734,4 +804,22 @@ export async function getShowDetails(showId: number): Promise<ShowDetails | null
       return null;
     }
   }
+}
+
+export async function getShowDetails(showId: number): Promise<ShowDetails | null> {
+  const cacheKey = `tv:show-details:v2:${showId}`;
+  const cached = readBrowserCacheEntry<ShowDetails>(cacheKey);
+  if (cached?.value && !cached.isStale) return cached.value;
+
+  const inFlight = showDetailsInFlight.get(showId);
+  if (inFlight) return inFlight;
+
+  const request = resolveShowDetails(showId)
+    .then((show) => {
+      if (show) writeBrowserCache(cacheKey, show, SHOW_DETAILS_CACHE_TTL_MS);
+      return show || cached?.value || null;
+    })
+    .finally(() => showDetailsInFlight.delete(showId));
+  showDetailsInFlight.set(showId, request);
+  return request;
 }

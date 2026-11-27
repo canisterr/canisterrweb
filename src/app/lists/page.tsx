@@ -1,28 +1,118 @@
 "use client";
 
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
-import { User, List, ListWithItems } from "@/types";
+import { User, List, ListItem, ListCollaborator, ListCollaboratorWithUser } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, get } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import {
-  getUserLists,
-  getPublicLists,
   createList,
-  getListCoverImages,
-  getListWithDetails,
   syncListCollaboratorIds,
 } from "@/lib/lists";
-import { Film, Globe, Loader2, Lock, Plus } from "lucide-react";
+import { createFallbackUser, getUsersByIds } from "@/lib/users";
+import { ChevronLeft, ChevronRight, Film, Globe, Loader2, Lock, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { AnimatedBackground } from "@/components/core/animated-background";
+import { getLogsForUser } from "@/lib/logs";
+import { getMovieCardSummary } from "@/lib/tmdb";
+import { getShowCardSummary } from "@/lib/tvmaze";
+import { getAuthorizedListData } from "@/lib/authorized-list-data";
 
-type DiscoverList = ListWithItems & {
+type DiscoverList = List & {
+  collaborators: ListCollaboratorWithUser[];
+  item_count: number;
   engagementScore: number;
 };
+
+type ListItemWithPoster = ListItem & { poster_url_snapshot?: string | null };
+
+async function loadListCards(userId: string) {
+  const data = await getAuthorizedListData();
+  const allLists = data.lists;
+  const allItems = Object.values(data.items) as ListItemWithPoster[];
+  const allCollaborators = Object.values(data.collaborators);
+  const collaboratorsByList = new Map<string, ListCollaborator[]>();
+  const itemsByList = new Map<string, ListItemWithPoster[]>();
+
+  for (const item of allItems) {
+    const items = itemsByList.get(item.list_id) || [];
+    items.push(item);
+    itemsByList.set(item.list_id, items);
+  }
+  for (const collaborator of allCollaborators) {
+    const collaborators = collaboratorsByList.get(collaborator.list_id) || [];
+    collaborators.push(collaborator);
+    collaboratorsByList.set(collaborator.list_id, collaborators);
+  }
+
+  const lists = Object.values(allLists);
+  const ownLists = lists.filter((list) =>
+    list.owner_id === userId || collaboratorsByList.get(list.id)?.some((collab) => collab.user_id === userId)
+  ).sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+  const publicLists = lists.filter((list) => list.privacy === "public")
+    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, 30);
+  const selectedLists = Array.from(new Map([...ownLists, ...publicLists].map((list) => [list.id, list])).values());
+  const userIds = selectedLists.flatMap((list) => [
+    list.owner_id,
+    ...(collaboratorsByList.get(list.id) || []).map((collab) => collab.user_id),
+  ]);
+  const users = await getUsersByIds(userIds);
+  users.canisterr = {
+    id: "canisterr",
+    username: "canisterr",
+    name: "Canisterr",
+    avatar_url: "/logo.png",
+    created_at: new Date(0).toISOString(),
+  };
+  const posterRequests = new Map<string, Promise<string | null>>();
+  const covers: Record<string, string[]> = {};
+
+  const cards = await Promise.all(selectedLists.map(async (list) => {
+    const items = (itemsByList.get(list.id) || []).sort((a, b) => (a.position || 0) - (b.position || 0));
+    const collaborators = (collaboratorsByList.get(list.id) || []).map((collab) => ({
+      ...collab,
+      user: users[collab.user_id] || createFallbackUser(collab.user_id),
+    }));
+    if (!collaborators.some((collab) => collab.user_id === list.owner_id)) {
+      collaborators.unshift({
+        id: `${list.id}-owner`, list_id: list.id, user_id: list.owner_id, role: "owner", joined_at: "",
+        user: users[list.owner_id] || createFallbackUser(list.owner_id),
+      });
+    }
+    const coverItems = items.slice(0, ownLists.some((own) => own.id === list.id) ? 8 : 4);
+    covers[list.id] = (await Promise.all(coverItems.map(async (item) => {
+      if (item.poster_url_snapshot) return item.poster_url_snapshot;
+      const key = `${item.content_type}:${item.content_id}`;
+      if (!posterRequests.has(key)) {
+        posterRequests.set(key, (async () => {
+          try {
+            const content = item.content_type === "tv"
+              ? await getShowCardSummary(item.content_id)
+              : await getMovieCardSummary(item.content_id);
+            return content?.poster_url || null;
+          } catch { return null; }
+        })());
+      }
+      return posterRequests.get(key)!;
+    }))).filter((poster): poster is string => Boolean(poster));
+    return {
+      ...list,
+      collaborators,
+      item_count: items.length,
+      engagementScore: items.length * 2 + (collaborators.length - 1) * 3 +
+        items.reduce((sum, item) => sum + (item.watched_by?.length || 0), 0),
+    } satisfies DiscoverList;
+  }));
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+  return {
+    userLists: ownLists.map((list) => cardsById.get(list.id)!),
+    publicLists: publicLists.map((list) => cardsById.get(list.id)!),
+    covers,
+  };
+}
 
 const brutalText = "text-[#f5f0de]";
 const brutalMuted = "text-white/55";
@@ -88,20 +178,25 @@ function ListCard({
   coverImages,
   compact,
   currentUserId,
+  href,
 }: {
   list: DiscoverList;
   coverImages: string[];
   compact: boolean;
   currentUserId: string;
+  href?: string;
 }) {
   const attribution = buildListAttribution(list, currentUserId);
+  const posterScroller = useRef<HTMLDivElement>(null);
   const hasCustomCover = list.cover_type === "custom" && Boolean(list.cover_image_url);
+  const isWatchlist = list.id === "watchlist";
   const shelfAccent = getShelfAccent(list.id);
   const visibleShelves = (hasCustomCover && list.cover_image_url
     ? [list.cover_image_url, ...coverImages]
     : coverImages
-  ).slice(0, 4);
-  const shelfHeightClass = compact ? "h-[150px] sm:h-[224px] lg:h-[258px]" : "h-[296px]";
+  );
+  const canScrollPosters = compact && visibleShelves.length > 4;
+  const shelfHeightClass = compact ? "h-[190px] sm:h-[280px] lg:h-[290px]" : "h-[296px]";
   const description = list.description?.trim();
 
   const content = (
@@ -168,25 +263,18 @@ function ListCard({
       <div className={`relative isolate mt-0 overflow-hidden rounded-none ${compact ? "" : "bg-[#f4efe7]"} px-3 pt-3 ${shelfHeightClass}`}>
 
         {visibleShelves.length > 0 ? (
-          <div className={`absolute inset-x-5 ${compact ? "bottom-[0.8rem] top-2 lg:bottom-[1.1rem] lg:top-0" : "bottom-[1.1rem] top-4"} z-10 flex items-end justify-center`}>
-            <div className="flex w-full max-w-[760px] items-end justify-center gap-3 lg:max-w-[860px] lg:gap-8">
+          <div ref={posterScroller} className={`absolute inset-x-5 ${compact ? "bottom-[1.7rem] top-2 z-10 lg:bottom-[2.2rem] lg:top-0" : "bottom-[1.1rem] top-4 z-10"} mx-auto flex max-w-[760px] items-end overflow-x-auto overscroll-x-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
+            <div className="flex w-full flex-none items-end gap-3 lg:gap-8">
             {visibleShelves.map((url, idx) => (
               <div
                 key={`${list.id}:shelf:${idx}`}
-                className="group/poster relative w-[22%] flex-none transition-transform duration-200 lg:w-[18.5%]"
-                style={{
-                  zIndex: 10 + idx,
-                  transform: idx === 1
-                    ? "translateY(0px) rotate(0deg)"
-                    : idx === 0
-                      ? "translateX(10%) translateY(2px) rotate(0deg)"
-                      : "translateX(-10%) translateY(2px) rotate(0deg)",
-                }}
+                className="group/poster relative w-[calc((100%-2.25rem)/4)] flex-none scroll-snap-align-start transition-transform duration-200 lg:w-[calc((100%-6rem)/4)]"
               >
                 <div className={`overflow-hidden rounded-none border ${compact ? "border-white/10 bg-[#050505]" : "border-black/10 bg-[#ddd6c8]"} shadow-[0_10px_18px_rgba(0,0,0,0.18)]`}>
                   <img
                     src={url}
                     alt={`${list.name} cover ${idx + 1}`}
+                    loading="lazy"
                     className={`w-full ${compact ? "aspect-[2/3] object-contain bg-[#050505] lg:aspect-[2/3]" : "h-full object-cover aspect-[0.68]"}`}
                   />
                 </div>
@@ -195,7 +283,7 @@ function ListCard({
             </div>
           </div>
         ) : (
-          <div className={`absolute inset-x-5 ${compact ? "bottom-[0.8rem] top-2 lg:bottom-[1.1rem] lg:top-0" : "bottom-[1.1rem] top-5"} z-10 flex items-end justify-center`}>
+          <div className={`absolute inset-x-5 ${compact ? "bottom-[1.7rem] top-2 z-10 lg:bottom-[2.2rem] lg:top-0" : "bottom-[1.1rem] top-5 z-10"} flex items-end justify-center`}>
             <div className="flex w-full max-w-[760px] items-end justify-center gap-3 lg:max-w-[860px] lg:gap-8">
             {[0, 1, 2, 3].map((idx) => (
               <div
@@ -221,13 +309,15 @@ function ListCard({
         <div
           className={`absolute inset-x-4 ${compact ? "bottom-3 h-[2.1rem] lg:h-[2.7rem]" : "bottom-3 h-[3.7rem]"} z-30 rounded-none border border-white/28`}
           style={{
-            background: compact
+            background: isWatchlist
+              ? "rgba(255, 122, 26, 0.68)"
+              : compact
               ? `linear-gradient(180deg, color-mix(in srgb, ${shelfAccent.base} 52%, white 28%), color-mix(in srgb, ${shelfAccent.base} 62%, transparent 18%))`
               : `linear-gradient(180deg, color-mix(in srgb, ${shelfAccent.base} 68%, white 14%), color-mix(in srgb, ${shelfAccent.base} 88%, black 4%))`,
             boxShadow: `0 12px 20px rgba(0,0,0,0.14)`,
-            opacity: compact ? 0.54 : 0.72,
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
+            opacity: isWatchlist ? 1 : compact ? 0.54 : 0.72,
+            backdropFilter: isWatchlist ? "blur(3px)" : "blur(10px)",
+            WebkitBackdropFilter: isWatchlist ? "blur(3px)" : "blur(10px)",
           }}
         />
         <div className={`absolute inset-x-5 ${compact ? "bottom-[2.6rem] lg:bottom-[3.15rem]" : "bottom-[3.9rem]"} z-40 h-px bg-white/55`} />
@@ -248,15 +338,43 @@ function ListCard({
     </div>
   );
 
-  return <Link href={`/lists/${list.id}`}>{content}</Link>;
+  return (
+    <div className="relative">
+      <Link href={href || `/lists/${list.id}`}>{content}</Link>
+      {canScrollPosters ? (
+        <div className="pointer-events-none absolute inset-x-1 bottom-[5.5rem] z-50 flex justify-between lg:bottom-[7rem]">
+          <button
+            type="button"
+            aria-label={`Scroll ${list.name} posters left`}
+            onClick={() => posterScroller.current?.scrollBy({ left: -posterScroller.current.clientWidth * 0.75, behavior: "smooth" })}
+            className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-black/75 text-white shadow-lg hover:bg-black sm:h-9 sm:w-9"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Scroll ${list.name} posters right`}
+            onClick={() => posterScroller.current?.scrollBy({ left: posterScroller.current.clientWidth * 0.75, behavior: "smooth" })}
+            className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-black/75 text-white shadow-lg hover:bg-black sm:h-9 sm:w-9"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 export default function ListsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listsLoadError, setListsLoadError] = useState(false);
+  const [retryLoad, setRetryLoad] = useState(0);
   const [userLists, setUserLists] = useState<DiscoverList[]>([]);
   const [publicLists, setPublicLists] = useState<DiscoverList[]>([]);
   const [listCovers, setListCovers] = useState<Record<string, string[]>>({});
+  const [watchlistCount, setWatchlistCount] = useState(0);
+  const [watchlistCovers, setWatchlistCovers] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [newListDescription, setNewListDescription] = useState("");
@@ -272,6 +390,8 @@ export default function ListsPage() {
         return;
       }
 
+      setLoading(true);
+      setListsLoadError(false);
       try {
         // Fetch user
         const userRef = ref(db, `users/${firebaseUser.uid}`);
@@ -288,82 +408,57 @@ export default function ListsPage() {
 
         setUser(currentUser);
 
-        // Fetch user's lists
-        const lists = await getUserLists(currentUser.id);
-        const userListsWithDetails = await Promise.all(
-          lists.map(async (list) => {
-            const details = await getListWithDetails(list.id);
-            if (!details) return null;
+        const [listCards, userLogs] = await Promise.all([
+          loadListCards(currentUser.id),
+          getLogsForUser(currentUser.id).catch(() => []),
+        ]);
+        const watchlistLogs = userLogs
+          .filter((log) => log.watch_later)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        setWatchlistCount(watchlistLogs.length);
+        void Promise.all(watchlistLogs.slice(0, 8).map(async (log) => {
+          const savedPoster = log.poster_url_snapshot || log.content_summary?.poster_url;
+          if (savedPoster) return savedPoster;
+          const content = log.content_type === "tv"
+            ? await getShowCardSummary(log.content_id)
+            : await getMovieCardSummary(log.content_id);
+          return content?.poster_url || null;
+        })).then((posters) => setWatchlistCovers(posters.filter((poster): poster is string => Boolean(poster)))).catch(() => {});
+        setUserLists(listCards.userLists);
+        setPublicLists(listCards.publicLists);
+        setListCovers(listCards.covers);
 
-            const collaboratorCount = details.collaborators.filter((collab) => collab.user_id !== details.owner_id).length;
-            const watchSignal = details.items.reduce((sum, item) => sum + (item.watched_by?.length || 0), 0);
-
-            return {
-              ...details,
-              engagementScore: details.item_count * 2 + collaboratorCount * 3 + watchSignal,
-            };
-          })
+        await Promise.all(
+          listCards.userLists
+            .filter((list) => list.owner_id === currentUser.id)
+            .filter((list) => !list.collaborator_ids || Object.keys(list.collaborator_ids).length === 0)
+            .map((list) => syncListCollaboratorIds(
+              list.id,
+              [list.owner_id, ...list.collaborators.map((collab) => collab.user_id)]
+            ))
         );
-        const resolvedUserLists = userListsWithDetails.filter((list): list is DiscoverList => Boolean(list));
-        setUserLists(resolvedUserLists);
-
-        if (currentUser.id) {
-          await Promise.all(
-            resolvedUserLists
-              .filter((list) => list.owner_id === currentUser.id)
-              .filter((list) => !list.collaborator_ids || Object.keys(list.collaborator_ids).length === 0)
-              .map((list) =>
-                syncListCollaboratorIds(
-                  list.id,
-                  [list.owner_id, ...list.collaborators.map((collab) => collab.user_id)]
-                )
-              )
-          );
-        }
-
-        // Fetch cover images for each list
-        const covers: Record<string, string[]> = {};
-        for (const list of lists) {
-          covers[list.id] = await getListCoverImages(list.id);
-        }
-        setListCovers(covers);
-
-        // Fetch public lists and sort by engagement
-        const publicListsBase = await getPublicLists(30);
-        const publicListsWithDetails = await Promise.all(
-          publicListsBase.map(async (list) => {
-            const details = await getListWithDetails(list.id);
-            if (!details) return null;
-
-            const collaboratorCount = details.collaborators.filter((collab) => collab.user_id !== details.owner_id).length;
-            const watchSignal = details.items.reduce((sum, item) => sum + (item.watched_by?.length || 0), 0);
-
-            return {
-              ...details,
-              engagementScore: details.item_count * 2 + collaboratorCount * 3 + watchSignal,
-            };
-          })
-        );
-        setPublicLists(
-          publicListsWithDetails
-            .filter((list): list is DiscoverList => Boolean(list))
-        );
-
-        const publicCovers: Record<string, string[]> = {};
-        for (const list of publicListsBase) {
-          publicCovers[list.id] = await getListCoverImages(list.id);
-        }
-        setListCovers((prev) => ({ ...prev, ...publicCovers }));
 
         setLoading(false);
       } catch (error) {
         console.error("Error fetching lists:", error);
+        setListsLoadError(true);
         setLoading(false);
       }
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, retryLoad]);
+
+  const listLoadStatus = loading ? (
+    <div className="flex items-center justify-center gap-2 py-12 text-sm text-white/50" role="status">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading lists…
+    </div>
+  ) : listsLoadError ? (
+    <div className="py-10 text-center text-sm text-white/55">
+      <p>Couldn’t load lists.</p>
+      <button type="button" onClick={() => setRetryLoad((count) => count + 1)} className="mt-3 rounded-full border border-white/15 px-4 py-2 text-xs font-semibold text-[#ff9b52] hover:border-[#ff7a1a]/60">Try again</button>
+    </div>
+  ) : null;
 
   const handleCreateList = async () => {
     if (!user || !newListName.trim() || newListIsRanked === null) return;
@@ -405,6 +500,23 @@ export default function ListsPage() {
   };
 
   const currentUserId = user?.id ?? "";
+  const watchlistCard: DiscoverList | null = user ? {
+    id: "watchlist",
+    name: "Watchlist",
+    description: null,
+    owner_id: user.id,
+    privacy: "private",
+    is_ranked: false,
+    view_type: "grid",
+    show_unwatched_first: false,
+    cover_type: "grid",
+    cover_image_url: null,
+    created_at: "",
+    updated_at: "",
+    collaborators: [{ id: "watchlist-owner", list_id: "watchlist", user_id: user.id, role: "owner", joined_at: "", user }],
+    item_count: watchlistCount,
+    engagementScore: 0,
+  } : null;
 
   const ownedLists = useMemo(
     () => userLists.filter((list) => list.owner_id === currentUserId),
@@ -437,8 +549,8 @@ export default function ListsPage() {
 
   return (
     <PageLayout user={user} onSignOut={handleSignOut} theme="brutalist">
-      <div className="mx-auto min-h-screen w-full max-w-[860px] space-y-8 bg-black px-1 py-4 sm:px-4 sm:py-6">
-        <div className="sticky top-16 z-20 -mx-1 space-y-4 border-b border-white/5 bg-black/95 px-1 pb-4 pt-1 backdrop-blur-xl sm:-mx-4 sm:px-4">
+      <div className="mx-auto min-h-screen w-full max-w-[860px] space-y-5 bg-black px-1 py-4 sm:px-4 sm:py-6">
+        <div className="sticky top-16 z-20 -mx-1 space-y-3 border-b border-white/5 bg-black/95 px-1 pb-3 pt-1 backdrop-blur-xl sm:-mx-4 sm:px-4">
           <div className="rounded-[14px] border border-white/10 bg-[#111111] p-[3px]">
             <AnimatedBackground
               defaultValue={activeSection}
@@ -483,22 +595,24 @@ export default function ListsPage() {
             </AnimatedBackground>
           </div>
 
-            <div className="flex w-full items-center gap-3">
-              <div className="relative min-w-0 flex-1">
+            <div className="w-full">
+              <div className="relative">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                 <input
                   type="text"
                   value={globalSearch}
                   onChange={(e) => setGlobalSearch(e.target.value)}
-                  placeholder="Search all list sections..."
-                  className="w-full rounded-full border border-white/15 bg-[#0b0d10] px-4 py-3.5 text-sm text-[#f5f0de] outline-none placeholder:text-white/40 focus:border-[#ff7a1a]/70 focus:ring-2 focus:ring-[#ff7a1a]/10 sm:text-base"
+                  placeholder="Search lists"
+                  aria-label="Search lists"
+                  className="h-10 w-full rounded-md border border-white/15 bg-[#111111] pl-10 pr-3 text-sm text-[#f5f0de] outline-none placeholder:text-white/40 focus:border-[#ff7a1a]/70 focus:ring-2 focus:ring-[#ff7a1a]/10"
                 />
               </div>
             </div>
         </div>
 
         {activeSection === "global" && (
-          <section className="scroll-mt-28">
-            {filteredPublicLists.length > 0 ? (
+          <section className="scroll-mt-28 pt-8">
+            {listLoadStatus || (filteredPublicLists.length > 0 ? (
               <div className="space-y-4">
                 {filteredPublicLists.map((list) => (
                   <ListCard
@@ -514,19 +628,19 @@ export default function ListsPage() {
               <div className="border border-dashed border-white/10 bg-[#111111] py-12 text-center text-white/55">
                 No public lists match your search.
               </div>
-            )}
+            ))}
           </section>
         )}
 
         {activeSection === "friends" && (
-          <section className="scroll-mt-28">
+          <section className="scroll-mt-28 pt-8">
             <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-[#f5f0de]">Friends&apos; Lists</h2>
               </div>
             </div>
 
-            {filteredFriendLists.length > 0 ? (
+            {listLoadStatus || (filteredFriendLists.length > 0 ? (
               <div className="space-y-4">
                 {filteredFriendLists.map((list) => (
                   <ListCard
@@ -542,26 +656,29 @@ export default function ListsPage() {
               <div className="border border-dashed border-white/10 bg-[#111111] py-12 text-center text-white/55">
                 No friends&apos; lists match your search.
               </div>
-            )}
+            ))}
           </section>
         )}
 
         {activeSection === "your" && (
-          <section className="scroll-mt-28">
+          <section className="scroll-mt-28 pt-8">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-2xl font-bold text-[#f5f0de]">Your Lists</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#ff7a1a] px-4 py-3 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-[#ff8d3b]"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create List
-                </button>
-              </div>
+              <h2 className="text-xl font-bold text-[#f5f0de] sm:text-2xl">Your Lists</h2>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-[#ff7a1a] px-3 text-sm font-semibold text-[#0a0a0a] transition-colors hover:bg-[#ff8d3b]"
+              >
+                <Plus className="h-4 w-4" />
+                Create List
+              </button>
             </div>
 
-            {filteredOwnedLists.length > 0 ? (
+            {watchlistCard && (!globalSearch.trim() || "watchlist".includes(globalSearch.trim().toLowerCase())) ? (
+              <ListCard list={watchlistCard} coverImages={watchlistCovers} compact currentUserId={currentUserId} href="/lists/watchlist" />
+            ) : null}
+
+            {listLoadStatus || (filteredOwnedLists.length > 0 ? (
               <div className="space-y-4">
                 {filteredOwnedLists.map((list) => (
                   <ListCard
@@ -577,7 +694,7 @@ export default function ListsPage() {
               <div className="border border-dashed border-white/10 bg-[#111111] py-12 text-center text-white/55">
                 No lists match your search.
               </div>
-            )}
+            ))}
           </section>
         )}
 
@@ -646,6 +763,11 @@ export default function ListsPage() {
                     Public
                   </button>
                 </div>
+                <p className="mt-2 text-xs text-white/50">
+                  {newListPrivacy === "private"
+                    ? "Only you and invited collaborators can open this list."
+                    : "Anyone can discover and open this list."}
+                </p>
               </div>
 
               {/* List Type Selection */}

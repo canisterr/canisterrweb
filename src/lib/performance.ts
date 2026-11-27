@@ -19,6 +19,13 @@ export function getTmdbBackdropUrl(path: string | null | undefined, size: TMDBIm
   return getTmdbImageUrl(path, size);
 }
 
+export function resizeTmdbCdnUrl(url: string, size: TMDBImageSize): string {
+  return url.replace(
+    /^https:\/\/image\.tmdb\.org\/t\/p\/(?:w\d+|original)(\/.*)$/,
+    `${TMDB_IMAGE_BASE_URL}/${size}$1`
+  );
+}
+
 export function getBlurDataUrl(color = "#161616"): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 24" preserveAspectRatio="none"><rect width="16" height="24" fill="${color}"/><path d="M-4 8h24v8H-4z" fill="rgba(255,255,255,0.08)"/></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;

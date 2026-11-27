@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerMovieLogs, getServerTasteProfile } from "@/lib/movie-dna-server";
+import { getCachedServerMovieLogs, getCachedServerTasteProfile } from "@/lib/movie-dna-server";
 import {
   computeMovieDna,
   contentToTitleFeatures,
@@ -9,7 +9,7 @@ import {
 
 export const runtime = "nodejs";
 
-function logsToDnaInputs(logs: Awaited<ReturnType<typeof getServerMovieLogs>>): DnaLogInput[] {
+function logsToDnaInputs(logs: Awaited<ReturnType<typeof getCachedServerMovieLogs>>): DnaLogInput[] {
   return logs.map((log) => ({
     title: contentToTitleFeatures(log.content as unknown as Record<string, unknown>, log.content_id, log.content_type),
     rating: log.reaction,
@@ -26,8 +26,8 @@ export async function GET(
     if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
 
     const [logs, priorTastes] = await Promise.all([
-      getServerMovieLogs(userId),
-      getServerTasteProfile(userId),
+      getCachedServerMovieLogs(userId),
+      getCachedServerTasteProfile(userId),
     ]);
     const dna = computeMovieDna(logsToDnaInputs(logs));
     const prior = computeMovieDna(

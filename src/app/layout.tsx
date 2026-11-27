@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import "./globals.css";
 import HydrationFix from "@/components/HydrationFix";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
@@ -10,6 +9,7 @@ import RegisterServiceWorker from "@/components/RegisterServiceWorker";
 import MobileInstallPrompt from "@/components/MobileInstallPrompt";
 import PwaBottomNav from "@/components/PwaBottomNav";
 import JsonLd from "@/components/JsonLd";
+import AnalyticsConsent from "@/components/AnalyticsConsent";
 import { baseMetadata, organizationSchema, websiteSchema } from "@/lib/seo";
 
 export const metadata: Metadata = baseMetadata({
@@ -45,18 +45,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased" suppressHydrationWarning>
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-N81XQ4GZ9S"
-          strategy="lazyOnload"
-        />
-        <Script id="google-analytics" strategy="lazyOnload">
-          {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', 'G-N81XQ4GZ9S');
-        `}
-        </Script>
+        <AnalyticsConsent />
         <JsonLd data={websiteSchema()} />
         <JsonLd data={organizationSchema()} />
         <LocalhostServiceWorkerCleanup />

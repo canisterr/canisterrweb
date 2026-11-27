@@ -5,7 +5,7 @@ import type { TMDBMovie } from "@/types";
 
 const LS_KEY = "cineparte.search.recent";
 const MAX_ENTRIES = 20;
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 500;
 // Cached results expire after 30 minutes; re-request after that
 const ENTRY_TTL_MS = 30 * 60 * 1000;
 
@@ -69,9 +69,10 @@ export function useMovieSearch(query: string): MovieSearchState {
   // Keep last good results so the UI doesn't flash empty while a new search loads
   const prevResultsRef = useRef<TMDBMovie[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
-  const fetchResults = useCallback(async (raw: string, requestId: number) => {
+  const fetchResults = useCallback(async (raw: string, requestId: number, signal: AbortSignal) => {
     const trimmed = raw.trim();
     if (trimmed.length < 2) {
       setResults([]);
@@ -93,21 +94,21 @@ export function useMovieSearch(query: string): MovieSearchState {
 
     // 2. Fetch from server-side API route
     try {
-      const res = await fetch(`/api/search-movies?q=${encodeURIComponent(trimmed)}`);
+      const res = await fetch(`/api/search-movies?q=${encodeURIComponent(trimmed)}`, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const movies: TMDBMovie[] = await res.json();
 
-      if (requestId !== requestIdRef.current) return;
+      if (signal.aborted || requestId !== requestIdRef.current) return;
       setResults(movies);
       prevResultsRef.current = movies;
       persistResult(normalized, movies);
     } catch {
       // Keep previous results visible on network error
-      if (requestId === requestIdRef.current) {
+      if (!signal.aborted && requestId === requestIdRef.current) {
         setResults(prevResultsRef.current);
       }
     } finally {
-      if (requestId === requestIdRef.current) {
+      if (!signal.aborted && requestId === requestIdRef.current) {
         setLoading(false);
       }
     }
@@ -115,6 +116,7 @@ export function useMovieSearch(query: string): MovieSearchState {
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    controllerRef.current?.abort();
 
     const trimmed = query.trim();
     if (trimmed.length < 2) {
@@ -125,17 +127,20 @@ export function useMovieSearch(query: string): MovieSearchState {
 
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    const controller = new AbortController();
+    controllerRef.current = controller;
 
     // Show stale results immediately while the new request is in flight
     setResults(prevResultsRef.current);
     setLoading(true);
 
     timerRef.current = setTimeout(() => {
-      void fetchResults(trimmed, requestId);
+      void fetchResults(trimmed, requestId, controller.signal);
     }, DEBOUNCE_MS);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      controller.abort();
     };
   }, [query, fetchResults]);
 

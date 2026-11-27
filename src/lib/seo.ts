@@ -70,7 +70,6 @@ export function baseMetadata(overrides: Partial<Metadata> = {}): Metadata {
       "movies",
       "film",
       "movie reviews",
-      "movie recommendations",
       "discover movies through friends",
       "social movie platform",
       "movie tracker",

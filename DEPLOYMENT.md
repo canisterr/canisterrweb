@@ -94,7 +94,7 @@ This creates:
 NEXT_PUBLIC_SUPABASE_URL=https://spwviwsybmvdxzbjphfh.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-NEXT_PUBLIC_TMDB_API_KEY=4188b69a3cc10dedaf3ca6961e153795
+TMDB_API_KEY=your_server_side_tmdb_key
 ```
 
 ✅ Already set in `.env.local`
@@ -147,6 +147,13 @@ npm run start
 ```
 
 ### Deploy to Vercel
+
+The Watchlist release reminder runs daily through the cron entry in `vercel.json`.
+Set `CRON_SECRET` in the production environment before deployment. The route
+rejects requests without Vercel's `Authorization: Bearer` header. Tracked titles
+with a known TMDB release date create one in-app notification when that date
+arrives; browser push also requires the user's push setting and a registered
+device token.
 
 ```bash
 vercel

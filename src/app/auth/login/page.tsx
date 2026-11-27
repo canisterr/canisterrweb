@@ -1,28 +1,38 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, ArrowRight, Lock, Mail } from "lucide-react";
-import { signIn } from "@/lib/auth";
-import { auth } from "@/lib/firebase";
+import { getAuthErrorMessage, signIn, signInWithGoogle } from "@/lib/auth";
+import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { get, ref } from "firebase/database";
+import AuthShell, { authInputClass, authLabelClass } from "@/components/auth/AuthShell";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { getUsernameValidationError } from "@/lib/username-utils";
 
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTarget = searchParams.get("redirect");
-  const safeRedirect = redirectTarget && redirectTarget.startsWith("/") ? redirectTarget : "/dashboard";
+  const safeRedirect = redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//") ? redirectTarget : "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
-        router.replace(safeRedirect);
+        void get(ref(db, `users/${firebaseUser.uid}`)).then((profile) => {
+          const username = profile.exists() ? profile.val()?.username : null;
+          const hasUsableProfile = typeof username === "string" && !getUsernameValidationError(username);
+          if (hasUsableProfile) router.replace(safeRedirect);
+          else if (firebaseUser.providerData.some((provider) => provider.providerId === "google.com")) {
+            router.replace(`/auth/complete-profile?redirect=${encodeURIComponent(safeRedirect)}`);
+          }
+        });
       }
     });
 
@@ -38,118 +48,57 @@ function LoginPageContent() {
       await signIn(email, password);
       router.push(safeRedirect);
     } catch (err) {
-      const code = (err as { code?: string } | null)?.code;
-      if (code === "auth/invalid-credential") {
-        setError("Invalid email or password.");
-      } else {
-        setError(err instanceof Error ? err.message : "Login failed");
-      }
+      setError(getAuthErrorMessage(err, "login"));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setError("");
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithGoogle();
+      router.replace(result.needsProfile
+        ? `/auth/complete-profile?redirect=${encodeURIComponent(safeRedirect)}`
+        : safeRedirect);
+    } catch (err) {
+      setError(getAuthErrorMessage(err, "login"));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-dvh bg-[#050505] text-[#f5f0de]">
-      <div className="grid h-full w-full lg:grid-cols-[2fr_3fr]">
-        <section className="relative hidden min-h-dvh overflow-hidden border-r border-white/10 bg-[#050505] lg:flex">
-          <img
-            src="https://image.tmdb.org/t/p/w780/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg"
-            alt="La La Land poster"
-            className="absolute inset-0 h-full w-full object-contain object-left pointer-events-none select-none"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(0,0,0,0.35),rgba(0,0,0,0.05)_50%,rgba(0,0,0,0.34))]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,122,26,0.14),transparent_28%),radial-gradient(circle_at_80%_80%,rgba(0,0,0,0.18),transparent_32%)]" />
-          <div className="absolute bottom-4 left-5 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60">
-            Credit: TMDB
-          </div>
-        </section>
-
-        <section className="flex min-h-dvh items-center justify-center bg-[#0a0a0a] px-8 py-10 lg:px-16">
-          <div className="w-full max-w-lg">
-            <div className="mb-10 flex items-center gap-4">
-              <Image src="/logo.png" alt="Canisterr logo" width={72} height={72} className="h-18 w-18 rounded-2xl object-cover" />
-              <h1 className="text-5xl font-black leading-none text-[#f5f0de] sm:text-6xl">
-                Canisterr
-              </h1>
-            </div>
-
-            <p className="text-base leading-7 text-white/60">
-              Enter your credentials to continue.
-            </p>
-
-            <div className="mt-5 flex items-center gap-3 text-[12px] font-black uppercase tracking-[0.24em]">
-              <Link href="/auth/login" className="text-[#ff7a1a]">
-                Sign in
-              </Link>
-              <span className="text-white/20">/</span>
-              <Link href="/auth/signup" className="text-white/40 transition hover:text-[#ff7a1a]">
-                Create account
-              </Link>
-            </div>
-
-            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-              {error && (
-                <div className="flex items-start gap-3 rounded-[1.25rem] border border-[#ff7a1a]/20 bg-[#ff7a1a]/10 p-4">
-                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#ff7a1a]" />
-                  <p className="text-sm text-[#f5f0de]">{error}</p>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-2 block text-base font-semibold text-[#f5f0de]/75">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/35" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    className="w-full rounded-[1.25rem] border border-white/10 bg-[#111111] px-12 py-4 text-base text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/45 focus:ring-2 focus:ring-[#ff7a1a]/15"
-                    placeholder="you@example.com"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-base font-semibold text-[#f5f0de]/75">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/35" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-[1.25rem] border border-white/10 bg-[#111111] px-12 py-4 text-base text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/45 focus:ring-2 focus:ring-[#ff7a1a]/15"
-                    placeholder="Your password"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-[1.25rem] bg-[#f5f0de] py-4 text-base font-black text-[#0a0a0a] transition hover:bg-[#ff7a1a] disabled:opacity-60"
-              >
-                {loading ? "Signing in..." : "Sign in"}
-              </button>
-            </form>
-
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm">
-              <Link href="/auth/forgot-password" className="font-semibold text-[#ff7a1a] hover:text-[#ff8d3b]">
-                Forgot password?
-              </Link>
-              <Link
-                href="/auth/signup"
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/45 hover:bg-white/[0.08]"
-              >
-                Need an account?
-                <ArrowRight className="h-4 w-4 text-[#ffb36b]" />
-              </Link>
-            </div>
-          </div>
-        </section>
+    <AuthShell mode="login">
+      <div className="mb-9 lg:text-center">
+        <h1 className="text-2xl font-bold tracking-tight lg:text-3xl lg:uppercase" style={{ fontFamily: '"Ubuntu", ui-sans-serif, system-ui, sans-serif' }}>Welcome back</h1>
+        <p className="mt-1 text-sm text-white/50 lg:text-white/50">Pick up where you left off.</p>
       </div>
-    </div>
+      <form onSubmit={handleSubmit} className="space-y-7">
+        {error ? <p role="alert" className="text-sm text-[#ff9d62] lg:text-[#ff9d62]">{error}</p> : null}
+        <div className="space-y-2">
+          <label htmlFor="login-email" className={authLabelClass}>Email</label>
+          <input id="login-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required className={authInputClass} />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="login-password" className={authLabelClass}>Password</label>
+          <input id="login-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required className={authInputClass} />
+        </div>
+        <div className="text-right">
+          <Link href="/auth/forgot-password" className="text-sm text-white/60 underline underline-offset-4 hover:text-[#f5f0de] lg:text-white/50 lg:hover:text-[#ff7a1a]">Forgot password?</Link>
+        </div>
+        <button type="submit" disabled={loading} className="w-full rounded-xl bg-[#f5f0de] px-4 py-3.5 text-base font-bold text-[#211f20] transition hover:bg-white disabled:opacity-60 lg:mx-auto lg:block lg:w-44 lg:rounded-full lg:bg-[#ff7a1a] lg:text-[#0b0b0b] lg:shadow-[0_6px_15px_rgba(255,122,26,0.25)] lg:hover:bg-[#ff8c35]">
+        {loading ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+      <div className="my-6 flex items-center gap-3 text-xs text-white/35">
+        <span className="h-px flex-1 bg-white/10" />
+        <span>OR</span>
+        <span className="h-px flex-1 bg-white/10" />
+      </div>
+      <GoogleSignInButton onClick={() => void handleGoogleSignIn()} disabled={loading || googleLoading} label={googleLoading ? "Connecting…" : "Continue with Google"} />
+    </AuthShell>
   );
 }
 

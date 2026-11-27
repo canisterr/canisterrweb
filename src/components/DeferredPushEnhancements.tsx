@@ -10,6 +10,10 @@ export default function DeferredPushEnhancements() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // The localhost cleanup removes service workers. Auto-enrolling for push here
+    // would register one again and trigger a full-page reload loop.
+    if (["localhost", "127.0.0.1"].includes(window.location.hostname)) return;
+
     const windowWithIdle = window as Window & {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
       cancelIdleCallback?: (handle: number) => void;

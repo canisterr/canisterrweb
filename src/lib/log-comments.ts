@@ -127,16 +127,15 @@ export async function getLogComments(
   logId: string,
   currentUserId?: string
 ): Promise<LogCommentWithUser[]> {
-  const [commentsSnapshot, likesSnapshot] = await Promise.all([
-    get(ref(db, `log_comments/${logId}`)),
-    get(ref(db, `log_comment_likes/${logId}`)),
-  ]);
+  const commentsSnapshot = await get(ref(db, `log_comments/${logId}`));
+  if (!commentsSnapshot.exists()) return [];
 
-  const comments: LogComment[] = commentsSnapshot.exists()
-    ? (Object.values(commentsSnapshot.val()) as LogComment[])
-    : [];
+  const comments = Object.values(commentsSnapshot.val()) as LogComment[];
+  const [likesSnapshot, usersById] = await Promise.all([
+    get(ref(db, `log_comment_likes/${logId}`)),
+    getUsersById(comments.map((comment) => comment.user_id)),
+  ]);
   const likesRaw = likesSnapshot.exists() ? likesSnapshot.val() : {};
-  const usersById = await getUsersById(comments.map((comment) => comment.user_id));
 
   return nestComments(comments, usersById, likesRaw, currentUserId);
 }

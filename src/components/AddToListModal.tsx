@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { User, List, Content } from "@/types";
-import { getUserLists, addItemToList, isItemInList } from "@/lib/lists";
+import { getUserLists, addItemToList } from "@/lib/lists";
+import { getAuthorizedListData } from "@/lib/authorized-list-data";
 import { Loader2 } from "lucide-react";
 
 interface AddToListModalProps {
@@ -45,16 +46,17 @@ export default function AddToListModal({ isOpen, onClose, content, user }: AddTo
 
     try {
       setLoading(true);
-      const userLists = await getUserLists(user.id);
+      const data = await getAuthorizedListData();
+      const userLists = await getUserLists(user.id, data);
       setLists(userLists);
 
       // Check which lists already have this item
       if (content) {
         const alreadyIn = new Set<string>();
-        for (const list of userLists) {
-          const exists = await isItemInList(list.id, content.id, content.type || "movie");
-          if (exists) {
-            alreadyIn.add(list.id);
+        const userListIds = new Set(userLists.map((list) => list.id));
+        for (const item of Object.values(data.items)) {
+          if (userListIds.has(item.list_id) && item.content_id === content.id && item.content_type === (content.type || "movie")) {
+            alreadyIn.add(item.list_id);
           }
         }
         setAddedToLists(alreadyIn);

@@ -38,7 +38,7 @@ Fill in your credentials:
 - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anon key
 - `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role key
-- `NEXT_PUBLIC_TMDB_API_KEY`: Your TMDB API key
+- `TMDB_API_KEY`: Your server-side TMDB API key (or use `TMDB_BEARER_TOKEN`)
 
 ### 3. **Install Dependencies**
 
@@ -90,10 +90,12 @@ database/
 
 ## 🔐 Authentication Flow
 
-1. **Signup**: Users create account with email, password, username, and name
-2. **Username Validation**: Real-time check for availability
-3. **Login**: Email/password authentication via Supabase
-4. **Session**: Managed via Supabase JWT tokens in browser
+1. **Signup**: Users can register with email and password, or continue with Google.
+2. **Profile setup**: New Google accounts choose a username and accept the Terms and Privacy Policy before a Canisterr profile is created. The age eligibility condition is part of the Terms.
+3. **Username validation**: Email signup checks availability while typing; the server enforces uniqueness for every signup method.
+4. **Login**: Firebase Authentication manages email/password and Google sign-in sessions.
+
+To enable Google sign-in, open Firebase Console → Authentication → Sign-in method, enable Google, and save the provider configuration. Add each deployed Canisterr hostname under Authentication → Settings → Authorized domains. Local development also needs `localhost` authorized if it is not already listed. Google provider configuration and authorized domains are managed in Firebase Console, not in application source.
 
 ---
 
@@ -252,3 +254,9 @@ For issues or questions:
 ---
 
 **Happy sharing! 🎬**
+
+## Canisterr Admin
+
+Admin access is restricted to verified email addresses listed in the server-only `CANISTERR_ADMIN_EMAILS` variable or Firebase UIDs listed in `CANISTERR_ADMIN_UIDS`. Set one of these variables in the deployment secret store, restart or redeploy, then sign in and open `/admin`. Do not expose these values in client-side variables, source control, or screenshots. There is no special admin signup or email-verification bypass; use the normal signup and verification flow, then grant access through the server-side allowlist. To remove access, remove the email or UID from the allowlist and redeploy.
+
+The admin page has three sections: Featured lists, Analytics, and API health. Paste comma-separated or newline-separated film and series titles into a featured list and fetch matches from TMDB and TVMaze. Searches are cached in the browser; each fetch and list can contain up to 50 titles. Pick poster matches, save the list, and turn on “Show this list on the home screen” to publish it below Friends Activity. Set an optional expiry date to hide it automatically. Analytics are private aggregate totals, cached for five minutes. The provider health check makes two requests only when you press its button.

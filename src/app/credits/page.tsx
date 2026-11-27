@@ -23,6 +23,7 @@ export default function CreditsPage() {
               </a>
               .
             </p>
+            <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
             <p>
               TV show data provided by{" "}
               <a href="https://www.tvmaze.com" target="_blank" rel="noreferrer" className="font-semibold text-[#ffb36b] hover:underline">

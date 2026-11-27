@@ -2,9 +2,13 @@
   "rules": {
     ".read": false,
     ".write": false,
+    "games": {
+      ".read": false,
+      ".write": false
+    },
     "users": {
       ".read": "auth != null",
-      ".indexOn": ["username", "name_lower"],
+      ".indexOn": ["username", "name_lower", "created_at"],
       "$uid": {
         ".read": "auth != null",
         ".write": "auth != null && auth.uid == $uid",
@@ -36,6 +40,24 @@
         ".write": "auth != null && ((!data.exists() && newData.child('user_id').val() == auth.uid) || (data.exists() && data.child('user_id').val() == auth.uid))"
       }
     },
+    "honour_definitions": {
+      ".read": "auth != null",
+      ".write": false
+    },
+    "honours": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": false
+      }
+    },
+    "honour_stats": {
+      ".read": false,
+      ".write": false
+    },
+    "honour_unlocks": {
+      ".read": false,
+      ".write": false
+    },
     "watched_movies": {
       ".read": "auth != null",
       ".indexOn": ["user_id"],
@@ -58,27 +80,15 @@
     },
     "user_tastes": {
       ".read": "auth != null",
+      ".indexOn": ["user_id"],
       "$tasteId": {
         ".write": "auth != null && ((!data.exists() && newData.child('user_id').val() == auth.uid) || (data.exists() && data.child('user_id').val() == auth.uid))"
       }
     },
-    "taste_profiles": {
+    "taste_signatures": {
+      ".read": "auth != null",
       "$uid": {
-        ".read": "auth != null && auth.uid == $uid",
         ".write": "auth != null && auth.uid == $uid"
-      }
-    },
-    "recommendation_sessions": {
-      "$uid": {
-        ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
-      }
-    },
-    "recommendation_events": {
-      "$uid": {
-        ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid",
-        ".indexOn": ["timestamp", "action", "contentId"]
       }
     },
     "follows": {
@@ -119,6 +129,14 @@
         }
       }
     },
+    "log_saves": {
+      ".read": "auth != null",
+      "$logId": {
+        "$uid": {
+          ".write": "auth != null && auth.uid == $uid"
+        }
+      }
+    },
     "log_comment_likes": {
       ".read": "auth != null",
       "$logId": {
@@ -130,21 +148,24 @@
       }
     },
     "list_collaborators": {
-      ".read": "auth != null",
       "$collabId": {
+        ".read": "auth != null && (root.child('lists').child(data.child('list_id').val()).child('privacy').val() == 'public' || root.child('lists').child(data.child('list_id').val()).child('owner_id').val() == auth.uid || root.child('lists').child(data.child('list_id').val()).child('collaborator_ids').child(auth.uid).val() == true)",
         ".write": "auth != null && (( !data.exists() && root.child('lists').child(newData.child('list_id').val()).child('owner_id').val() == auth.uid ) || ( data.exists() && root.child('lists').child(data.child('list_id').val()).child('owner_id').val() == auth.uid ))"
       }
     },
     "list_items": {
-      ".read": "auth != null",
       "$itemId": {
+        ".read": "auth != null && (root.child('lists').child(data.child('list_id').val()).child('privacy').val() == 'public' || root.child('lists').child(data.child('list_id').val()).child('owner_id').val() == auth.uid || root.child('lists').child(data.child('list_id').val()).child('collaborator_ids').child(auth.uid).val() == true)",
         ".write": "auth != null && (( !data.exists() && (root.child('lists').child(newData.child('list_id').val()).child('owner_id').val() == auth.uid || root.child('lists').child(newData.child('list_id').val()).child('collaborator_ids').child(auth.uid).val() == true) ) || ( data.exists() && (root.child('lists').child(data.child('list_id').val()).child('owner_id').val() == auth.uid || root.child('lists').child(data.child('list_id').val()).child('collaborator_ids').child(auth.uid).val() == true) ))"
       }
     },
     "lists": {
-      ".read": "auth != null",
       "$listId": {
-        ".write": "auth != null && ((!data.exists() && newData.child('owner_id').val() == auth.uid) || (data.exists() && (data.child('owner_id').val() == auth.uid || data.child('collaborator_ids').child(auth.uid).val() == true)))"
+        ".read": "auth != null && (data.child('privacy').val() == 'public' || data.child('owner_id').val() == auth.uid || data.child('collaborator_ids').child(auth.uid).val() == true)",
+        ".write": "auth != null && ((!data.exists() && newData.child('owner_id').val() == auth.uid) || (data.exists() && data.child('owner_id').val() == auth.uid && (!newData.exists() || newData.child('owner_id').val() == auth.uid)))",
+        "updated_at": {
+          ".write": "auth != null && root.child('lists').child($listId).child('collaborator_ids').child(auth.uid).val() == true"
+        }
       }
     }
   }

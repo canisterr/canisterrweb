@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
-import { getFirebaseAdminApp } from "@/lib/firebase-admin";
+import { getFirebaseAdminApp, getFirebaseAdminDatabase } from "@/lib/firebase-admin";
 import { ensureUserProfileRecord } from "@/lib/server-user-profile";
+import { PRIVACY_POLICY_VERSION, TERMS_VERSION } from "@/lib/legal-versions";
 import { getUsernameValidationError, normalizeUsernameKey } from "@/lib/username-utils";
 
 type CompleteSignupBody = {
   idToken?: string;
   username?: string;
   name?: string;
+  termsAccepted?: boolean;
+  privacyAccepted?: boolean;
 };
 
 export const dynamic = "force-dynamic";
@@ -38,6 +41,9 @@ export async function POST(request: NextRequest) {
   if (!name) {
     return NextResponse.json({ error: "Full name is required." }, { status: 400 });
   }
+  if (body.termsAccepted !== true || body.privacyAccepted !== true) {
+    return NextResponse.json({ error: "Accept the current Terms and Privacy Policy." }, { status: 400 });
+  }
 
   try {
     const auth = getAuth(getFirebaseAdminApp());
@@ -47,6 +53,14 @@ export async function POST(request: NextRequest) {
       preferredUsername: username,
       preferredName: name,
       strictPreferredUsername: true,
+    });
+    const acceptedAt = new Date().toISOString();
+    await getFirebaseAdminDatabase().ref(`users/${decodedToken.uid}/legal_acceptance`).set({
+      terms_version: TERMS_VERSION,
+      privacy_policy_version: PRIVACY_POLICY_VERSION,
+      terms_accepted_at: acceptedAt,
+      privacy_accepted_at: acceptedAt,
+      age_eligibility_clause_accepted_with_terms: true,
     });
 
     return NextResponse.json({ ok: true });

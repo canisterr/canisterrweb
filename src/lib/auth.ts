@@ -1,10 +1,13 @@
 import { auth, db } from "@/lib/firebase";
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   browserLocalPersistence,
   indexedDBLocalPersistence,
   inMemoryPersistence,
+  GoogleAuthProvider,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut as firebaseSignOut,
   setPersistence,
   onAuthStateChanged,
@@ -23,6 +26,44 @@ import {
 } from "@/lib/username-index";
 
 let persistencePromise: Promise<void> | null = null;
+
+export function getSignupPasswordError(password: string): string | null {
+  return password.length >= 6 && /[A-Za-z]/.test(password) && /\d/.test(password)
+    ? null
+    : "Use at least 6 characters, including a letter and a number.";
+}
+
+export function getAuthErrorMessage(error: unknown, action: "login" | "signup"): string {
+  const maybeError = error as { code?: string; message?: string } | null;
+  const message = typeof maybeError?.message === "string" ? maybeError.message : "";
+  const code = maybeError?.code || message.match(/auth\/[a-z-]+/i)?.[0] || "";
+  const messages: Record<string, string> = {
+    "auth/invalid-credential": "The email or password is incorrect.",
+    "auth/user-not-found": "No account was found with that email. Check it or create an account.",
+    "auth/wrong-password": "The password is incorrect. Try again or reset it.",
+    "auth/invalid-email": "Enter a valid email address.",
+    "auth/email-already-in-use": "An account already uses this email. Try logging in instead.",
+    "auth/weak-password": "Choose a stronger password with at least 6 characters.",
+    "auth/too-many-requests": "Too many attempts. Wait a little, then try again.",
+    "auth/network-request-failed": "We couldn’t connect. Check your internet connection and try again.",
+    "auth/user-disabled": "This account is disabled. Contact support for help.",
+    "auth/operation-not-allowed": "This sign-in method is not enabled yet. Please contact support.",
+    "auth/unauthorized-domain": "This website domain is not enabled for sign-in. Contact support.",
+    "auth/popup-blocked": "Your browser blocked the sign-in window. Allow pop-ups and try again.",
+    "auth/popup-closed-by-user": "The sign-in window was closed before finishing.",
+    "auth/account-exists-with-different-credential": "An account already uses this email with another sign-in method. Sign in with that method first.",
+    "auth/missing-email": "Enter your email address.",
+    "auth/missing-password": "Enter your password.",
+  };
+
+  if (messages[code]) return messages[code];
+  if (/FirebaseError|Firebase:|auth\/[a-z-]+/i.test(message)) {
+    return action === "login"
+      ? "We couldn’t sign you in. Check your details and try again."
+      : "We couldn’t create your account. Please try again.";
+  }
+  return message || (action === "login" ? "Login failed. Please try again." : "Sign up failed. Please try again.");
+}
 
 function isPermissionDeniedError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -53,9 +94,17 @@ export async function signUp(
   email: string,
   password: string,
   username: string,
-  name: string
+  name: string,
+  acceptance: { termsAccepted: boolean; privacyAccepted: boolean }
 ) {
   await ensureAuthPersistence();
+
+  if (!acceptance.termsAccepted || !acceptance.privacyAccepted) {
+    throw new Error("Accept the Terms and Privacy Policy to create an account.");
+  }
+
+  const passwordError = getSignupPasswordError(password);
+  if (passwordError) throw new Error(passwordError);
 
   const usernameError = getUsernameValidationError(username);
   if (usernameError) {
@@ -88,7 +137,6 @@ export async function signUp(
     throw new Error("User creation failed");
   }
 
-  // Send email verification
   await sendEmailVerification(userCredential.user);
 
   // Create user profile in Realtime Database (non-blocking)
@@ -103,6 +151,8 @@ export async function signUp(
         idToken,
         username: normalizedUsername,
         name: name.trim(),
+        termsAccepted: acceptance.termsAccepted,
+        privacyAccepted: acceptance.privacyAccepted,
       }),
     });
 
@@ -111,8 +161,13 @@ export async function signUp(
       throw new Error(payload?.error || "Profile creation failed");
     }
   } catch (profileError) {
-    console.warn("Profile creation failed, but auth succeeded:", profileError);
-    // Don't fail signup if profile creation fails
+    console.error("Profile creation failed; rolling back the incomplete signup:", profileError);
+    try {
+      await deleteUser(userCredential.user);
+    } catch {
+      await firebaseSignOut(auth);
+    }
+    throw profileError;
   }
 
   return userCredential;
@@ -122,6 +177,45 @@ export async function signIn(email: string, password: string) {
   await ensureAuthPersistence();
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   return userCredential;
+}
+
+export async function signInWithGoogle() {
+  await ensureAuthPersistence();
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  const credential = await signInWithPopup(auth, provider);
+  const profile = await get(ref(db, `users/${credential.user.uid}`));
+  const username = profile.exists() ? profile.val()?.username : null;
+  return {
+    user: credential.user,
+    needsProfile: !profile.exists() || typeof username !== "string" || Boolean(getUsernameValidationError(username)),
+  };
+}
+
+export async function completeGoogleSignup(
+  user: import("firebase/auth").User,
+  username: string,
+  name: string,
+  acceptance: { termsAccepted: boolean; privacyAccepted: boolean }
+) {
+  if (!acceptance.termsAccepted || !acceptance.privacyAccepted) {
+    throw new Error("Accept the Terms and Privacy Policy to create an account.");
+  }
+  const response = await fetch("/api/auth/complete-signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      idToken: await user.getIdToken(),
+      username,
+      name,
+      termsAccepted: acceptance.termsAccepted,
+      privacyAccepted: acceptance.privacyAccepted,
+    }),
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error || "Could not complete your profile.");
+  }
 }
 
 export async function sendResetPasswordEmail(email: string) {

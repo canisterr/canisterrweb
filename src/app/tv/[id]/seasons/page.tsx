@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import { ArrowLeft, CalendarDays, Film, PlayCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import { auth, db } from "@/lib/firebase";
 import { signOut as authSignOut } from "@/lib/auth";
@@ -167,9 +167,8 @@ export default function TvSeasonsPage() {
           Back to show
         </Link>
 
-        <section className="rounded-[2rem] border border-white/10 bg-[#111111] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.25)] sm:p-6">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <div className="mx-auto w-full max-w-44 overflow-hidden border border-white/10 bg-white/5 sm:mx-0">
+        <section className="flex items-start gap-5 py-4 sm:gap-7">
+            <div className="w-24 shrink-0 overflow-hidden bg-white/5 sm:w-32">
               {show?.poster_url ? (
                 <img
                   src={show.poster_url}
@@ -182,46 +181,39 @@ export default function TvSeasonsPage() {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb36b]">Season guide</p>
-              <h1 className="mt-2 text-3xl font-black leading-tight text-[#f5f0de] sm:text-5xl">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffb36b]">Season guide</p>
+              <h1 className="mt-1 text-3xl font-black leading-tight text-[#f5f0de] sm:text-5xl">
                 {show?.title || show?.name || "TV Show"}
               </h1>
               {show?.overview && (
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-white/75 sm:text-base">
+                <p className="mt-3 line-clamp-3 max-w-3xl text-sm leading-6 text-white/65 sm:text-base">
                   {show.overview}
                 </p>
               )}
-              <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/70">
-                {show?.rating?.average ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                    Rating {show.rating.average.toFixed(1)}
-                  </span>
-                ) : null}
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/45 sm:text-sm">
                 {show?.runtime ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  <span>
                     {show.runtime} min episodes
                   </span>
                 ) : null}
                 {show?.network?.name ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  <span>
                     {show.network.name}
                   </span>
                 ) : null}
               </div>
             </div>
-          </div>
         </section>
 
-        <section className="mt-6 space-y-4">
+        <section className="mt-7 space-y-4">
           <div className="flex items-end justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black text-[#f5f0de]">Seasons</h2>
-              <p className="text-sm text-white/55">Pick a season to browse its episodes.</p>
             </div>
             <span className="text-xs text-white/45">{seasons.length} seasons</span>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {seasons.map((season) => {
               const isSelected = selectedSeason?.id === season.id;
               return (
@@ -229,53 +221,35 @@ export default function TvSeasonsPage() {
                   key={season.id}
                   type="button"
                   onClick={() => setSelectedSeason(season)}
-                  className={`text-left transition ${
+                  className={`min-w-0 border px-4 py-3 text-left transition ${
                     isSelected
-                      ? "border-[#ff7a1a]/50 bg-[#ff7a1a]/10"
-                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
-                  } rounded-[1.5rem] border p-4`}
+                      ? "border-[#ff7a1a] bg-[#ff7a1a] text-black"
+                      : "border-white/15 bg-[#111111] text-[#f5f0de] hover:border-white/40"
+                  }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-black uppercase tracking-[0.2em] text-[#ffb36b]">Season {season.number}</p>
-                      <p className="mt-1 text-lg font-bold text-[#f5f0de]">{season.name}</p>
-                    </div>
-                    <Film className={`h-5 w-5 ${isSelected ? "text-[#ffb36b]" : "text-white/35"}`} />
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/60">
-                    {season.premiereDate ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1">
-                        <CalendarDays className="h-3.5 w-3.5" />
-                        {formatYear(season.premiereDate)}
-                      </span>
-                    ) : null}
-                    {season.episodeOrder ? (
-                      <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1">
-                        {season.episodeOrder} episodes
-                      </span>
-                    ) : null}
-                  </div>
+                  <p className="text-xl font-black">{String(season.number).padStart(2, "0")}</p>
+                  <p className="mt-1 truncate text-xs font-semibold">{season.name}</p>
+                  <p className={`mt-2 text-xs ${isSelected ? "text-black/65" : "text-white/40"}`}>
+                    {[season.premiereDate && formatYear(season.premiereDate), season.episodeOrder && `${season.episodeOrder} episodes`].filter(Boolean).join(" · ") || "Season"}
+                  </p>
                 </button>
               );
             })}
           </div>
         </section>
 
-        <section className="mt-8 rounded-[2rem] border border-white/10 bg-[#111111] p-4 sm:p-6">
+        <section className="mt-8">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black text-[#f5f0de]">
                 {selectedSeason ? selectedSeason.name : "Episodes"}
               </h2>
-              <p className="text-sm text-white/55">
-                {selectedSeason ? `Season ${selectedSeason.number}` : "Choose a season to see episodes."}
-              </p>
               {selectedSeason && (
                 <Link
                   href={showPath ? `${showPath}/seasons/${selectedSeason.number}` : "/dashboard"}
-                  className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#ffb36b] hover:text-[#ff7a1a]"
+                  className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-[#ffb36b] hover:text-[#ff7a1a]"
                 >
-                  Open season page
+                  Season details <ArrowRight className="h-4 w-4" />
                 </Link>
               )}
             </div>
@@ -283,36 +257,34 @@ export default function TvSeasonsPage() {
           </div>
 
           {loadingEpisodes ? (
-            <div className="mt-5 grid gap-3">
+            <div className="mt-5 grid gap-2">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-20 animate-pulse rounded-2xl bg-white/5" />
+                <div key={index} className="h-20 animate-pulse bg-white/5" />
               ))}
             </div>
           ) : episodes.length > 0 ? (
-            <div className="mt-5 grid gap-3">
+            <div className="mt-5 grid gap-0 sm:grid-cols-2 sm:gap-x-8">
               {episodes.map((episode) => (
                 <div
                   key={episode.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                  className="flex items-center gap-3 py-3"
                 >
+                  <span className="w-7 shrink-0 text-sm font-black text-[#ffb36b]">{String(episode.number).padStart(2, "0")}</span>
+                  {episode.image?.medium && <img src={episode.image.medium} alt="" className="aspect-video w-20 shrink-0 object-cover" />}
                   <div className="min-w-0">
-                    <p className="text-sm font-black uppercase tracking-[0.2em] text-[#ffb36b]">
-                      Episode {episode.number}
-                    </p>
-                    <p className="mt-1 truncate text-lg font-bold text-[#f5f0de]">{episode.name}</p>
-                    <p className="mt-1 text-sm text-white/55">
+                    <p className="truncate text-sm font-semibold text-[#f5f0de]">{episode.name}</p>
+                    <p className="mt-1 text-xs text-white/45">
                       {episode.airdate || "Date unavailable"}
                       {episode.runtime ? ` • ${episode.runtime} min` : ""}
                     </p>
                   </div>
-                  <PlayCircle className="h-6 w-6 flex-shrink-0 text-white/30" />
                 </div>
               ))}
             </div>
           ) : (
-            <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-sm text-white/55">
+            <p className="mt-5 text-sm text-white/55">
               No episodes found for this season.
-            </div>
+            </p>
           )}
         </section>
       </main>

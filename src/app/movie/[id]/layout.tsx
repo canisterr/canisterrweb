@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { movieMetadata, movieSchema, breadcrumbSchema, BASE_URL } from "@/lib/seo";
-import { resolveMovieRouteParam } from "@/lib/content-slugs";
+import { getResolvedMoviePage } from "@/lib/movie-page-resolver";
 import JsonLd from "@/components/JsonLd";
 
 type Props = {
@@ -10,14 +10,14 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const resolved = await resolveMovieRouteParam(id);
+  const resolved = await getResolvedMoviePage(id);
   if (!resolved) return { title: "Movie | Canisterr" };
   return movieMetadata(resolved.movie, resolved.canonicalPath);
 }
 
 export default async function MovieLayout({ params, children }: Props) {
   const { id } = await params;
-  const resolved = await resolveMovieRouteParam(id);
+  const resolved = await getResolvedMoviePage(id);
   const movie = resolved?.movie;
 
   return (

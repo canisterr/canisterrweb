@@ -3,15 +3,9 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import type { PosterItem } from "@/lib/posters";
-import Hero from "./Hero";
-import Footer from "./Footer";
+import LandingExperience from "./LandingExperience";
 
-type HomeGateProps = {
-  posters: PosterItem[];
-};
-
-export default function HomeGate({ posters }: HomeGateProps) {
+export default function HomeGate() {
   const router = useRouter();
   const { user, loading } = useCurrentUser();
 
@@ -21,18 +15,7 @@ export default function HomeGate({ posters }: HomeGateProps) {
     }
   }, [loading, router, user]);
 
-  if (loading) {
-    return <main className="min-h-screen bg-[#020202]" />;
-  }
+  if (!loading && user) return <div className="min-h-screen bg-[#0b0b0b]" />;
 
-  if (user) {
-    return <main className="min-h-screen bg-[#020202]" />;
-  }
-
-  return (
-    <main className="min-h-screen overflow-hidden bg-[#020202] text-[#fff5e8]">
-      <Hero posters={posters} />
-      <Footer />
-    </main>
-  );
+  return <LandingExperience />;
 }

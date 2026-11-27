@@ -1,15 +1,18 @@
 "use client";
 
 import { useRef, useState, type ChangeEvent } from "react";
+import { RotateCcw, Trash2, Upload } from "lucide-react";
 import { get, ref, remove } from "firebase/database";
-import { CloudDownload, Upload } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
+import LetterboxdMark from "@/components/LetterboxdMark";
 import { useSettingsUser } from "../settings-shared";
 import { SettingLine, SettingsGroup, SettingsMessage } from "../settings-ui";
 import { auth, db } from "@/lib/firebase";
 import { createMovieLog } from "@/lib/logs";
+import { scheduleHonoursRecalculation } from "@/lib/honours-client";
 import { searchMovies } from "@/lib/tmdb";
-import type { MovieLog, List } from "@/types";
+import { getAuthorizedListData } from "@/lib/authorized-list-data";
+import type { MovieLog } from "@/types";
 
 function parseCsvLine(line: string): string[] {
   const values: string[] = [];
@@ -46,7 +49,8 @@ function parseRatingsCsv(csvText: string) {
   if (lines.length < 2) return [];
 
   const headers = parseCsvLine(lines[0]).map((header) => header.replace(/^\ufeff/, "").toLowerCase());
-  const dateIdx = headers.findIndex((h) => h === "date");
+  const watchedDateIdx = headers.findIndex((h) => h === "watched date");
+  const dateIdx = watchedDateIdx >= 0 ? watchedDateIdx : headers.findIndex((h) => h === "date");
   const nameIdx = headers.findIndex((h) => h === "name" || h.includes("title"));
   const yearIdx = headers.findIndex((h) => h === "year");
   const ratingIdx = headers.findIndex((h) => h === "rating");
@@ -254,10 +258,10 @@ export default function SettingsImportPage() {
     setMessage(null);
 
     try {
-      const [profileSnap, logsSnap, listsSnap, followsSnap, notificationsSnap, sharesSnap] = await Promise.all([
+      const [profileSnap, logsSnap, listData, followsSnap, notificationsSnap, sharesSnap] = await Promise.all([
         get(ref(db, `users/${user.id}`)),
         get(ref(db, "movie_logs")),
-        get(ref(db, "lists")),
+        getAuthorizedListData(),
         get(ref(db, "follows")),
         get(ref(db, `notifications/${user.id}`)),
         get(ref(db, "shares")),
@@ -268,7 +272,7 @@ export default function SettingsImportPage() {
         profile: profileSnap.exists() ? profileSnap.val() : null,
         settings: profileSnap.exists() ? profileSnap.val()?.settings || null : null,
         logs: logsSnap.exists() ? Object.entries(logsSnap.val() as Record<string, MovieLog>).filter(([, log]) => log.user_id === user.id).map(([id, log]) => ({ ...log, id })) : [],
-        lists: listsSnap.exists() ? Object.entries(listsSnap.val() as Record<string, List>).filter(([, list]) => list.owner_id === user.id).map(([id, list]) => ({ ...list, id })) : [],
+        lists: Object.entries(listData.lists).filter(([, list]) => list.owner_id === user.id).map(([id, list]) => ({ ...list, id })),
         follows: followsSnap.exists() ? Object.entries(followsSnap.val() as Record<string, any>).filter(([, follow]) => follow.follower_id === user.id || follow.following_id === user.id).map(([id, follow]) => ({ ...follow, id })) : [],
         notifications: notificationsSnap.exists() ? notificationsSnap.val() : null,
         shares: sharesSnap.exists() ? Object.entries(sharesSnap.val() as Record<string, any>).filter(([, share]) => share.sender_id === user.id || share.receiver_id === user.id).map(([id, share]) => ({ ...share, id })) : [],
@@ -308,6 +312,7 @@ export default function SettingsImportPage() {
         }
       });
       await Promise.all(removals);
+      if (removed > 0) scheduleHonoursRecalculation(user.id);
       setMessage(`Removed ${removed} imported log${removed === 1 ? "" : "s"}.`);
     } catch {
       setError("Could not clear imported ratings.");
@@ -322,38 +327,67 @@ export default function SettingsImportPage() {
       loading={loading}
       onSignOut={handleSignOut}
       title="Import"
-      description="Letterboxd CSV and data export. Keep the actions short and direct."
+      description="Move your Letterboxd ratings or download your data."
     >
-      <div className="space-y-8">
-        <SettingsGroup title="Import">
-        <SettingLine icon={Upload} title="Import Letterboxd CSV" description="Pick a ratings export and we will build logs from it.">
-          <div className="space-y-4">
-            <div className="rounded-[1.35rem] border border-white/10 bg-white/[0.04] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-black text-[#f5f0de]">Custom rating map</p>
-                  <p className="mt-1 text-xs text-white/45">
-                    Decide how your CSV ratings become Bad, Average, Good, or Masterpiece before importing.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBadMaxInput(String(DEFAULT_RATING_BOUNDS.badMax));
-                    setAverageMaxInput(String(DEFAULT_RATING_BOUNDS.averageMax));
-                    setGoodMaxInput(String(DEFAULT_RATING_BOUNDS.goodMax));
-                    setMasterpieceMinInput(String(DEFAULT_RATING_BOUNDS.masterpieceMin));
-                  }}
-                  disabled={busy}
-                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50"
-                >
-                  Reset
-                </button>
+      <div className="space-y-5">
+        <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#111111]">
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-14 shrink-0 items-center justify-center rounded-full bg-white/[0.04]">
+                <LetterboxdMark className="h-5 w-11" />
+              </span>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#ff9b52]">Bring your diary over</p>
+                <h2 className="mt-1 text-lg font-bold leading-tight text-[#f5f0de] sm:text-xl">Import from Letterboxd</h2>
               </div>
+            </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <ol className="mt-5 grid gap-4 sm:grid-cols-3 sm:gap-5">
+              <li className="flex gap-3 border-l border-[#ff7a1a]/70 pl-3">
+                <span className="text-xs font-black tabular-nums text-[#ff9b52]">01</span>
+                <p className="text-xs leading-relaxed text-white/65">Open Letterboxd&apos;s <a href="https://letterboxd.com/user/exportdata/" target="_blank" rel="noreferrer" className="font-semibold text-[#ffb36b] underline decoration-[#ffb36b]/40 underline-offset-2 hover:text-[#ff7a1a]">data export</a>.</p>
+              </li>
+              <li className="flex gap-3 border-l border-[#ff7a1a]/70 pl-3">
+                <span className="text-xs font-black tabular-nums text-[#ff9b52]">02</span>
+                <p className="text-xs leading-relaxed text-white/65">Choose <strong className="text-[#f5f0de]">Export Data</strong>, then unzip the download.</p>
+              </li>
+              <li className="flex gap-3 border-l border-[#ff7a1a]/70 pl-3">
+                <span className="text-xs font-black tabular-nums text-[#ff9b52]">03</span>
+                <p className="text-xs leading-relaxed text-white/65">Pick <strong className="text-[#f5f0de]">diary.csv</strong> below to keep your watch dates.</p>
+              </li>
+            </ol>
+            <p className="mt-4 border-t border-white/[0.08] pt-3 text-[11px] leading-relaxed text-white/45"><strong className="text-white/65">diary.csv</strong> uses the date you watched a film. <strong className="text-white/65">ratings.csv</strong> uses the date you rated it. Rated movie rows are imported; unrated rows are skipped.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-4 py-4 sm:px-6">
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#ff7a1a] px-5 text-sm font-bold text-[#101010] transition hover:bg-[#ff9142] disabled:opacity-50">
+              <Upload className="h-4 w-4" /> Choose CSV
+            </button>
+            <button type="button" onClick={handleClearImports} disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-xs font-semibold text-white/50 transition hover:bg-white/[0.05] hover:text-[#f5f0de] disabled:opacity-50">
+              <Trash2 className="h-3.5 w-3.5" /> Clear imported logs
+            </button>
+            {busy && <span className="ml-auto text-xs text-white/45">Working…</span>}
+          </div>
+
+          <details className="border-t border-white/10 px-4 py-4 sm:px-6">
+            <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[#f5f0de] marker:hidden">
+              <span>Rating conversion</span>
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-white/40"><span>Bad ≤ {previewBounds.badMax.toFixed(1)} · Average ≤ {previewBounds.averageMax.toFixed(1)} · Good ≤ {previewBounds.goodMax.toFixed(1)} · Masterpiece ≥ {previewBounds.masterpieceMin.toFixed(1)}</span><span className="font-bold text-[#ff9b52]">Adjust ↓</span></span>
+            </summary>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-xs text-white/45">Adjust how your Letterboxd stars map to Canisterr verdicts.</p>
+              <button type="button" onClick={() => {
+                setBadMaxInput(String(DEFAULT_RATING_BOUNDS.badMax));
+                setAverageMaxInput(String(DEFAULT_RATING_BOUNDS.averageMax));
+                setGoodMaxInput(String(DEFAULT_RATING_BOUNDS.goodMax));
+                setMasterpieceMinInput(String(DEFAULT_RATING_BOUNDS.masterpieceMin));
+              }} disabled={busy} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold text-[#ffb36b] hover:bg-white/[0.05] disabled:opacity-50">
+                <RotateCcw className="h-3 w-3" /> Reset
+              </button>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <label className="space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb36b]/80">Bad up to</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">Bad up to</span>
                   <input
                     type="number"
                     min="0"
@@ -362,12 +396,12 @@ export default function SettingsImportPage() {
                     value={badMaxInput}
                     onChange={(event) => setBadMaxInput(event.target.value)}
                     disabled={busy}
-                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
+                    className="w-full rounded-lg border border-white/10 bg-[#191919] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a] disabled:opacity-50"
                   />
                 </label>
 
                 <label className="space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb36b]/80">Average up to</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">Average up to</span>
                   <input
                     type="number"
                     min="0"
@@ -376,12 +410,12 @@ export default function SettingsImportPage() {
                     value={averageMaxInput}
                     onChange={(event) => setAverageMaxInput(event.target.value)}
                     disabled={busy}
-                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
+                    className="w-full rounded-lg border border-white/10 bg-[#191919] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a] disabled:opacity-50"
                   />
                 </label>
 
                 <label className="space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb36b]/80">Good up to</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">Good up to</span>
                   <input
                     type="number"
                     min="0"
@@ -390,12 +424,12 @@ export default function SettingsImportPage() {
                     value={goodMaxInput}
                     onChange={(event) => setGoodMaxInput(event.target.value)}
                     disabled={busy}
-                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
+                    className="w-full rounded-lg border border-white/10 bg-[#191919] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a] disabled:opacity-50"
                   />
                 </label>
 
                 <label className="space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ffb36b]/80">Masterpiece from</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">Masterpiece from</span>
                   <input
                     type="number"
                     min="0"
@@ -404,53 +438,34 @@ export default function SettingsImportPage() {
                     value={masterpieceMinInput}
                     onChange={(event) => setMasterpieceMinInput(event.target.value)}
                     disabled={busy}
-                    className="w-full rounded-2xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#0a84ff] disabled:opacity-50"
+                    className="w-full rounded-lg border border-white/10 bg-[#191919] px-3 py-2 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a] disabled:opacity-50"
                   />
                 </label>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold text-[#f5f0de]/70">
-                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
+              <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/40">
+                <span>
                   0.0 - {previewBounds.badMax.toFixed(1)} = Bad
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
+                <span>
                   {(previewBounds.badMax + 0.1).toFixed(1)} - {previewBounds.averageMax.toFixed(1)} = Average
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
+                <span>
                   {(previewBounds.averageMax + 0.1).toFixed(1)} - {previewBounds.goodMax.toFixed(1)} = Good
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1">
+                <span>
                   {previewBounds.masterpieceMin.toFixed(1)}+ = Masterpiece
                 </span>
               </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={busy}
-                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50"
-              >
-                Choose file
-              </button>
-              <button
-                onClick={handleClearImports}
-                disabled={busy}
-                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:opacity-50"
-              >
-                Clear imports
-              </button>
-            </div>
-          </div>
-        </SettingLine>
-        </SettingsGroup>
+          </details>
+        </section>
 
         <SettingsGroup title="Export">
-          <SettingLine icon={CloudDownload} title="Export data" description="Download your profile, logs, lists and social data as JSON.">
+          <SettingLine title="Export data" description="Download your data as JSON." stacked>
             <button
               onClick={handleExport}
               disabled={busy}
-              className="rounded-full bg-[#0a84ff] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2994ff] disabled:opacity-50"
+              className=" rounded-md bg-[#ff7a1a] px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-[#ff8d3b] disabled:opacity-50"
             >
               Download export
             </button>

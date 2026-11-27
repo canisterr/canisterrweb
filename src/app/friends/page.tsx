@@ -20,6 +20,7 @@ import {
 } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
 import { createFollowRequestNotification } from "@/lib/notifications";
+import { scheduleAcceptedFollowHonoursRecalculation, scheduleHonoursRecalculation } from "@/lib/honours-client";
 import { getUsersByIds, searchUsersCached } from "@/lib/users";
 import { Users, Heart } from "lucide-react";
 
@@ -256,6 +257,7 @@ export default function FriendsPage() {
       if (snapshot.exists()) {
         const followData = snapshot.val();
         await set(followRef, { ...followData, status: "accepted" });
+        scheduleAcceptedFollowHonoursRecalculation(followId);
       }
     } catch (error) {
       console.error("Error accepting follow:", error);
@@ -266,6 +268,7 @@ export default function FriendsPage() {
     try {
       const followRef = ref(db, `follows/${followId}`);
       await set(followRef, null);
+      if (user) scheduleHonoursRecalculation(user.id);
     } catch (error) {
       console.error("Error unfollowing:", error);
     }

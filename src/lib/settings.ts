@@ -246,7 +246,8 @@ export type NotificationPreferenceKey =
   | "logNotifications"
   | "collaborationInvites"
   | "matcherUpdates"
-  | "emailNotifications";
+  | "emailNotifications"
+  | "pushNotifications";
 
 export type NotificationType =
   | "follow_request"
@@ -258,9 +259,13 @@ export type NotificationType =
   | "log_comment"
   | "log_comment_reply"
   | "log_comment_like"
-  | "matcher_update";
+  | "matcher_update"
+  | "release_reminder"
+  | "honour_unlocked";
 
 export function notificationPreferenceForType(type: NotificationType): NotificationPreferenceKey {
+  if (type === "honour_unlocked") return "logNotifications";
+  if (type === "release_reminder") return "pushNotifications";
   if (type === "follow_request") return "followRequests";
   if (type === "collaboration_request") return "collaborationInvites";
   if (type === "matcher_update") return "matcherUpdates";

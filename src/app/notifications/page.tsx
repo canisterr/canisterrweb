@@ -28,9 +28,10 @@ function avatarFallback(name?: string): string {
   return name?.charAt(0)?.toUpperCase() || "N";
 }
 
-type NotificationFilter = "all" | "requests" | "shares" | "logs";
+type NotificationFilter = "all" | "requests" | "shares" | "logs" | "releases";
 
 function getNotificationFilter(note: NotificationItem): Exclude<NotificationFilter, "all"> {
+  if (note.type === "release_reminder") return "releases";
   if (note.type === "follow_request" || note.type === "collaboration_request") return "requests";
   if (note.type === "share_reply" || note.type === "share_received") return "shares";
   if (note.type === "log_created") return "logs";
@@ -216,6 +217,7 @@ export default function NotificationsPage() {
             ["requests", "Requests"],
             ["shares", "Shares"],
             ["logs", "Logs"],
+            ["releases", "Releases"],
           ] as const).map(([value, label]) => (
             <button
               key={value}
@@ -237,14 +239,18 @@ export default function NotificationsPage() {
             <p className="py-12 text-sm text-[#f5f0de]/55">No notifications in this filter.</p>
           ) : (
             filteredNotifications.map((note) => {
-              const avatar = note.fromUser?.avatar_url ? (
+              const avatar = note.type === "release_reminder" ? (
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center border border-[#ff7a1a]/35 bg-[#ff7a1a]/10 text-[#ff9b52]">
+                  <Bell className="h-5 w-5" aria-hidden="true" />
+                </div>
+              ) : note.fromUser?.avatar_url ? (
                 <img
                   src={note.fromUser.avatar_url}
                   alt={note.fromUser.name}
                   className="h-11 w-11 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10"
                 />
               ) : (
-                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[#f5f0de] text-sm font-black text-black">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#f5f0de] text-sm font-black text-black">
                   {avatarFallback(note.fromUser?.name)}
                 </div>
               );
@@ -255,7 +261,7 @@ export default function NotificationsPage() {
                     {avatar}
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-black text-[#f5f0de]">{note.fromUser?.name || "Someone"}</p>
+                        <p className="text-sm font-black text-[#f5f0de]">{note.type === "release_reminder" ? "Release reminder" : note.fromUser?.name || "Someone"}</p>
                         <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#ffb36b]/70">
                           {getNotificationFilter(note)}
                         </span>

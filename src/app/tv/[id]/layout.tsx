@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { tvMetadata, tvSchema, breadcrumbSchema, BASE_URL } from "@/lib/seo";
 import { resolveTvRouteParam } from "@/lib/content-slugs";
 import JsonLd from "@/components/JsonLd";
@@ -8,16 +9,18 @@ type Props = {
   children: React.ReactNode;
 };
 
+const getResolvedShow = cache(resolveTvRouteParam);
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const resolved = await resolveTvRouteParam(id);
+  const resolved = await getResolvedShow(id);
   if (!resolved) return { title: "TV Show | Canisterr" };
   return tvMetadata(resolved.show, resolved.canonicalPath);
 }
 
 export default async function TvLayout({ params, children }: Props) {
   const { id } = await params;
-  const resolved = await resolveTvRouteParam(id);
+  const resolved = await getResolvedShow(id);
   const show = resolved?.show;
 
   return (

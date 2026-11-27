@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import type { User } from "@/types";
-import { Compass, Film, Globe, List, LogIn, MessageCircle, ShoppingBag } from "lucide-react";
+import { ChevronRight, Clapperboard, Gamepad2, House, LibraryBig, Send, X } from "lucide-react";
 
 interface SidebarProps {
   user: User | null;
@@ -39,14 +39,12 @@ export default function Sidebar({
     }
   };
 
-  const guestHref = `/auth/login?redirect=${encodeURIComponent(pathname)}`;
   const navItems = [
-    { href: "/dashboard", label: "Home", icon: Globe },
-    { href: "/discover", label: "Discover", icon: Compass },
-    { href: "/lists", label: "Lists", icon: List },
-    { href: "/store", label: "Store", icon: ShoppingBag },
-    { href: "/share?panel=share", label: "Recommend", icon: MessageCircle },
-    { href: "/logs", label: "Log", icon: Film },
+    { href: "/dashboard", label: "Home", icon: House },
+    { href: "/games", label: "Games", icon: Gamepad2 },
+    { href: "/lists", label: "Lists", icon: LibraryBig },
+    { href: "/share?panel=share", label: "Recommend", icon: Send },
+    { href: "/logs", label: "Log", icon: Clapperboard },
   ];
 
   // Sidebar classes for mobile/desktop
@@ -59,64 +57,36 @@ export default function Sidebar({
 
   return (
     <div className={`${sidebarBase} ${sidebarMobile} min-w-0`}>
-      {/* Close button for mobile */}
-      <button
-        className={`absolute right-4 top-4 z-50 h-10 w-10 items-center justify-center rounded-full border shadow-sm lg:hidden ${
-          isBrutalist
-            ? "border-white/15 bg-[#161616] text-[#f5f0de]"
-            : "border-slate-200 bg-white text-slate-900"
-        } ${mobileOpen ? "flex" : "hidden"}`}
-        onClick={onCloseMobile}
-        aria-label="Close menu"
-      >
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-
-      {/* Profile / Login */}
-      <Link
-        href={user ? "/profile" : guestHref}
-        onClick={onCloseMobile}
-        className={`block border-b p-5 pr-16 transition-colors sm:p-6 ${
-          isBrutalist ? "border-white/10 hover:bg-white/5" : "border-slate-200/80 hover:bg-slate-50/80"
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          {user ? (
-            user.avatar_url ? (
-              <Image
-                src={user.avatar_url}
-                alt={user.username}
-                width={40}
-                height={40}
-                className={`h-10 w-10 rounded-full object-cover ${
-                  isBrutalist ? "ring-1 ring-white/10" : "ring-1 ring-slate-200"
-                }`}
-              />
-            ) : (
-              <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${isBrutalist ? "bg-[#f5f0de] text-[#0a0a0a]" : "bg-slate-900 text-white"}`}>
-                {user.username && user.username.length > 0 ? user.username[0].toUpperCase() : "U"}
-              </div>
-            )
-          ) : (
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full border ${isBrutalist ? "border-white/10 bg-white/5 text-[#f5f0de]" : "border-slate-200 bg-slate-50 text-slate-900"}`}>
-              <LogIn className="h-4 w-4" />
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className={`truncate text-base font-bold ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>
-              {user ? user.name : "Log in"}
-            </p>
-            <p className={`mt-0.5 text-xs font-semibold ${isBrutalist ? "text-white/55" : "text-slate-500"}`}>
-              {user ? "View profile" : "Get started"}
-            </p>
-          </div>
-        </div>
-      </Link>
+      <div className="flex min-h-20 items-center gap-2 px-4 py-3">
+        {user ? (
+          <Link
+            href={user.username ? `/profile/${encodeURIComponent(user.username)}` : "/profile"}
+            onClick={onCloseMobile}
+            className="group flex min-w-0 flex-1 items-center gap-3"
+            aria-label={`Open ${user.name}'s profile`}
+          >
+            <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border text-sm font-bold ${isBrutalist ? "border-white/15 bg-[#1a1a1a] text-[#f5f0de]" : "border-slate-200 bg-slate-100 text-slate-900"}`}>
+              {user.avatar_url ? <Image src={user.avatar_url} alt="" fill sizes="44px" className="object-cover" unoptimized /> : user.name?.charAt(0)?.toUpperCase() || "U"}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={`block truncate text-base font-semibold leading-tight ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>{user.name}</span>
+              <span className={`mt-0.5 block truncate text-xs ${isBrutalist ? "text-white/45" : "text-slate-500"}`}><span className="lg:hidden">@{user.username}</span><span className="hidden lg:inline">View profile</span></span>
+            </span>
+            <ChevronRight className={`h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 ${isBrutalist ? "text-white/35" : "text-slate-400"}`} />
+          </Link>
+        ) : <span className={`flex-1 text-sm font-semibold ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Menu</span>}
+        <button
+          type="button"
+          onClick={onCloseMobile}
+          aria-label="Close menu"
+          className={`ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition lg:hidden ${isBrutalist ? "text-white/55 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`}
+        >
+          <X className="h-5 w-5" strokeWidth={1.8} />
+        </button>
+      </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-2 p-5">
+      <nav className="flex-1 space-y-2 p-5 lg:pt-5">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (

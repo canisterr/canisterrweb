@@ -1,14 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signUp, checkUsernameAvailability } from "@/lib/auth";
-import { Mail, Lock, User, AlertCircle, CheckCircle, ArrowRight } from "lucide-react";
-import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { signUp, checkUsernameAvailability, getAuthErrorMessage, getSignupPasswordError, signInWithGoogle } from "@/lib/auth";
+import { auth, db } from "@/lib/firebase";
 import { getUsernameValidationError } from "@/lib/username-index";
+import AuthShell, { authInputClass, authLabelClass } from "@/components/auth/AuthShell";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { get, ref } from "firebase/database";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function SignUpPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [verificationSent, setVerificationSent] = useState(false);
@@ -29,10 +31,16 @@ export default function SignUpPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
-        router.replace("/dashboard");
+        void get(ref(db, `users/${firebaseUser.uid}`)).then((profile) => {
+          const username = profile.exists() ? profile.val()?.username : null;
+          const hasUsableProfile = typeof username === "string" && !getUsernameValidationError(username);
+          if (hasUsableProfile) router.replace("/dashboard");
+          else if (firebaseUser.providerData.some((provider) => provider.providerId === "google.com")) {
+            router.replace("/auth/complete-profile");
+          }
+        });
       }
     });
-
     return () => unsubscribe();
   }, [router]);
 
@@ -42,13 +50,7 @@ export default function SignUpPage() {
       usernameCheckDebounceRef.current = null;
     }
 
-    if (usernameValidationError) {
-      setUsernameAvailable(null);
-      setCheckingUsername(false);
-      return;
-    }
-
-    if (username.length < 3) {
+    if (usernameValidationError || username.length < 3) {
       setUsernameAvailable(null);
       setCheckingUsername(false);
       return;
@@ -57,8 +59,7 @@ export default function SignUpPage() {
     setCheckingUsername(true);
     usernameCheckDebounceRef.current = setTimeout(async () => {
       try {
-        const available = await checkUsernameAvailability(username);
-        setUsernameAvailable(available);
+        setUsernameAvailable(await checkUsernameAvailability(username));
       } catch {
         setUsernameAvailable(null);
       } finally {
@@ -74,256 +75,132 @@ export default function SignUpPage() {
     };
   }, [username, usernameValidationError]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError("");
 
     if (!agreedToTerms) {
       setError("Please agree to the terms and conditions to continue.");
       return;
     }
-
+    const passwordError = getSignupPasswordError(password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
     if (password !== confirmPassword) {
       setError("Passwords do not match");
       return;
     }
-
     if (usernameValidationError) {
       setError(usernameValidationError);
       return;
     }
-
     if (usernameAvailable === false) {
       setError("Username is not available");
       return;
     }
 
     setLoading(true);
-
     try {
-      await signUp(email, password, username, name);
+      await signUp(email, password, username, name, {
+        termsAccepted: agreedToTerms,
+        privacyAccepted: agreedToTerms,
+      });
       setVerificationSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed");
+      setError(getAuthErrorMessage(err, "signup"));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleGoogleSignUp = async () => {
+    setError("");
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithGoogle();
+      router.replace(result.needsProfile ? "/auth/complete-profile" : "/dashboard");
+    } catch (err) {
+      setError(getAuthErrorMessage(err, "signup"));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-dvh bg-[#050505] text-[#f5f0de]">
-      <div className="grid h-full w-full lg:grid-cols-[2fr_3fr]">
-        <section className="relative hidden min-h-dvh overflow-hidden border-r border-white/10 bg-[#050505] lg:flex">
-          <img
-            src="https://image.tmdb.org/t/p/w780/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg"
-            alt="La La Land poster"
-            className="absolute inset-0 h-full w-full object-contain object-left pointer-events-none select-none"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(0,0,0,0.35),rgba(0,0,0,0.05)_50%,rgba(0,0,0,0.34))]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,122,26,0.14),transparent_28%),radial-gradient(circle_at_80%_80%,rgba(0,0,0,0.18),transparent_32%)]" />
-        </section>
-
-        <section className="flex min-h-dvh items-start justify-start bg-[#0a0a0a] px-5 py-6 sm:px-8 sm:py-8 lg:px-4 lg:py-4">
-          <div className="w-full max-w-none">
-            <div className="mb-8 flex items-start gap-4">
-              <div className="flex items-center gap-3">
-                <Image src="/logo.png" alt="Canisterr logo" width={56} height={56} className="h-14 w-14 rounded-2xl object-cover" />
-                <div>
-                  <h1 className="mt-1 text-4xl font-black leading-none text-[#f5f0de] sm:text-6xl">
-                    Canisterr
-                  </h1>
-                </div>
-              </div>
-            </div>
-
-            <p className="max-w-lg text-sm leading-7 text-white/60">
-              Build your profile, choose your username, and start logging films.
-            </p>
-
-            <div className="mt-5 flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.24em]">
-              <Link href="/auth/login" className="text-white/40 transition hover:text-[#ff7a1a]">
-                Sign in
-              </Link>
-              <span className="text-white/20">/</span>
-              <Link href="/auth/signup" className="text-[#ff7a1a]">
-                Create account
-              </Link>
-            </div>
-
-            {verificationSent ? (
-              <div className="mt-8 space-y-4">
-                <h2 className="text-3xl font-black text-[#f5f0de] sm:text-4xl">Verify your email</h2>
-                <p className="text-sm leading-7 text-white/60 sm:text-base">
-                  A verification link has been sent to <span className="font-semibold text-[#ffb36b]">{email}</span>.
-                  {" "}You can use the app now, but please verify within 7 days.
-                </p>
-                <div className="flex flex-wrap gap-3 text-sm font-semibold">
-                  <Link href="/dashboard" className="rounded-full border border-[#ff7a1a] bg-[#ff7a1a] px-4 py-2.5 text-[#0a0a0a] transition hover:bg-[#ff8d3b]">
-                    Continue
-                  </Link>
-                  <Link href="/auth/login" className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5 text-[#f5f0de] transition hover:bg-white/[0.08]">
-                    Log in
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-                {error && (
-                  <div className="flex items-start gap-3 rounded-[1.25rem] border border-[#ff7a1a]/20 bg-[#ff7a1a]/10 p-4">
-                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#ff7a1a]" />
-                    <p className="text-sm text-[#f5f0de]">{error}</p>
-                  </div>
-                )}
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-[#f5f0de]/75">Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/35" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      required
-                      className="w-full rounded-[1.25rem] border border-white/10 bg-[#111111] py-3 pl-10 pr-4 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/45 focus:ring-2 focus:ring-[#ff7a1a]/15"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-[#f5f0de]/75">Username</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/35" />
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
-                      placeholder="username"
-                      minLength={3}
-                      maxLength={20}
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      pattern="[a-z0-9._]{3,20}"
-                      required
-                      className="w-full rounded-[1.25rem] border border-white/10 bg-[#111111] py-3 pl-10 pr-10 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/45 focus:ring-2 focus:ring-[#ff7a1a]/15"
-                    />
-                    {username.length >= 3 && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        {checkingUsername ? (
-                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#ff7a1a]" />
-                        ) : usernameAvailable === true ? (
-                          <CheckCircle className="h-5 w-5 text-[#ff7a1a]" />
-                        ) : usernameAvailable === false ? (
-                          <AlertCircle className="h-5 w-5 text-[#ffb36b]" />
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                  {username.length > 0 && username.length < 3 && (
-                    <p className="mt-1 text-xs text-[#f5f0de]/45">At least 3 characters</p>
-                  )}
-                  {usernameValidationError && (
-                    <p className="mt-1 text-xs text-[#ffb36b]">
-                      {usernameValidationError}
-                    </p>
-                  )}
-                  {!usernameValidationError && (
-                    <p className="mt-1 text-xs text-[#f5f0de]/45">
-                      Use letters, numbers, dots, and underscores only. No @ or -.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-[#f5f0de]/75">Full Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    required
-                    className="w-full rounded-[1.25rem] border border-white/10 bg-[#111111] px-4 py-3 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/45 focus:ring-2 focus:ring-[#ff7a1a]/15"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-[#f5f0de]/75">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/35" />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      minLength={6}
-                      required
-                      className="w-full rounded-[1.25rem] border border-white/10 bg-[#111111] py-3 pl-10 pr-4 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/45 focus:ring-2 focus:ring-[#ff7a1a]/15"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-[#f5f0de]/75">Confirm Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/35" />
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="••••••••"
-                      minLength={6}
-                      required
-                      className="w-full rounded-[1.25rem] border border-white/10 bg-[#111111] py-3 pl-10 pr-4 text-sm text-[#f5f0de] outline-none transition placeholder:text-white/30 focus:border-[#ff7a1a]/45 focus:ring-2 focus:ring-[#ff7a1a]/15"
-                    />
-                  </div>
-                </div>
-
-                <label className="flex items-start gap-3 rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-[#f5f0de]/80">
-                  <input
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border-white/20 bg-[#111111] text-[#ff7a1a] accent-[#ff7a1a]"
-                  />
-                  <span>
-                    By clicking I agree to the{" "}
-                    <Link href="/terms" className="font-semibold text-[#ffb36b] hover:text-[#ff8d3b]">
-                      terms and conditions
-                    </Link>{" "}
-                    and{" "}
-                    <Link href="/privacy" className="font-semibold text-[#ffb36b] hover:text-[#ff8d3b]">
-                      privacy policy
-                    </Link>
-                    .
-                  </span>
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={loading || usernameAvailable === false || !agreedToTerms}
-                  className="w-full rounded-[1.25rem] bg-[#f5f0de] py-3 text-sm font-black text-[#0a0a0a] transition hover:bg-[#ff7a1a] disabled:opacity-60"
-                >
-                  {loading ? "Creating account..." : "Create account"}
-                </button>
-              </form>
-            )}
-
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm">
-              <Link href="/auth/login" className="font-semibold text-[#ff7a1a] hover:text-[#ff8d3b]">
-                Already have an account?
-              </Link>
-              <Link
-                href="/auth/login"
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/45 hover:bg-white/[0.08]"
-              >
-                Sign in
-                <ArrowRight className="h-4 w-4 text-[#ffb36b]" />
-              </Link>
+    <AuthShell mode="signup">
+      {verificationSent ? (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Check your email</h1>
+          <p className="mt-3 text-sm leading-6 text-white/60 lg:text-white/50">
+            We sent a verification link to <span className="font-semibold text-[#f5f0de] lg:text-[#f5f0de]">{email}</span>.
+            You can use the app now, but please verify within 7 days.
+          </p>
+          <Link href="/dashboard" className="mt-8 flex w-full items-center justify-center rounded-xl bg-[#f5f0de] px-4 py-3.5 text-base font-bold text-[#0b0b0b] transition hover:bg-white lg:mx-auto lg:w-44 lg:rounded-full lg:bg-[#ff7a1a] lg:text-[#0b0b0b] lg:hover:bg-[#ff8c35]">
+            Continue
+          </Link>
+        </div>
+      ) : (
+        <>
+          <div className="mb-7 lg:mb-4 lg:text-center">
+            <h1 className="text-2xl font-bold tracking-tight lg:text-3xl lg:uppercase" style={{ fontFamily: '"Ubuntu", ui-sans-serif, system-ui, sans-serif' }}>Create your account</h1>
+            <p className="mt-1 text-sm text-white/50 lg:text-white/50">Keep every watch in one place.</p>
+          </div>
+          {error ? <p role="alert" className="mb-4 text-sm text-[#ff9d62] lg:text-[#ff9d62]">{error}</p> : null}
+          <div className="mb-5">
+            <GoogleSignInButton onClick={() => void handleGoogleSignUp()} disabled={loading || googleLoading} label={googleLoading ? "Connecting…" : "Continue with Google"} />
+            <div className="mt-5 flex items-center gap-3 text-xs text-white/35">
+              <span className="h-px flex-1 bg-white/10" />
+              <span>OR SIGN UP WITH EMAIL</span>
+              <span className="h-px flex-1 bg-white/10" />
             </div>
           </div>
-        </section>
-      </div>
-    </div>
+          <form onSubmit={handleSubmit} className="space-y-5 lg:space-y-3">
+            <div className="space-y-1">
+              <label htmlFor="signup-username" className={authLabelClass}>Username</label>
+              <input
+                id="signup-username" type="text" value={username}
+                onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
+                minLength={3} maxLength={20} autoCapitalize="none" autoCorrect="off"
+                autoComplete="username" spellCheck={false} pattern="[a-z0-9._]{3,20}"
+                required aria-describedby="username-help" className={authInputClass}
+              />
+              <p id="username-help" className={`pt-1 text-xs ${usernameValidationError || usernameAvailable === false ? "text-[#ff9d62] lg:text-[#ff9d62]" : "text-white/40 lg:text-white/40"}`}>
+                {usernameValidationError || (username.length >= 3
+                  ? checkingUsername ? "Checking username…" : usernameAvailable === true ? "Username available" : usernameAvailable === false ? "Username is taken" : "3–20 letters, numbers, dots, or underscores"
+                  : "3–20 letters, numbers, dots, or underscores")}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="signup-email" className={authLabelClass}>Email</label>
+              <input id="signup-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required className={authInputClass} />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="signup-name" className={authLabelClass}>Full name</label>
+              <input id="signup-name" type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required className={authInputClass} />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="signup-password" className={authLabelClass}>Password</label>
+              <input id="signup-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required aria-describedby="password-help" className={authInputClass} />
+              <p id="password-help" className="pt-1 text-xs text-white/40">At least 6 characters, with a letter and a number. No symbols needed.</p>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="signup-confirm-password" className={authLabelClass}>Confirm password</label>
+              <input id="signup-confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" required className={authInputClass} />
+            </div>
+            <div className="flex items-start gap-2.5 pt-1">
+              <input id="signup-terms" type="checkbox" checked={agreedToTerms} onChange={(event) => setAgreedToTerms(event.target.checked)} className="canisterr-auth-checkbox" />
+              <label htmlFor="signup-terms" className="text-xs leading-5 text-white/55 lg:text-white/50">
+                I agree to the <Link href="/terms" className="text-[#ff9d62] underline underline-offset-2 lg:text-[#ff9d62]">Terms</Link> and <Link href="/privacy" className="text-[#ff9d62] underline underline-offset-2 lg:text-[#ff9d62]">Privacy Policy</Link>.
+              </label>
+            </div>
+            <button type="submit" disabled={loading || usernameAvailable === false || !agreedToTerms} className="w-full rounded-xl bg-[#f5f0de] px-4 py-3.5 text-base font-bold text-[#0b0b0b] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 lg:mx-auto lg:block lg:w-44 lg:rounded-full lg:bg-[#ff7a1a] lg:text-[#0b0b0b] lg:shadow-[0_6px_15px_rgba(255,122,26,0.25)] lg:hover:bg-[#ff8c35]">
+              {loading ? "Creating account…" : "Sign up"}
+            </button>
+          </form>
+        </>
+      )}
+    </AuthShell>
   );
 }

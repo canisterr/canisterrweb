@@ -1,5 +1,6 @@
 "use client";
 
+import { auth } from "@/lib/firebase";
 import type { MovieLog, User } from "@/types";
 
 export type ContentActivityLog = MovieLog & {
@@ -23,8 +24,10 @@ export async function fetchContentActivity(
   contentId: number,
   contentType: "movie" | "tv"
 ): Promise<ContentActivityPayload> {
+  const token = await auth.currentUser?.getIdToken().catch(() => undefined);
   const response = await fetch(`/api/content-activity?contentId=${contentId}&contentType=${contentType}`, {
     cache: "no-store",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
 
   if (!response.ok) {

@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import { baseMetadata, canonical } from "@/lib/seo";
 import HomeGate from "@/components/home/HomeGate";
-import { getHomepagePosters } from "@/lib/posters";
 
 export const metadata: Metadata = baseMetadata({
-  title: "Canisterr - Your Cinema Identity",
+  title: "Canisterr - Your Personal Cinema Journal",
   description:
-    "Canisterr is a social movie platform where you discover films through friends, track your taste, share reviews, and find what to watch next.",
+    "Keep the films and series that moved you. Write down what you thought and find people who get it.",
   alternates: {
     canonical: canonical("/"),
   },
@@ -15,20 +14,18 @@ export const metadata: Metadata = baseMetadata({
     siteName: "Canisterr",
     locale: "en_US",
     url: canonical("/"),
-    title: "Canisterr - Your Cinema Identity",
+    title: "Canisterr - Your Personal Cinema Journal",
     description:
-      "Canisterr is a social movie platform where you discover films through friends, track your taste, share reviews, and find what to watch next.",
+      "Keep the films and series that moved you. Write down what you thought and find people who get it.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Canisterr - Your Cinema Identity",
+    title: "Canisterr - Your Personal Cinema Journal",
     description:
-      "Canisterr is a social movie platform where you discover films through friends, track your taste, share reviews, and find what to watch next.",
+      "Keep the films and series that moved you. Write down what you thought and find people who get it.",
   },
 });
 
-export default async function HomePage() {
-  const posters = await getHomepagePosters();
-
-  return <HomeGate posters={posters} />;
+export default function HomePage() {
+  return <HomeGate />;
 }

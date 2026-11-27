@@ -24,12 +24,12 @@ export function createTimedCache<TArgs extends unknown[], TValue>({
     const now = Date.now();
     const cached = cache.get(cacheKey);
 
-    if (cached && cached.expiresAt > now && "value" in cached) {
-      return cached.value;
-    }
-
     if (cached?.promise) {
       return cached.promise;
+    }
+
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
     }
 
     const promise = Promise.resolve(loader(...args));

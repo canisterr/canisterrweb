@@ -116,7 +116,7 @@ export default function AcrylicMovieShelf({
           ref={railRef}
           className="scrollbar-hide -mx-2 overflow-x-auto px-2 pb-2 overscroll-x-contain scroll-smooth"
         >
-          <div className="relative w-max min-w-full">
+          <div className="relative h-[18.05rem] w-max min-w-full sm:h-[19.7rem] lg:h-[21.4rem]">
             <div className="flex items-start gap-4 pr-2">
               {items.map((item) => {
                 const poster = (
@@ -167,7 +167,7 @@ export default function AcrylicMovieShelf({
               })}
             </div>
 
-            <div className="pointer-events-none absolute inset-x-0 top-[10.15rem] z-20 h-[3.85rem] sm:top-[11.35rem] sm:h-[4rem] lg:top-[12.55rem] lg:h-[4.2rem]">
+            <div className="pointer-events-none absolute inset-x-0 top-[14.2rem] z-20 h-[3.85rem] sm:top-[15.7rem] sm:h-[4rem] lg:top-[17.2rem] lg:h-[4.2rem]">
               <div
                 className="absolute inset-x-0 bottom-0 top-0 overflow-hidden rounded-[1.45rem] border border-white/20 shadow-[0_14px_28px_rgba(0,0,0,0.2)] backdrop-blur-[10px]"
                 style={{

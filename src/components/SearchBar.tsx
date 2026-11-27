@@ -23,6 +23,7 @@ interface SearchBarProps {
   disabled?: boolean;
   minChars?: number;
   theme?: "default" | "brutalist";
+  selectedIds?: Array<string | number>;
 }
 
 export default function SearchBar({
@@ -33,6 +34,7 @@ export default function SearchBar({
   disabled = false,
   minChars = 1,
   theme = "default",
+  selectedIds = [],
 }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchData[]>([]);
@@ -170,6 +172,7 @@ export default function SearchBar({
                 <li key={item.id}>
                   <button
                     onClick={() => handleSelect(item)}
+                    aria-pressed={selectedIds.includes(item.id)}
                     className={`flex w-full items-center gap-3 border-b px-3 py-3 text-left transition-colors last:border-b-0 sm:gap-4 sm:px-4 sm:py-4 ${
                       isBrutalist
                         ? "border-white/10 hover:bg-white/5"
@@ -201,6 +204,7 @@ export default function SearchBar({
                         <p className={`mt-1 text-sm ${isBrutalist ? "text-white/55" : "text-slate-500"}`}>{item.subtitle}</p>
                       )}
                     </div>
+                    {selectedIds.includes(item.id) && <span className="text-[#ff7a1a]" aria-label="Selected">✓</span>}
                   </button>
                 </li>
               ))}

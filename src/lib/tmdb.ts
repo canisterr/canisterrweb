@@ -1,11 +1,11 @@
 import { TMDBMovie, TMDBPersonSearchResult, TMDBSearchResponse } from "@/types";
-import { ParsedIntent } from "./nlp-parser";
 import { fetchTmdb } from "./tmdb-transport";
+import type { TmdbWatchProviderAppend } from "./watch-providers";
 import { getTmdbBackdropUrl, getTmdbImageUrl, getTmdbPosterUrl } from "./performance";
-import { readBrowserCache, readBrowserCacheEntry, writeBrowserCache } from "./browser-cache";
+import { readBrowserCacheEntry, writeBrowserCache } from "./browser-cache";
 import { searchMovieCatalog, upsertMovieCatalog } from "./movie-catalog";
 
-// Genre ID mappings for TMDB discover API (also the canonical genre list for the 3D store's genre hall)
+// Genre ID mappings for TMDB discovery.
 export const GENRE_MAP: Record<string, number> = {
   action: 28,
   adventure: 12,
@@ -27,54 +27,7 @@ export const GENRE_MAP: Record<string, number> = {
   western: 37,
 };
 
-function getMovieGenreIds(movie: TMDBMovie): number[] {
-  if (Array.isArray(movie.genres) && movie.genres.length > 0) {
-    return movie.genres;
-  }
-
-  const genreIds = (movie as TMDBMovie & { genre_ids?: number[] }).genre_ids;
-  return Array.isArray(genreIds) ? genreIds : [];
-}
-
-export function getGenreIdsForNames(genres: string[]): number[] {
-  return Array.from(
-    new Set(
-      genres
-        .map((genre) => GENRE_MAP[genre.toLowerCase()])
-        .filter((genreId): genreId is number => typeof genreId === "number")
-    )
-  );
-}
-
-function rankDiscoverResults(movies: TMDBMovie[], preferredGenreIds: number[]): TMDBMovie[] {
-  if (movies.length === 0) {
-    return [];
-  }
-
-  const preferredSet = new Set(preferredGenreIds);
-
-  return movies.slice().sort((a, b) => {
-    const score = (movie: TMDBMovie) => {
-      const movieGenres = getMovieGenreIds(movie);
-      const genreHits = preferredSet.size > 0 ? movieGenres.filter((genreId) => preferredSet.has(genreId)).length : 0;
-      let value = genreHits * 500;
-
-      value += Math.min(movie.popularity || 0, 200) * 2.25;
-      value += Math.min(movie.vote_count || 0, 5000) * 0.02;
-      value += (movie.vote_average || 0) * 14;
-
-      if (preferredSet.size > 0 && genreHits > 0) {
-        value += 60;
-      }
-
-      return value;
-    };
-
-    return score(b) - score(a);
-  });
-}
-
-interface TMDBDetailedMovie {
+interface TMDBDetailedMovie extends TmdbWatchProviderAppend {
   id: number;
   title: string;
   poster_path: string | null;
@@ -87,6 +40,7 @@ interface TMDBDetailedMovie {
   production_companies?: Array<{
     id: number;
     name: string;
+    origin_country?: string | null;
   }>;
   keywords?: {
     keywords?: Array<{ id: number; name: string }>;
@@ -201,6 +155,7 @@ type MovieDetailsResult = ReturnType<typeof normalizeMovieDetails> | null;
 const movieDetailsCache = new Map<number, MovieDetailsResult>();
 const movieDetailsInFlight = new Map<number, Promise<MovieDetailsResult>>();
 const movieDetailsBlockedUntil = new Map<number, number>();
+const MOVIE_DETAILS_BROWSER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const movieSearchRefreshInFlight = new Map<string, Promise<TMDBMovie[]>>();
 const personSearchRefreshInFlight = new Map<string, Promise<TMDBPersonSearchResult[]>>();
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -247,20 +202,6 @@ function getReleaseYear(movie: Pick<TMDBMovie, "release_date">): number | null {
   if (!movie.release_date) return null;
   const year = Number(movie.release_date.split("-")[0]);
   return Number.isFinite(year) ? year : null;
-}
-
-function toIsoDateString(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function getUpcomingDateWindow() {
-  const startDate = new Date();
-  const endDate = new Date(startDate);
-  endDate.setFullYear(endDate.getFullYear() + 1);
-  return {
-    startDate: toIsoDateString(startDate),
-    endDate: toIsoDateString(endDate),
-  };
 }
 
 function uniqueMovies(movies: TMDBMovie[]): TMDBMovie[] {
@@ -317,27 +258,27 @@ async function performMovieSearch(query: string, page: number = 1): Promise<TMDB
     return pagedResults;
   }
 
+  const localResults = await searchMovieCatalog(trimmedQuery);
+  if (localResults.length >= 10) {
+    return rankMovieSearchResults(localResults, trimmedQuery, removeYear(trimmedQuery), {
+      requestedYear: extractSearchYear(trimmedQuery),
+      personMovieIds: new Set(),
+    });
+  }
+
   const requestedYear = extractSearchYear(trimmedQuery);
   const meaningfulTokenCount = normalizeSearchText(removeYear(trimmedQuery))
     .split(" ")
     .filter((token) => token && !STOP_WORDS.has(token)).length;
   const people = meaningfulTokenCount >= 3 ? await findPeopleInQuery(trimmedQuery) : [];
   const titleQuery = removePersonChunksFromQuery(trimmedQuery, people) || removeYear(trimmedQuery);
-  const searchPages = trimmedQuery.length <= 2 ? [1, 2, 3, 4, 5] : [1];
+  const searchPages = [1];
   const baseSearchQueries = Array.from(
     new Set([trimmedQuery, removeYear(trimmedQuery), titleQuery].filter((entry) => entry.trim().length >= 1))
-  );
+  ).slice(0, 2);
   const yearSearchQueries = requestedYear
-    ? Array.from(new Set([titleQuery, removeYear(trimmedQuery)].filter((entry) => entry.trim().length >= 1)))
+    ? Array.from(new Set([titleQuery, removeYear(trimmedQuery)].filter((entry) => entry.trim().length >= 1))).slice(0, 1)
     : [];
-
-  const localResults = await searchMovieCatalog(trimmedQuery);
-  if (localResults.length >= 10) {
-    return rankMovieSearchResults(localResults, trimmedQuery, titleQuery, {
-      requestedYear,
-      personMovieIds: new Set(),
-    });
-  }
 
   const [movieResultGroups, personMovieIds] = await Promise.all([
     Promise.all([
@@ -376,7 +317,7 @@ function getPossiblePersonChunks(query: string): string[] {
     }
   }
 
-  return Array.from(new Set(chunks)).slice(0, 8);
+  return Array.from(new Set(chunks)).slice(0, 3);
 }
 
 async function findPeopleInQuery(query: string): Promise<Array<{ id: number; name: string; chunk: string }>> {
@@ -549,6 +490,15 @@ function normalizeMovieDetails(data: TMDBDetailedMovie) {
       data.production_countries
         ?.map((country) => country.name || "")
         .filter((country) => country.trim().length > 0) || null,
+    production_countries: data.production_countries?.map((country) => ({
+      name: country.name || "",
+      iso_3166_1: country.iso_3166_1 || null,
+    })) || null,
+    production_companies: data.production_companies?.map((company) => ({
+      name: company.name,
+      origin_country: company.origin_country || null,
+    })) || null,
+    origin_countries: data.origin_country || null,
     keywords:
       data.keywords?.keywords?.map((keyword) => keyword.name).filter(Boolean) || null,
     studios:
@@ -560,6 +510,7 @@ function normalizeMovieDetails(data: TMDBDetailedMovie) {
     popularity: data.popularity,
     vote_count: data.vote_count,
     platforms: [],
+    watch_providers: data["watch/providers"]?.results || null,
     cast_details: castDetails,
     crew_details: crewDetails,
     trailer_key: trailer?.key || null,
@@ -577,6 +528,7 @@ export async function searchMovies(query: string, page: number = 1) {
     const cachedEntry = readBrowserCacheEntry<TMDBMovie[]>(cacheKey);
     if (cachedEntry) {
       const cached = cachedEntry.value ?? [];
+      if (!cachedEntry.isStale) return cached;
       if (!movieSearchRefreshInFlight.has(cacheKey)) {
         const refreshPromise = performMovieSearch(trimmedQuery, page)
           .then((fresh) => {
@@ -606,6 +558,56 @@ export async function searchMovies(query: string, page: number = 1) {
   }
 }
 
+export async function discoverMoviesByProductionCountry(countryCode: string): Promise<TMDBMovie[]> {
+  if (!/^[A-Z]{2}$/.test(countryCode)) return [];
+  try {
+    const response = await fetchTmdb("discover/movie", {
+      with_origin_country: countryCode,
+      sort_by: "popularity.desc",
+      "vote_count.gte": 50,
+      include_adult: false,
+      page: 1,
+    });
+    if (!response.ok) return [];
+    const data: TMDBSearchResponse = await response.json();
+    return data.results || [];
+  } catch (error) {
+    console.error("TMDB country discovery error:", error);
+    return [];
+  }
+}
+
+export async function discoverPassportMovies(
+  countryCode: string,
+  options: { genreId?: number; fromYear?: number; toYear?: number; page?: number; sort?: "popular" | "topRated" } = {}
+): Promise<{ movies: TMDBMovie[]; totalPages: number; totalResults: number }> {
+  if (!/^[A-Z]{2}$/.test(countryCode)) return { movies: [], totalPages: 0, totalResults: 0 };
+  const page = Math.max(1, Math.min(500, Math.trunc(options.page || 1)));
+  const cutoff = options.toYear ? `${options.toYear}-12-31` : new Date().toISOString().slice(0, 10);
+  const cacheKey = `passport:discover:v1:${countryCode}:${options.sort || "popular"}:${options.genreId || 0}:${options.fromYear || 0}:${cutoff}:${page}`;
+  const cached = readBrowserCacheEntry<{ movies: TMDBMovie[]; totalPages: number; totalResults: number }>(cacheKey);
+  if (cached?.value && !cached.isStale) return cached.value;
+  const response = await fetchTmdb("discover/movie", {
+    with_origin_country: countryCode,
+    with_genres: options.genreId,
+    "primary_release_date.gte": options.fromYear ? `${options.fromYear}-01-01` : undefined,
+    "primary_release_date.lte": cutoff,
+    sort_by: options.sort === "topRated" ? "vote_average.desc" : "popularity.desc",
+    "vote_count.gte": options.sort === "topRated" ? 100 : undefined,
+    include_adult: false,
+    page,
+  });
+  if (!response.ok) throw new Error("Country discovery is unavailable");
+  const data: TMDBSearchResponse = await response.json();
+  const result = {
+    movies: data.results || [],
+    totalPages: Math.min(500, data.total_pages || 0),
+    totalResults: data.total_results || 0,
+  };
+  writeBrowserCache(cacheKey, result, 30 * 60 * 1000);
+  return result;
+}
+
 export async function searchPeople(query: string): Promise<TMDBPersonSearchResult[]> {
   try {
     const trimmedQuery = query.trim();
@@ -617,6 +619,7 @@ export async function searchPeople(query: string): Promise<TMDBPersonSearchResul
     const cachedEntry = readBrowserCacheEntry<TMDBPersonSearchResult[]>(cacheKey);
     if (cachedEntry) {
       const cached = cachedEntry.value ?? [];
+      if (!cachedEntry.isStale) return cached;
       if (!personSearchRefreshInFlight.has(cacheKey)) {
         const refreshPromise = (async () => {
           const response = await fetchTmdb("search/person", {
@@ -738,239 +741,26 @@ export async function getPersonExternalIds(personId: number): Promise<TMDBPerson
   }
 }
 
-export async function getPopularMovies(page: number = 1, limit: number = 12): Promise<TMDBMovie[]> {
-  try {
-    const response = await fetchTmdb("movie/popular", { page });
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch popular movies");
-    }
-
-    const data: TMDBSearchResponse = await response.json();
-    const results = data.results.slice(0, limit);
-    await upsertMovieCatalog(results);
-    return results;
-  } catch (error) {
-    console.error("TMDB popular movies error:", error);
-    return [];
-  }
-}
-
-export async function getUpcomingMovies(
-  page: number = 1,
-  limit: number = 12,
-  options?: {
-    originalLanguage?: string | null;
-    startDate?: string;
-    endDate?: string;
-  }
-): Promise<TMDBMovie[]> {
-  try {
-    const window = getUpcomingDateWindow();
-    const response = await fetchTmdb("discover/movie", {
-      page,
-      sort_by: "primary_release_date.asc",
-      "primary_release_date.gte": options?.startDate || window.startDate,
-      "primary_release_date.lte": options?.endDate || window.endDate,
-      include_adult: false,
-      ...(options?.originalLanguage ? { with_original_language: options.originalLanguage } : {}),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch upcoming movies");
-    }
-
-    const data: TMDBSearchResponse = await response.json();
-    const results = data.results.slice(0, limit);
-    await upsertMovieCatalog(results);
-    return results;
-  } catch (error) {
-    console.error("TMDB upcoming movies error:", error);
-    return [];
-  }
-}
-
-/**
- * Enhanced search using TMDB discover endpoint with genre filtering
- * More powerful than basic search - allows filtering by genre, rating, year, etc.
- */
-export async function discoverMoviesByGenre(
-  genres: string[],
-  options?: {
-    minRating?: number;
-    minYear?: number;
-    maxYear?: number;
-    sortBy?: "popularity.desc" | "vote_average.desc" | "release_date.desc";
-    page?: number;
-  }
-) {
-  try {
-    const results: Map<number, TMDBMovie> = new Map();
-    const preferredGenreIds = getGenreIdsForNames(genres);
-
-    // Search for each genre separately to use OR logic instead of AND
-    for (const genre of genres) {
-      const genreId = GENRE_MAP[genre.toLowerCase()];
-      if (!genreId) continue;
-
-      try {
-        const response = await fetchTmdb("discover/movie", {
-          with_genres: genreId,
-          ...(options?.minRating ? { "vote_average.gte": options.minRating } : {}),
-          ...(options?.minYear ? { "release_date.gte": `${options.minYear}-01-01` } : {}),
-          ...(options?.maxYear ? { "release_date.lte": `${options.maxYear}-12-31` } : {}),
-          sort_by: options?.sortBy || "popularity.desc",
-          page: options?.page || 1,
-          "vote_count.gte": 150,
-          language: "en",
-        });
-        if (!response.ok) continue;
-
-        const data: TMDBSearchResponse = await response.json();
-        data.results.forEach((movie) => {
-          if (!results.has(movie.id)) {
-            results.set(movie.id, movie);
-          }
-        });
-      } catch (error) {
-        console.error(`Error searching genre ${genre}:`, error);
-        continue;
-      }
-    }
-
-    const ranked = rankDiscoverResults(Array.from(results.values()), preferredGenreIds);
-    await upsertMovieCatalog(ranked);
-    return ranked;
-  } catch (error) {
-    console.error("TMDB discover error:", error);
-    return [];
-  }
-}
-
-/**
- * Enhanced search that combines multiple strategies
- * 1. Try genre-based discovery first (more precise)
- * 2. Fall back to text search
- * 3. Combine and deduplicate results
- */
-export async function enhancedMovieSearch(intent: ParsedIntent): Promise<TMDBMovie[]> {
-  const allResults: Map<number, TMDBMovie> = new Map(); // Use Map to deduplicate by ID
-  const preferredGenres = Array.from(new Set(intent.genres));
-  const preferredGenreIds = getGenreIdsForNames(preferredGenres);
-
-  console.log("[Enhanced Search] Intent Analysis:", {
-    effectiveMood: intent.mood,
-    styles: intent.styleTags,
-    genres: intent.genres,
-    minRating: intent.minRating,
-    minYear: intent.minYear,
-    maxYear: intent.maxYear,
-    keywords: intent.keywords,
-    rawQuery: intent.rawQuery,
-  });
-
-  // Strategy 1: Genre-based discover (most precise)
-  if (preferredGenres.length > 0) {
-    console.log("[Enhanced Search] Strategy 1: Genre-based discover with genres:", preferredGenres);
-    const discoverResults = await discoverMoviesByGenre(preferredGenres, {
-      minRating: intent.minRating || undefined,
-      minYear: intent.minYear || undefined,
-      maxYear: intent.maxYear || undefined,
-      sortBy: "popularity.desc",
-    });
-
-    console.log(`[Enhanced Search] ✅ Genre discover returned ${discoverResults.length} movies`);
-    discoverResults.forEach((movie) => {
-      if (!allResults.has(movie.id)) {
-        allResults.set(movie.id, movie);
-      }
-    });
-  }
-
-  // Strategy 2: Keyword search (if genres didn't return enough results)
-  const shouldUseTextSearch =
-    Boolean(intent.cast || intent.director) ||
-    (intent.keywords.length > 0 && preferredGenres.length === 0);
-
-  if (allResults.size < 12 && shouldUseTextSearch) {
-    let searchQuery = [intent.keywords.join(" "), intent.cast, intent.director]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-
-    if (!searchQuery && intent.mood) {
-      searchQuery = intent.mood;
-    }
-
-    if (intent.minYear && intent.maxYear && intent.minYear === intent.maxYear) {
-      searchQuery = `${searchQuery} ${intent.minYear}`.trim();
-    }
-
-    if (searchQuery) {
-      console.log(`[Enhanced Search] Strategy 2: Keyword search for: "${searchQuery}"`);
-      const searchResults = await searchMovies(searchQuery, 1);
-      console.log(`[Enhanced Search] ✅ Keyword search returned ${searchResults.length} results`);
-
-      searchResults.forEach((movie) => {
-        const movieGenreIds = getMovieGenreIds(movie);
-
-        if (preferredGenreIds.length > 0) {
-          const genreMatch = movieGenreIds.some((genreId) => preferredGenreIds.includes(genreId));
-          if (!genreMatch) {
-            return;
-          }
-        }
-
-        // Apply additional filters
-        if (intent.minRating && movie.vote_average < intent.minRating) {
-          console.log(
-            `[Enhanced Search] ⛔ Filtering out "${movie.title}" (rating ${movie.vote_average} < ${intent.minRating})`
-          );
-          return;
-        }
-        if (intent.minYear && movie.release_date) {
-          const year = parseInt(movie.release_date.split("-")[0]);
-          if (year < intent.minYear) {
-            console.log(`[Enhanced Search] ⛔ Filtering out "${movie.title}" (${year} < ${intent.minYear})`);
-            return;
-          }
-        }
-        if (intent.maxYear && movie.release_date) {
-          const year = parseInt(movie.release_date.split("-")[0]);
-          if (year > intent.maxYear) {
-            console.log(`[Enhanced Search] ⛔ Filtering out "${movie.title}" (${year} > ${intent.maxYear})`);
-            return;
-          }
-        }
-
-        if (!allResults.has(movie.id)) {
-          allResults.set(movie.id, movie);
-        }
-      });
-    }
-  }
-
-  // Convert map back to array and sort by rating + popularity
-  const results = rankDiscoverResults(Array.from(allResults.values()), preferredGenreIds);
-
-  console.log(`[Enhanced Search] Final results: ${results.length} movies matched your request`);
-  console.log(
-    "[Enhanced Search] Top picks:",
-    results.slice(0, 5).map((m) => `"${m.title}" (${m.vote_average})`)
-  );
-
-  return results;
-}
-
 export async function getMovieDetails(movieId: number) {
   const cached = movieDetailsCache.get(movieId);
   if (cached !== undefined) {
     return cached;
   }
 
+  const browserCacheKey = `tmdb:movie-details:v2:${movieId}`;
+  const missingCacheKey = `tmdb:movie-missing:v1:${movieId}`;
+  const browserEntry = readBrowserCacheEntry<NonNullable<MovieDetailsResult>>(browserCacheKey);
+  if (browserEntry?.value && !browserEntry.isStale) {
+    movieDetailsCache.set(movieId, browserEntry.value);
+    return browserEntry.value;
+  }
+  if (readBrowserCacheEntry<boolean>(missingCacheKey)?.isStale === false) {
+    return browserEntry?.value ?? null;
+  }
+
   const blockedUntil = movieDetailsBlockedUntil.get(movieId) || 0;
   if (blockedUntil > Date.now()) {
-    return null;
+    return browserEntry?.value ?? null;
   }
 
   const inFlight = movieDetailsInFlight.get(movieId);
@@ -981,26 +771,30 @@ export async function getMovieDetails(movieId: number) {
   const request = (async () => {
   try {
     const response = await fetchTmdb(`movie/${movieId}`, {
-      append_to_response: "credits,videos,keywords,images",
+      append_to_response: "credits,videos,keywords,images,watch/providers",
     });
 
     if (!response.ok) {
+      if (response.status === 404 || response.status === 410) {
+        writeBrowserCache(missingCacheKey, true, 24 * 60 * 60 * 1000);
+      }
       if (response.status === 429) {
         const retryAfter = Number(response.headers.get("Retry-After"));
         const waitMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : 60_000;
         movieDetailsBlockedUntil.set(movieId, Date.now() + waitMs);
       }
       console.warn(`TMDB movie details unavailable for ${movieId}: ${response.status}`);
-      return null;
+      return browserEntry?.value ?? null;
     }
 
     const data: TMDBDetailedMovie = await response.json();
     const normalized = normalizeMovieDetails(data);
     movieDetailsCache.set(movieId, normalized);
+    writeBrowserCache(browserCacheKey, normalized, MOVIE_DETAILS_BROWSER_TTL_MS);
     return normalized;
   } catch (error) {
     console.error("TMDB detail error:", error);
-    return null;
+    return browserEntry?.value ?? null;
   } finally {
     movieDetailsInFlight.delete(movieId);
   }
@@ -1008,6 +802,26 @@ export async function getMovieDetails(movieId: number) {
 
   movieDetailsInFlight.set(movieId, request);
   return request;
+}
+
+/** Fetch just the fields needed for compact list poster previews. */
+export async function getMovieCardSummary(movieId: number): Promise<{ title: string; poster_url: string | null } | null> {
+  const details = readBrowserCacheEntry<NonNullable<MovieDetailsResult>>(`tmdb:movie-details:v2:${movieId}`);
+  if (details?.value && !details.isStale) return { title: details.value.title, poster_url: details.value.poster_url || null };
+  const cacheKey = `tmdb:movie-card-summary:v1:${movieId}`;
+  const cached = readBrowserCacheEntry<{ title: string; poster_url: string | null }>(cacheKey);
+  if (cached?.value && !cached.isStale) return cached.value;
+  try {
+    const response = await fetchTmdb(`movie/${movieId}`);
+    if (!response.ok) return cached?.value ?? null;
+    const data = await response.json() as { title?: string; poster_path?: string | null };
+    if (!data.title) return null;
+    const summary = { title: data.title, poster_url: getTmdbPosterUrl(data.poster_path || null, "w500") };
+    writeBrowserCache(cacheKey, summary, 30 * 24 * 60 * 60 * 1000);
+    return summary;
+  } catch {
+    return cached?.value ?? null;
+  }
 }
 
 export async function getSimilarMovies(movieId: number, limit: number = 10) {
@@ -1041,6 +855,56 @@ export async function getSimilarMovies(movieId: number, limit: number = 10) {
     console.error("TMDB similar movies error:", error);
     return [];
   }
+}
+
+export interface TasteRecommendation {
+  id: number;
+  tmdb_id?: number;
+  title: string;
+  poster_url: string | null;
+  release_date: string | null;
+  overview: string | null;
+  genres: string[];
+  type: "movie" | "tv";
+}
+
+const tasteRecommendationRequests = new Map<string, Promise<TasteRecommendation[]>>();
+
+/** One cached TMDB request per media type and taste seed, or popular titles for a new profile. */
+export async function getTasteRecommendations(
+  type: "movie" | "tv",
+  seedId?: number | null
+): Promise<TasteRecommendation[]> {
+  const safeSeedId = Number.isFinite(seedId) && Number(seedId) > 0 ? Number(seedId) : null;
+  const cacheKey = `taste-recommendations:v2:${type}:${safeSeedId ?? "top-rated"}`;
+  const cached = readBrowserCacheEntry<TasteRecommendation[]>(cacheKey);
+  if (cached?.value && !cached.isStale) return cached.value;
+  const inFlight = tasteRecommendationRequests.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const request = (async () => {
+    const path = safeSeedId
+      ? `${type}/${safeSeedId}/recommendations`
+      : `${type}/top_rated`;
+    const response = await fetchTmdb(path, { page: 1 });
+    if (!response.ok) throw new Error("Recommendations are unavailable");
+    const data: TMDBSearchResponse = await response.json();
+    const recommendations = (data.results || []).map((item: any) => ({
+      id: type === "tv" ? 1_000_000_000 + item.id : item.id,
+      ...(type === "tv" ? { tmdb_id: item.id } : {}),
+      title: item.title || item.name || "Untitled",
+      poster_url: getTmdbPosterUrl(item.poster_path, "w300"),
+      release_date: item.release_date || item.first_air_date || null,
+      overview: item.overview || null,
+      genres: Object.entries(GENRE_MAP).filter(([, genreId]) => item.genre_ids?.includes(genreId)).map(([genre]) => genre),
+      type,
+    }));
+    writeBrowserCache(cacheKey, recommendations, 12 * 60 * 60 * 1000);
+    return recommendations;
+  })().finally(() => tasteRecommendationRequests.delete(cacheKey));
+
+  tasteRecommendationRequests.set(cacheKey, request);
+  return request;
 }
 
 export function getTMDBImageUrl(

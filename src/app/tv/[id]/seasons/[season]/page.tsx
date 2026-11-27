@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import { ArrowLeft, PlayCircle, Star } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import LogMovieModal from "@/components/LogMovieModal";
 import { auth, db } from "@/lib/firebase";
@@ -21,10 +21,6 @@ function formatYear(dateStr?: string): string {
   return Number.isNaN(year) ? dateStr : String(year);
 }
 
-function getEpisodeLabel(episode: TVMazeEpisode): string {
-  return `Episode ${episode.number}${episode.name ? ` - ${episode.name}` : ""}`;
-}
-
 export default function TvSeasonPage() {
   const router = useRouter();
   const params = useParams();
@@ -38,7 +34,6 @@ export default function TvSeasonPage() {
   const [user, setUser] = useState<User | null>(null);
   const [show, setShow] = useState<ShowDetails | null>(null);
   const [showPath, setShowPath] = useState<string | null>(null);
-  const [seasons, setSeasons] = useState<TVMazeSeason[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<TVMazeSeason | null>(null);
   const [episodes, setEpisodes] = useState<TVMazeEpisode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +80,6 @@ export default function TvSeasonPage() {
         if (!resolved) {
           setShow(null);
           setShowPath(null);
-          setSeasons([]);
           setSelectedSeason(null);
           setLoading(false);
           return;
@@ -99,7 +93,6 @@ export default function TvSeasonPage() {
 
         setShow(resolved.show);
         setShowPath(resolved.canonicalPath);
-        setSeasons(seasonList);
         setSelectedSeason(matchingSeason);
 
         const expectedPath = `${resolved.canonicalPath}/seasons/${matchingSeason?.number || seasonParam}`;
@@ -193,22 +186,14 @@ export default function TvSeasonPage() {
             <ArrowLeft className="h-4 w-4" />
             Back to seasons
           </Link>
-          <Link
-            href={showPath || "/dashboard"}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#111111] px-4 py-2 text-sm font-bold text-[#f5f0de] transition hover:border-[#ff7a1a]/30 hover:text-[#ffb36b]"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to show
-          </Link>
         </div>
 
-        <section className="rounded-[2rem] border border-white/10 bg-[#111111] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.25)] sm:p-6">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <div className="mx-auto w-full max-w-44 overflow-hidden border border-white/10 bg-white/5 sm:mx-0">
-              {show?.poster_url ? (
+        <section className="flex items-start gap-5 py-4 sm:gap-7">
+            <div className="w-24 shrink-0 overflow-hidden bg-white/5 sm:w-32">
+              {selectedSeason?.image?.medium || show?.poster_url ? (
                 <img
-                  src={show.poster_url}
-                  alt={show.title || show.name}
+                  src={selectedSeason?.image?.medium || show!.poster_url!}
+                  alt={selectedSeason?.name || show?.title || show?.name || "Season poster"}
                   className="aspect-[2/3] w-full object-cover"
                 />
               ) : (
@@ -217,26 +202,23 @@ export default function TvSeasonPage() {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ffb36b]">Season page</p>
-              <h1 className="mt-2 text-3xl font-black leading-tight text-[#f5f0de] sm:text-5xl">
-                {show?.title || show?.name || "TV Show"}
-              </h1>
-              <p className="mt-2 text-lg font-semibold text-[#ffb36b]">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffb36b]">{show?.title || show?.name || "TV Show"}</p>
+              <h1 className="mt-1 text-3xl font-black leading-tight text-[#f5f0de] sm:text-5xl">
                 {selectedSeason ? selectedSeason.name : `Season ${seasonParam}`}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/70">
+              </h1>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/45 sm:text-sm">
                 {selectedSeason?.premiereDate ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  <span>
                     {formatYear(selectedSeason.premiereDate)}
                   </span>
                 ) : null}
                 {selectedSeason?.episodeOrder ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  <span>
                     {selectedSeason.episodeOrder} episodes
                   </span>
                 ) : null}
                 {show?.runtime ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  <span>
                     {show.runtime} min episodes
                   </span>
                 ) : null}
@@ -245,59 +227,54 @@ export default function TvSeasonPage() {
                 <button
                   type="button"
                   onClick={handleOpenSeasonLog}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#ff7a1a] px-4 py-2 text-sm font-black text-black transition hover:bg-[#ff8d3b]"
+                  className="inline-flex items-center gap-2 bg-[#ff7a1a] px-5 py-2.5 text-sm font-black text-black transition hover:bg-[#ff8d3b]"
                 >
-                  <Star className="h-4 w-4" />
-                  Rate this season
+                  <Plus className="h-4 w-4" />
+                  Log this season
                 </button>
               </div>
             </div>
-          </div>
         </section>
 
-        <section className="mt-6 rounded-[2rem] border border-white/10 bg-[#111111] p-4 sm:p-6">
+        <section className="mt-7">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black text-[#f5f0de]">
                 {selectedSeason ? selectedSeason.name : "Episodes"}
               </h2>
-              <p className="text-sm text-white/55">
-                {selectedSeason ? `Season ${selectedSeason.number}` : "No season selected."}
-              </p>
             </div>
             <span className="text-xs text-white/45">{episodes.length} episodes</span>
           </div>
 
           {loadingEpisodes ? (
-            <div className="mt-5 grid gap-3">
+            <div className="mt-5 grid gap-2">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-20 animate-pulse rounded-2xl bg-white/5" />
+                <div key={index} className="h-20 animate-pulse bg-white/5" />
               ))}
             </div>
           ) : episodes.length > 0 ? (
-            <div className="mt-5 grid gap-3">
+            <div className="mt-5 grid sm:grid-cols-2 sm:gap-x-8">
               {episodes.map((episode) => (
                 <div
                   key={episode.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                  className="flex items-center gap-3 py-3"
                 >
+                  <span className="w-7 shrink-0 text-sm font-black text-[#ffb36b]">{String(episode.number).padStart(2, "0")}</span>
+                  {episode.image?.medium && <img src={episode.image.medium} alt="" className="aspect-video w-20 shrink-0 object-cover" />}
                   <div className="min-w-0">
-                    <p className="text-sm font-black uppercase tracking-[0.2em] text-[#ffb36b]">
-                      {getEpisodeLabel(episode)}
-                    </p>
-                    <p className="mt-1 text-sm text-white/55">
+                    <p className="truncate text-sm font-semibold text-[#f5f0de]">{episode.name}</p>
+                    <p className="mt-1 text-xs text-white/45">
                       {episode.airdate || "Date unavailable"}
                       {episode.runtime ? ` • ${episode.runtime} min` : ""}
                     </p>
                   </div>
-                  <PlayCircle className="h-6 w-6 flex-shrink-0 text-white/30" />
                 </div>
               ))}
             </div>
           ) : (
-            <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-sm text-white/55">
+            <p className="mt-5 text-sm text-white/55">
               No episodes found for this season.
-            </div>
+            </p>
           )}
         </section>
 

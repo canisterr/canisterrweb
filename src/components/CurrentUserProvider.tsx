@@ -78,7 +78,9 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
+    let authVersion = 0;
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      const currentVersion = ++authVersion;
       if (!firebaseUser) {
         setUser(null);
         setSettings(DEFAULT_SETTINGS);
@@ -107,6 +109,18 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
           && !getUsernameValidationError(userData.username);
 
         if (!hasStoredUsername) {
+          const isGoogleAccount = firebaseUser.providerData.some((provider) => provider.providerId === "google.com");
+          if (isGoogleAccount) {
+            setUser(null);
+            setSettings(DEFAULT_SETTINGS);
+            if (window.location.pathname !== "/auth/complete-profile") {
+              const currentPath = `${window.location.pathname}${window.location.search}`;
+              const redirect = currentPath.startsWith("/auth/") ? "" : `?redirect=${encodeURIComponent(currentPath)}`;
+              window.location.replace(`/auth/complete-profile${redirect}`);
+            }
+            return;
+          }
+
           try {
             const repairedUser = await ensureCurrentUserProfile({
               uid: firebaseUser.uid,
@@ -147,6 +161,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
           mood_tags_updated_at: userData?.mood_tags_updated_at,
         };
 
+        if (currentVersion !== authVersion || auth.currentUser?.uid !== firebaseUser.uid) return;
         setSettings(nextSettings);
         setUser(nextUser);
         writeCachedCurrentUser(firebaseUser.uid, { user: nextUser, settings: nextSettings });
@@ -155,7 +170,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
           void syncUsernameIndex(firebaseUser.uid, userData.username).catch(() => {});
         }
       } catch {
-        if (!cached) {
+        if (currentVersion === authVersion && auth.currentUser?.uid === firebaseUser.uid && !cached) {
           setSettings(DEFAULT_SETTINGS);
           setUser(fallbackUser);
         }

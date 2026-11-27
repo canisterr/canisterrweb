@@ -52,7 +52,12 @@ export default function AddItemsToListPage() {
         setUser(currentUser);
 
         const listData = await getListWithDetails(listId);
-        if (listData) {
+        const canAddItems = listData && (
+          listData.owner_id === currentUser.id ||
+          Boolean(listData.collaborator_ids?.[currentUser.id]) ||
+          listData.collaborators.some((collaborator) => collaborator.user_id === currentUser.id)
+        );
+        if (listData && canAddItems) {
           setList(listData);
           if (listData.owner_id === currentUser.id) {
             const collaboratorIds = [

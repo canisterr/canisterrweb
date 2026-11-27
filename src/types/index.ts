@@ -22,12 +22,16 @@ export interface Movie {
   backdrop_gallery_urls?: string[] | null;
   genres: string[] | null;
   platforms: string[] | null;
+  watch_providers?: import("@/lib/watch-providers").WatchProviderRegions | null;
   director: string | null;
   actors?: string[] | null; // For match scoring
   cast?: string[] | null;
   language?: string | null; // For match scoring
   country?: string | null;
   countries?: string[] | null;
+  production_companies?: Array<{ name: string; origin_country: string | null }> | null;
+  production_countries?: Array<{ name: string; iso_3166_1: string | null }> | null;
+  origin_countries?: string[] | null;
   keywords?: string[] | null; // For match scoring (taste-signature keyword affinity)
   studios?: string[] | null; // For match scoring (taste-signature studio affinity)
   release_date: string | null;
@@ -210,6 +214,8 @@ export interface List {
   cover_image_url: string | null; // For custom covers
   created_at: string;
   updated_at: string;
+  editorial_source?: "canisterr";
+  expires_at?: string;
 }
 
 export interface ListItem {
@@ -221,6 +227,8 @@ export interface ListItem {
   position: number; // Order in the list for ranked/regular lists
   added_at: string;
   watched_by: string[]; // Array of user IDs who watched this item
+  poster_url_snapshot?: string | null;
+  content_summary?: { title: string; poster_url: string | null; release_year?: string };
 }
 
 export interface ListCollaborator {
@@ -260,6 +268,11 @@ export interface MovieLog {
   contains_spoiler?: boolean; // Hide review text until the reader reveals it
   mood?: string; // How they felt (e.g., "happy", "sad", "excited")
   watch_later?: boolean; // For watchlist - movie to watch later (not watched yet)
+  release_date_snapshot?: string | null;
+  title_snapshot?: string;
+  poster_url_snapshot?: string | null;
+  release_notify?: boolean;
+  release_reminded_at?: string;
 
   // TV-specific fields (optional)
   season?: number; // Season number (for TV logs)
@@ -278,6 +291,7 @@ export interface MovieLog {
 
   ticket_image_url?: string | null; // Custom image/ticket uploaded for the log
   imported_from_csv?: boolean; // Marks logs created from a ratings CSV import
+  content_summary?: { title: string; poster_url: string | null }; // Card metadata captured when the log is created
 
   created_at: string;
   updated_at: string;
@@ -335,29 +349,4 @@ export interface UserTasteWithContent extends UserTaste {
   source?: "taste" | "log";
   notes?: string | null;
   watched_date?: string;
-}
-
-// Taste Vector Types - for recommendation engine
-export interface TasteVector {
-  userId: string;
-  genres: Record<string, number>; // {"Thriller": 1.5, "Comedy": -0.5, ...}
-  moods: Record<string, number>; // {"Dark": 1, "Feel-good": 0.5, ...}
-  directors: Record<string, number>; // {"Nolan": 1, ...}
-  lastUpdated: string;
-}
-
-export interface MovieVector {
-  contentId: number;
-  contentType: "movie" | "tv";
-  genres: string[];
-  moods: string[]; // Inferred moods
-  director?: string;
-}
-
-export interface TasteMatch {
-  userId1: string;
-  userId2: string;
-  matchPercentage: number; // 0-100
-  commonFavorites: number[];
-  lastCalculated: string;
 }

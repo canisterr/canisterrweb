@@ -6,29 +6,33 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import TopActionBanner from "@/components/TopActionBanner";
-import { User, ShareWithDetails, Content, MovieLogWithContent, TMDBPersonSearchResult } from "@/types";
-import { db } from "@/lib/firebase";
-import { isPermissionDeniedError } from "@/lib/firebase-errors";
-import { equalTo, onValue, orderByChild, query, ref } from "firebase/database";
+import OnThisDay from "@/components/home/OnThisDay";
+import ReleaseDay from "@/components/home/ReleaseDay";
+import AdminFeaturedLists from "@/components/home/AdminFeaturedLists";
+import HomeGamesStrip from "@/components/home/HomeGamesStrip";
+import HomeStatsBento from "@/components/home/HomeStatsBento";
+import NewUserGuide from "@/components/home/NewUserGuide";
+import ExploreLists from "@/components/home/ExploreLists";
+import { User, Content, MovieLog, MovieLogWithContent, TMDBPersonSearchResult } from "@/types";
 import { signOut as authSignOut } from "@/lib/auth";
-import { searchMovies, searchPeople } from "@/lib/tmdb";
-import { searchShows } from "@/lib/tvmaze";
+import { searchMulti } from "@/lib/search-multi";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getFriendLogs } from "@/lib/friend-logs";
+import { auth } from "@/lib/firebase";
+import { isPermissionDeniedError } from "@/lib/firebase-errors";
+import { getLogsForUser } from "@/lib/logs";
 import { reportAppError } from "@/lib/report-error";
-import { getDisplayUserName, getUsersByIds, searchUsersCached } from "@/lib/users";
+import { getDisplayUserName, searchUsersCached } from "@/lib/users";
 import { getBlurDataUrl } from "@/lib/performance";
 import { getTmdbPosterUrl } from "@/lib/performance";
 import { buildCrewPath, getCrewKnownWorks } from "@/lib/crew";
 import Link from "next/link";
-import { ArrowRight, Clapperboard, Clock, Film, Loader2, MessageCircle, Plus, RotateCcw, Search, Share2, X } from "lucide-react";
+import { ArrowRight, Clock, Film, Loader2, Plus, RotateCcw, Search, X } from "lucide-react";
 
 const SEARCH_HISTORY_STORAGE_KEY = "cine_search_history";
 const MAX_SEARCH_HISTORY = 8;
 
-const ShareModal = dynamic(() => import("@/components/ShareModal"), { ssr: false });
 const LogMovieModal = dynamic(() => import("@/components/LogMovieModal"), { ssr: false });
 type SearchAccount = {
   id: string;
@@ -136,9 +140,12 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user: sessionUser, loading: sessionLoading } = useCurrentUser();
   const [user, setUser] = useState<User | null>(null);
-  const [shares, setShares] = useState<ShareWithDetails[]>([]);
-  const [selectedShare, setSelectedShare] = useState<ShareWithDetails | null>(null);
   const [friendLogs, setFriendLogs] = useState<(MovieLogWithContent & { friend: User })[]>([]);
+  const [followingCount, setFollowingCount] = useState<number | null>(null);
+  const [friendActivityStatus, setFriendActivityStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [friendActivityRetry, setFriendActivityRetry] = useState(0);
+  const [showNewUserPreview, setShowNewUserPreview] = useState(false);
+  const [ownLogs, setOwnLogs] = useState<MovieLog[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
@@ -148,7 +155,6 @@ export default function DashboardPage() {
   const [searchFilter, setSearchFilter] = useState<"all" | "movie" | "tv" | "crew" | "accounts">("all");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
-  const [showQuickActions, setShowQuickActions] = useState(false);
   const [showQuickLogSearch, setShowQuickLogSearch] = useState(false);
   const [showQuickLogModal, setShowQuickLogModal] = useState(false);
   const [quickLogContent, setQuickLogContent] = useState<Content | null>(null);
@@ -156,7 +162,6 @@ export default function DashboardPage() {
   const [quickLogResults, setQuickLogResults] = useState<Content[]>([]);
   const [quickLogSearching, setQuickLogSearching] = useState(false);
   const [quickLogFilter, setQuickLogFilter] = useState<"all" | "movie" | "tv">("all");
-  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [searchTimerRef] = useState<{ current: ReturnType<typeof setTimeout> | null }>({ current: null });
   const [searchRequestRef] = useState<{ current: number }>({ current: 0 });
   const [quickLogTimerRef] = useState<{ current: ReturnType<typeof setTimeout> | null }>({ current: null });
@@ -169,108 +174,75 @@ export default function DashboardPage() {
       setUser(null);
       setLoading(false);
       setFriendLogs([]);
-      setShares([]);
+      setFriendActivityStatus("ready");
+      setOwnLogs(null);
       return;
     }
-
-    let cancelled = false;
-    let unsubscribeShares = () => {};
 
     const currentUser = sessionUser;
     setUser(currentUser);
     setLoading(false);
+  }, [router, sessionLoading, sessionUser]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    setShowNewUserPreview(new URLSearchParams(window.location.search).get("newUserPreview") === "1");
+  }, []);
+
+  useEffect(() => {
+    if (sessionLoading || !sessionUser?.id) return;
+
+    let cancelled = false;
+    setOwnLogs(null);
+    void getLogsForUser(sessionUser.id)
+      .then((logs) => {
+        if (!cancelled) setOwnLogs(logs);
+      })
+      .catch((error) => {
+        console.error("Could not load home stats:", error);
+        if (!cancelled) setOwnLogs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionLoading, sessionUser?.id]);
+
+  useEffect(() => {
+    if (sessionLoading || !sessionUser?.id) return;
+
+    let cancelled = false;
+    const userId = sessionUser.id;
+    const options = { daysBack: null, limit: 8, dedupeByContent: false, summaryOnly: true };
+    setFollowingCount(null);
+    setFriendActivityStatus("loading");
 
     void (async () => {
       try {
-        const logs = await getFriendLogs(currentUser.id, 14, 20);
-        if (!cancelled) {
-          setFriendLogs(logs);
+        let logs;
+        try {
+          logs = await getFriendLogs(userId, { ...options, onFollowingCount: setFollowingCount });
+        } catch (error) {
+          if (!isPermissionDeniedError(error) || auth.currentUser?.uid !== userId) throw error;
+          await auth.currentUser.getIdToken(true);
+          if (cancelled) return;
+          logs = await getFriendLogs(userId, { ...options, onFollowingCount: setFollowingCount });
         }
+        if (cancelled) return;
+        setFriendLogs(logs);
+        setFriendActivityStatus("ready");
       } catch (error) {
+        if (cancelled) return;
+        setFriendActivityStatus("error");
         reportAppError({
           title: "Friend activity failed",
           message: "We could not load your friends' logs.",
           details: error instanceof Error ? error.stack || error.message : String(error),
         });
       }
-
-      if (cancelled) return;
-
-      const sharesRef = query(
-        ref(db, "shares"),
-        orderByChild("receiver_id"),
-        equalTo(currentUser.id)
-      );
-      unsubscribeShares = onValue(
-        sharesRef,
-        async (snapshot) => {
-          if (!snapshot.exists()) {
-            if (!cancelled) setShares([]);
-            return;
-          }
-
-          const allShares = snapshot.val();
-          const sharesList = Object.entries(allShares)
-            .map(([id, data]: any) => ({
-              id,
-              ...data,
-              created_at: data.created_at || data.createdAt || "",
-            }))
-            .filter((s: any) => s.receiver_id === currentUser.id)
-            .sort(
-              (a: any, b: any) =>
-                getActivityTimestamp(b.created_at) - getActivityTimestamp(a.created_at)
-            );
-
-          try {
-            const usersData = await getUsersByIds(sharesList.map((share: any) => share.sender_id));
-
-            const sharesWithDetails: ShareWithDetails[] = sharesList.map((share: any) => ({
-              ...share,
-              movie: share.movie || null,
-              sender: usersData[share.sender_id],
-            }));
-
-            if (!cancelled) {
-              setShares(sharesWithDetails);
-            }
-          } catch (error) {
-            reportAppError({
-              title: "Shares failed to load",
-              message: "We could not load your shares right now.",
-              details: error instanceof Error ? error.stack || error.message : String(error),
-            });
-            if (!cancelled) {
-              setShares(sharesList);
-            }
-          }
-        },
-        (error) => {
-          if (isPermissionDeniedError(error)) {
-            console.warn("Dashboard shares listener is unavailable with the current Firebase permissions.");
-            if (!cancelled) {
-              setShares([]);
-            }
-            return;
-          }
-
-          reportAppError({
-            title: "Shares failed to load",
-            message: "We could not load your shares right now.",
-            details: error instanceof Error ? error.stack || error.message : String(error),
-          });
-          if (!cancelled) {
-            setShares([]);
-          }
-        }
-      );
     })();
 
-    return () => {
-      cancelled = true;
-      unsubscribeShares();
-    };
-  }, [router, sessionLoading, sessionUser]);
+    return () => { cancelled = true; };
+  }, [sessionLoading, sessionUser?.id, friendActivityRetry]);
 
   useEffect(() => {
     setSearchHistory(loadSearchHistory());
@@ -279,16 +251,6 @@ export default function DashboardPage() {
   useEffect(() => {
     saveSearchHistory(searchHistory);
   }, [searchHistory]);
-
-  useEffect(() => {
-    if (!bannerMessage) return;
-
-    const timer = window.setTimeout(() => {
-      setBannerMessage(null);
-    }, 2800);
-
-    return () => window.clearTimeout(timer);
-  }, [bannerMessage]);
 
   useEffect(() => {
     return () => {
@@ -321,12 +283,14 @@ export default function DashboardPage() {
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
 
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current);
     }
 
-    if (query.trim().length < 1) {
+    if (!query.trim()) {
       setSearchResults([]);
       setAccountResults([]);
       setSearching(false);
@@ -334,16 +298,13 @@ export default function DashboardPage() {
     }
 
     setSearching(true);
-    const requestId = searchRequestRef.current + 1;
-    searchRequestRef.current = requestId;
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const [movies, shows, usersData, people] = await Promise.all([
-          searchMovies(query),
-          searchShows(query),
+        const [media, usersData] = await Promise.all([
+          searchMulti(query),
           searchUsersCached(query),
-          searchPeople(query),
         ]);
+        const { movies, shows, people } = media;
 
         if (requestId !== searchRequestRef.current) return;
 
@@ -426,7 +387,7 @@ export default function DashboardPage() {
           setSearching(false);
         }
       }
-    }, 250);
+    }, query.trim().length === 1 ? 700 : 450);
   };
 
   const openAccountSearch = () => {
@@ -442,24 +403,25 @@ export default function DashboardPage() {
 
   const handleQuickLogSearch = (queryText: string) => {
     setQuickLogQuery(queryText);
+    const requestId = quickLogRequestRef.current + 1;
+    quickLogRequestRef.current = requestId;
 
     if (quickLogTimerRef.current) {
       clearTimeout(quickLogTimerRef.current);
     }
 
-    if (queryText.trim().length < 1) {
+    if (!queryText.trim()) {
       setQuickLogResults([]);
       setQuickLogSearching(false);
       return;
     }
 
     setQuickLogSearching(true);
-    const requestId = quickLogRequestRef.current + 1;
-    quickLogRequestRef.current = requestId;
     quickLogTimerRef.current = setTimeout(async () => {
       try {
-        const movies = quickLogFilter === "tv" ? [] : await searchMovies(queryText);
-        const shows = quickLogFilter === "movie" ? [] : await searchShows(queryText);
+        const media = await searchMulti(queryText);
+        const movies = quickLogFilter === "tv" ? [] : media.movies;
+        const shows = quickLogFilter === "movie" ? [] : media.shows;
 
         if (requestId !== quickLogRequestRef.current) return;
 
@@ -508,7 +470,7 @@ export default function DashboardPage() {
           setQuickLogSearching(false);
         }
       }
-    }, 250);
+    }, queryText.trim().length === 1 ? 700 : 450);
   };
 
   useEffect(() => {
@@ -541,9 +503,6 @@ export default function DashboardPage() {
     return null;
   }
 
-  // Separate unwatched shares for the home preview.
-  const unwatchedShares = shares.filter((s: any) => !s.watched);
-
   const friendLogVisitCounts = friendLogs.reduce<Record<string, number>>((counts, log) => {
     const key = `${log.friend.id}:${log.content_type}:${log.content.id}`;
     counts[key] = (counts[key] || 0) + 1;
@@ -551,30 +510,12 @@ export default function DashboardPage() {
   }, {});
   const repeatWatchKeys = new Set<string>();
 
-  const friendActivity = [
-    ...unwatchedShares.map((share) => {
-      const senderName = share.sender ? getDisplayUserName(share.sender, user) : "Unknown";
-
-      return {
-        id: `share-${share.id}`,
-        kind: "shared" as const,
-        poster_url: (share.movie || share.content)?.poster_url || null,
-        title: (share.movie || share.content)?.title || "Unknown",
-        byline: `by ${senderName}`,
-        avatarUrl: share.sender?.avatar_url || null,
-        avatarLabel: senderName,
-        note: share.note || null,
-        reaction: "",
-        createdAt: share.created_at,
-        onClick: () => setSelectedShare(share),
-      };
-    }),
-    ...friendLogs.map((log) => {
+  const friendActivity = friendLogs
+    .map((log) => {
       const friendName = getDisplayUserName(log.friend, user);
 
       return {
         id: `log-${log.id}`,
-        kind: "logged" as const,
         poster_url: log.content?.poster_url || null,
         title: log.content?.title || "Unknown",
         byline: `by ${friendName}`,
@@ -593,8 +534,7 @@ export default function DashboardPage() {
           router.push(buildLogUrl(log));
         },
       };
-    }),
-  ]
+    })
     .sort((a, b) => getActivityTimestamp(b.createdAt) - getActivityTimestamp(a.createdAt))
     .slice(0, 8);
   const filteredQuickLogResults = quickLogResults.filter(
@@ -624,7 +564,6 @@ export default function DashboardPage() {
 
   return (
     <PageLayout user={user} onSignOut={handleSignOut} theme="brutalist">
-      <TopActionBanner message={bannerMessage} />
       <main className="mx-auto min-h-screen w-full max-w-[860px] bg-black px-1 pb-8 pt-2 text-[#f5f0de] sm:px-4 sm:pt-4">
         {/* Search Bar */}
         <div className="mb-7 sm:mb-8">
@@ -918,6 +857,8 @@ export default function DashboardPage() {
         </div>
         {/* Recently Watched Section (Current User) removed as requested */}
 
+        {!user || (ownLogs !== null && !ownLogs.some((log) => !log.watch_later && Boolean(log.watched_date)) && friendActivityStatus === "ready" && (!hasFriendActivity || showNewUserPreview)) ? <NewUserGuide /> : null}
+
         {/* Friends Activity / Get Started Section */}
         <div className="mb-6">
           {user ? (
@@ -928,15 +869,24 @@ export default function DashboardPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowQuickActions(true)}
+                  onClick={() => {
+                    setQuickLogQuery("");
+                    setQuickLogResults([]);
+                    setQuickLogFilter("all");
+                    setShowQuickLogSearch(true);
+                  }}
                   className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a] text-[#08090b] shadow-[0_8px_24px_rgba(255,122,26,0.25)] transition hover:-translate-y-0.5 hover:bg-[#ff8d3b] sm:h-10 sm:w-10"
-                  aria-label="Open quick actions"
+                  aria-label="Log a title"
                 >
                   <Plus className="h-5 w-5" strokeWidth={2} />
                 </button>
               </div>
 
-              {hasFriendActivity ? (
+              {friendActivityStatus === "loading" ? null : friendActivityStatus === "error" ? (
+                <div className="border border-white/10 bg-[#111111] px-4 py-6 text-sm text-white/60">
+                  Friends activity could not load. <button type="button" onClick={() => setFriendActivityRetry((value) => value + 1)} className="font-semibold text-[#ffb36b] hover:underline">Retry</button>
+                </div>
+              ) : hasFriendActivity ? (
                 <>
                   <div className="-mx-1 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <div className="flex gap-3">
@@ -959,158 +909,67 @@ export default function DashboardPage() {
                                 blurDataURL={getBlurDataUrl()}
                               />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center text-xs text-white/40">
-                                No poster
-                              </div>
+                              <div className="flex h-full w-full items-center justify-center text-xs text-white/40">No poster</div>
                             )}
-                            {item.kind === "logged" && item.repeatWatch && (
-                              <div
-                                className="absolute bottom-2 right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-[#ffb36b] shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
-                                aria-label="Rewatched"
-                                title="Rewatched"
-                              >
+                            {item.repeatWatch && (
+                              <div className="absolute bottom-2 right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/75 text-[#ffb36b]" aria-label="Rewatched" title="Rewatched">
                                 <RotateCcw className="h-2.5 w-2.5" />
                               </div>
                             )}
                           </div>
                           <div className="border-t border-white/10 p-1.5 sm:p-2.5">
-                            <h3 className="truncate text-[9px] font-bold leading-tight text-[#f5f0de] sm:text-sm">
-                              {item.title}
-                            </h3>
-                            <p className="mt-0.5 truncate text-[8px] leading-tight text-white/55 sm:mt-1 sm:text-xs">
-                              {item.byline}
-                            </p>
-                            <div className="mt-1.5 flex items-center justify-between gap-1 sm:mt-2.5 sm:gap-2">
-                              <span className="truncate text-[7px] font-bold uppercase text-[#ff7a1a] sm:text-[10px]">
-                                {item.kind === "shared" ? "shared" : item.reaction}
-                              </span>
-                              {item.kind === "shared" && item.note ? (
-                                <span
-                                  className="inline-flex items-center justify-center text-[#f5f0de]"
-                                  aria-label="Contains message"
-                                  title="Contains message"
-                                >
-                                  <MessageCircle className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5" />
-                                </span>
-                              ) : (
-                                <span className="min-h-[0.75rem]" />
-                              )}
+                            <h3 className="truncate text-[9px] font-bold leading-tight text-[#f5f0de] sm:text-sm">{item.title}</h3>
+                            <p className="mt-0.5 truncate text-[8px] leading-tight text-white/55 sm:mt-1 sm:text-xs">{item.byline}</p>
+                            <div className="mt-1.5 text-[7px] font-bold uppercase text-[#ff7a1a] sm:mt-2.5 sm:text-[10px]">
+                              {item.reaction === "Unrated" ? "Logged" : item.reaction}
                             </div>
                           </div>
                         </button>
                       ))}
-                      <Link
-                        href="/all-movies"
-                        className="flex w-[calc(28.571%_-_0.857rem)] min-w-[calc(28.571%_-_0.857rem)] flex-shrink-0 flex-col items-center justify-center gap-2 overflow-hidden border border-[#ff7a1a]/40 bg-[#ff7a1a]/[0.06] text-center text-[#ff8d3b] transition hover:border-[#ff7a1a]/70 hover:bg-[#ff7a1a]/10 sm:w-[calc(22.222%_-_0.666rem)] sm:min-w-[calc(22.222%_-_0.666rem)]"
-                      >
+                      <Link href="/friends/logs" className="flex w-[calc(28.571%_-_0.857rem)] min-w-[calc(28.571%_-_0.857rem)] flex-shrink-0 flex-col items-center justify-center gap-2 overflow-hidden border border-[#ff7a1a]/40 bg-[#ff7a1a]/[0.06] text-center text-[#ff8d3b] transition hover:border-[#ff7a1a]/70 hover:bg-[#ff7a1a]/10 sm:w-[calc(22.222%_-_0.666rem)] sm:min-w-[calc(22.222%_-_0.666rem)]">
                         <span className="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 p-2">
                           <ArrowRight className="h-5 w-5" />
-                          <span className="text-[9px] font-bold uppercase leading-tight tracking-wide sm:text-xs">
-                            View All
-                          </span>
+                          <span className="text-[9px] font-bold uppercase leading-tight tracking-wide sm:text-xs">View All</span>
                         </span>
                       </Link>
                     </div>
                   </div>
                 </>
+              ) : followingCount !== null && followingCount > 0 ? (
+                <div className="rounded-xl border border-white/10 bg-[#111111] px-4 py-4 sm:px-5">
+                  <p className="text-sm font-semibold text-[#f5f0de]">Your friends’ logs will show up here.</p>
+                  <p className="mt-1 text-xs text-white/55 sm:text-sm">Once they log a movie or TV show, you’ll see it in Friends Activity.</p>
+                </div>
               ) : (
-                <div className="mx-auto flex max-w-sm flex-col items-center justify-center border border-white/10 bg-[#111111] px-4 py-8 text-center sm:py-10">
-                  <Clapperboard className="mx-auto mb-3 h-10 w-10 text-white/20" />
-                  <p className="font-medium text-[#f5f0de]">No friends yet</p>
-                  <p className="mt-1 text-sm text-white/55">Find people to see what they watch and share.</p>
-                  <button
-                    type="button"
-                    onClick={openAccountSearch}
-                    className="mt-4 inline-flex items-center justify-center border border-[#ff7a1a] px-3 py-1.5 text-xs font-medium text-[#ffb36b] transition-colors hover:bg-[#ff7a1a]/10"
-                  >
-                    Add friends
-                  </button>
+                <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3 rounded-xl border border-white/10 bg-[#111111] p-3 sm:grid-cols-[76px_minmax(0,1fr)_auto] sm:gap-5 sm:p-4">
+                  <div className="relative h-[96px] w-16 shrink-0 overflow-hidden rounded-md border border-[#ff7a1a]/40 bg-[#1b1714] shadow-[0_6px_18px_rgba(0,0,0,0.3)] sm:h-[112px] sm:w-[76px]">
+                    <Image
+                      src="https://image.tmdb.org/t/p/w342/2koX1xLkpTQM4IZebYvKysFW1Nh.jpg"
+                      alt="Friends TV series poster"
+                      fill
+                      sizes="94px"
+                      className="object-cover"
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col items-start justify-center">
+                    <p className="text-sm font-bold tracking-tight text-[#f5f0de] sm:text-base">See what your friends are watching.</p>
+                    <p className="mt-1 text-xs leading-relaxed text-white/55 sm:text-sm">Their movie and TV logs will appear here.</p>
+                    <button type="button" onClick={openAccountSearch} className="mt-3 inline-flex h-8 w-fit items-center justify-self-start gap-2 rounded-full bg-[#ff7a1a] px-3.5 text-xs font-bold text-[#101010] transition hover:bg-[#ff9142] sm:hidden">Find friends <ArrowRight className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <button type="button" onClick={openAccountSearch} className="hidden h-10 w-fit items-center justify-self-end gap-2 rounded-full bg-[#ff7a1a] px-4 text-sm font-bold text-[#101010] transition hover:bg-[#ff9142] sm:col-start-3 sm:inline-flex">Find friends <ArrowRight className="h-4 w-4" /></button>
                 </div>
               )}
             </>
-          ) : (
-            <div className="mx-auto flex max-w-lg flex-col items-center justify-center border border-white/10 bg-[#111111] px-4 py-8 text-center sm:px-6 sm:py-10">
-              <Clapperboard className="mx-auto mb-3 h-10 w-10 text-white/20" />
-              <p className="font-medium text-[#f5f0de]">Get started</p>
-              <p className="mt-1 text-sm text-white/55">
-                Sign in to log titles, build lists, and share what you&apos;re watching.
-              </p>
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-                <Link
-                  href="/auth/login?redirect=/dashboard"
-                  className="inline-flex items-center justify-center border border-[#ff7a1a] px-3 py-1.5 text-xs font-medium text-[#ffb36b] transition-colors hover:bg-[#ff7a1a]/10"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/lists"
-                  className="inline-flex items-center justify-center border border-white/10 px-3 py-1.5 text-xs font-medium text-[#f5f0de] transition-colors hover:bg-white/5"
-                >
-                  Browse lists
-                </Link>
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
 
-        {showQuickActions && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm">
-            <button
-              type="button"
-              className="absolute inset-0 cursor-default"
-              onClick={() => setShowQuickActions(false)}
-              aria-label="Close quick actions"
-            />
-            <div className="relative w-full max-w-md border border-white/10 bg-[#111111] p-5 text-[#f5f0de] shadow-[0_24px_80px_rgba(0,0,0,0.7)]">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-black text-[#f5f0de]">Create</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickActions(false)}
-                  className="rounded-full border border-white/10 p-2 text-white/55 transition hover:bg-white/5 hover:text-[#f5f0de]"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+        <AdminFeaturedLists />
+        <HomeGamesStrip />
+        {user && ownLogs?.some((log) => !log.watch_later && Boolean(log.watched_date)) ? <HomeStatsBento user={user} logs={ownLogs} /> : null}
 
-              <div className="divide-y divide-white/[0.06]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowQuickActions(false);
-                    setQuickLogQuery("");
-                    setQuickLogResults([]);
-                    setQuickLogFilter("all");
-                    setShowQuickLogSearch(true);
-                  }}
-                  className="group flex w-full items-center gap-3.5 rounded-xl px-1.5 py-3 text-left transition hover:bg-white/[0.05]"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-[#f5f0de]">
-                    <Clapperboard className="h-5 w-5" strokeWidth={1.75} />
-                  </span>
-                  <span className="min-w-0 flex-1 font-black text-[#f5f0de]">Log Title</span>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-white/50" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowQuickActions(false);
-                    router.push("/share");
-                  }}
-                  className="group flex w-full items-center gap-3.5 rounded-xl px-1.5 py-3 text-left transition hover:bg-white/[0.05]"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-[#f5f0de]">
-                    <Share2 className="h-5 w-5" strokeWidth={1.75} />
-                  </span>
-                  <span className="min-w-0 flex-1 font-black text-[#f5f0de]">Share</span>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-white/50" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {user && friendActivityStatus === "ready" && followingCount === 0 ? <ExploreLists userId={user.id} /> : null}
+        {user && ownLogs !== null ? <OnThisDay user={user} logs={ownLogs} /> : null}
+        {ownLogs !== null ? <ReleaseDay logs={ownLogs} /> : null}
 
         {showQuickLogSearch && (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 p-2 pt-2 sm:items-center sm:p-4">
@@ -1146,12 +1005,13 @@ export default function DashboardPage() {
 
               {(quickLogResults.length > 0 || quickLogQuery.length >= 1 || quickLogSearching) && (
                 <>
-                  <div className="flex gap-2 overflow-x-auto border-b border-white/10 bg-[#111111] p-4">
+                  <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-white/10 bg-[#111111] px-4 py-3 sm:px-6">
                     {(["all", "movie", "tv"] as const).map((filter) => (
                       <button
                         key={filter}
+                        type="button"
                         onClick={() => setQuickLogFilter(filter)}
-                        className={`flex-shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                        className={`inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-sm font-semibold leading-none transition-colors ${
                           quickLogFilter === filter
                             ? "bg-[#f5f0de] text-[#0a0a0a]"
                             : "bg-white/5 text-[#f5f0de]/75 hover:bg-white/10"
@@ -1241,18 +1101,6 @@ export default function DashboardPage() {
 
         {/* More Features section removed as requested */}
 
-        {/* Share Modal */}
-        {selectedShare && (
-          <ShareModal
-            key={selectedShare.id}
-            share={selectedShare}
-            currentUserId={user?.id || ""}
-            onClose={() => setSelectedShare(null)}
-            user={user}
-            theme="brutalist"
-            onLogged={(message) => setBannerMessage(message)}
-          />
-        )}
       </main>
     </PageLayout>
   );

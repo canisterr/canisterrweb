@@ -308,7 +308,7 @@ export default function UserLogPage() {
       setProfileUser(profileUserData);
 
       // Fetch logs for the profile user
-      const userLogs = await getUserMovieLogs(profileUserData.id, 500);
+      const userLogs = await getUserMovieLogs(profileUserData.id, 500, profileUserData, { summaryOnly: true });
       const filtered = userLogs
         .filter((log) => !log.watch_later && Boolean(log.watched_date))
         .sort(compareLogsDesc);
@@ -491,7 +491,7 @@ export default function UserLogPage() {
   const handleRefreshLogs = async () => {
     if (!profileUser) return;
     try {
-      const userLogs = await getUserMovieLogs(profileUser.id, 500);
+      const userLogs = await getUserMovieLogs(profileUser.id, 500, profileUser, { fresh: true, summaryOnly: true });
       const filtered = userLogs
         .filter((log) => !log.watch_later && Boolean(log.watched_date))
         .sort(compareLogsDesc);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Bell, LoaderCircle, MessageSquare, Mail, SendHorizontal, Smartphone, Sparkles, Users } from "lucide-react";
+import { AlertCircle, LoaderCircle } from "lucide-react";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
 import { SettingLine, CompactToggle, SettingsGroup, SettingsMessage } from "../settings-ui";
@@ -121,18 +121,18 @@ export default function SettingsNotificationsPage() {
       title="Notifications"
       description="Only the updates you actually want."
     >
-      <div className="space-y-8">
+      <div className="space-y-5">
         <SettingsGroup title="Delivery">
-          <SettingLine icon={Smartphone} title="Web push notifications" description="Get alerts on this browser or installed app.">
-            <div className="flex flex-col items-end gap-2">
-              <p className="text-right text-xs font-semibold text-white/50">{pushStatusText}</p>
-              <div className="flex flex-wrap justify-end gap-2">
+          <SettingLine title="Web push notifications" description="Alerts on this device." stacked>
+            <div className="flex flex-wrap items-center gap-3 ">
+              <p className="w-full text-xs text-white/45">{pushStatusText}</p>
+              <div className="flex flex-wrap gap-2">
                 {pushState.enabled ? (
                   <button
                     type="button"
                     onClick={() => void handlePushTest()}
                     disabled={pushBusy || pushTestBusy}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-transparent px-3 py-2 text-xs font-semibold text-[#f5f0de] transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {pushTestBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     Send test
@@ -142,8 +142,8 @@ export default function SettingsNotificationsPage() {
                   type="button"
                   onClick={() => void handlePushToggle()}
                   disabled={pushBusy || pushTestBusy || (!pushState.supported && !pushState.enabled)}
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold transition ${
-                    pushState.enabled ? "bg-[#34c759] text-[#08120b] hover:bg-[#48d36b]" : "bg-[#0a84ff] text-white hover:bg-[#2994ff]"
+                  className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition ${
+                    pushState.enabled ? "border border-white/20 bg-transparent text-white/70 hover:border-white/40" : "bg-[#ff7a1a] text-black hover:bg-[#ff8d3b]"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   {pushBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
@@ -164,7 +164,7 @@ export default function SettingsNotificationsPage() {
         ) : null}
 
         <SettingsGroup title="Activity">
-        <SettingLine icon={Users} title="Follow notifications" description="Let people know when someone follows you.">
+        <SettingLine title="Follow notifications" description="Let people know when someone follows you.">
           <CompactToggle
             checked={settings.notifications.followRequests}
             onChange={(next) => void updateSection("notifications", { followRequests: next })}
@@ -172,7 +172,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={Sparkles} title="Like notifications" description="Likes and saves on your logs and comments.">
+        <SettingLine title="Like notifications" description="Likes and saves on your logs and comments.">
           <CompactToggle
             checked={settings.notifications.likeNotifications}
             onChange={(next) => void updateSection("notifications", { likeNotifications: next })}
@@ -180,7 +180,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={MessageSquare} title="Comment notifications" description="Comments and replies on your logs and shares.">
+        <SettingLine title="Comment notifications" description="Comments and replies on your logs and shares.">
           <CompactToggle
             checked={settings.notifications.commentNotifications}
             onChange={(next) => void updateSection("notifications", { commentNotifications: next })}
@@ -188,7 +188,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={SendHorizontal} title="Share notifications" description="When someone sends you a movie or TV recommendation.">
+        <SettingLine title="Share notifications" description="When someone sends you a movie or TV recommendation.">
           <CompactToggle
             checked={settings.notifications.shareNotifications}
             onChange={(next) => void updateSection("notifications", { shareNotifications: next })}
@@ -196,7 +196,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={Bell} title="Log notifications" description="When someone posts a new log.">
+        <SettingLine title="Log notifications" description="When someone posts a new log.">
           <CompactToggle
             checked={settings.notifications.logNotifications}
             onChange={(next) => void updateSection("notifications", { logNotifications: next })}
@@ -204,7 +204,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={MessageSquare} title="Collaboration invites" description="List collaboration requests and invites.">
+        <SettingLine title="Collaboration invites" description="List collaboration requests and invites.">
           <CompactToggle
             checked={settings.notifications.collaborationInvites}
             onChange={(next) => void updateSection("notifications", { collaborationInvites: next })}
@@ -212,7 +212,7 @@ export default function SettingsNotificationsPage() {
           />
         </SettingLine>
 
-        <SettingLine icon={Mail} title="Email notifications" description="Optional email delivery for account messages.">
+        <SettingLine title="Email notifications" description="Optional email delivery for account messages.">
           <CompactToggle
             checked={settings.notifications.emailNotifications}
             onChange={(next) => void updateSection("notifications", { emailNotifications: next })}

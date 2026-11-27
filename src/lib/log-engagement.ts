@@ -30,26 +30,33 @@ const LIKER_PREVIEW_SIZE = 3;
  */
 export async function getLogEngagementBatch(
   logIds: string[],
-  currentUserId?: string | null
+  currentUserId?: string | null,
+  options: { includeSaves?: boolean } = {}
 ): Promise<Record<string, LogEngagementSnapshot>> {
   const uniqueLogIds = Array.from(new Set(logIds.filter(Boolean)));
   if (uniqueLogIds.length === 0) return {};
+  if (!currentUserId || currentUserId === "__guest__") {
+    return Object.fromEntries(uniqueLogIds.map((logId) => [logId, getEmptyLogEngagement()]));
+  }
 
   const reads = await Promise.all(
     uniqueLogIds.map(async (logId) => {
-      const [likesSnap, commentsSnap, savesSnap] = await Promise.all([
+      const [likesResult, commentsResult, savesResult] = await Promise.allSettled([
         get(ref(db, `log_likes/${logId}`)),
         get(ref(db, `log_comments/${logId}`)),
-        get(ref(db, `log_saves/${logId}`)),
+        options.includeSaves === false ? Promise.resolve(null) : get(ref(db, `log_saves/${logId}`)),
       ]);
+      const likesSnap = likesResult.status === "fulfilled" ? likesResult.value : null;
+      const commentsSnap = commentsResult.status === "fulfilled" ? commentsResult.value : null;
+      const savesSnap = savesResult.status === "fulfilled" ? savesResult.value : null;
 
-      const likeUserIds = likesSnap.exists() ? Object.keys(likesSnap.val() || {}) : [];
-      const saves = savesSnap.exists() ? savesSnap.val() : {};
+      const likeUserIds = likesSnap?.exists() ? Object.keys(likesSnap.val() || {}) : [];
+      const saves = savesSnap?.exists() ? savesSnap.val() : {};
 
       return {
         logId,
         likeUserIds,
-        commentsCount: commentsSnap.exists() ? Object.keys(commentsSnap.val() || {}).length : 0,
+        commentsCount: commentsSnap?.exists() ? Object.keys(commentsSnap.val() || {}).length : 0,
         savesCount: Object.keys(saves || {}).length,
         saved: currentUserId ? !!saves?.[currentUserId] : false,
       };

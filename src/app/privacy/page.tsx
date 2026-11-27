@@ -1,159 +1,105 @@
-import Link from "next/link";
+import LegalDocument from "@/components/LegalDocument";
+import { PRIVACY_POLICY_VERSION } from "@/lib/legal-versions";
 
-const effectiveDate = "April 27, 2026";
+const effectiveDate = "November 26, 2026";
 
 const sections = [
   {
-    title: "1. Information we collect",
+    title: "1. Information Canisterr handles",
     items: [
       "Account details such as your username, display name, email address, and profile image.",
       "Content you create, including logs, comments, lists, reactions, follows, messages, and shared items.",
-      "Device and usage data such as browser type, pages visited, timestamps, and basic diagnostics.",
-      "Technical data used to deliver notifications, prevent abuse, and keep the app working reliably.",
+      "Taste preferences and derived recommendations based on your logged titles and ratings.",
+      "Device and service data such as authentication identifiers, push tokens when enabled, request logs, timestamps, and diagnostic information.",
     ],
   },
   {
-    title: "2. How we use information",
+    title: "2. Why we use it",
     items: [
       "Create and manage your account.",
       "Show your profile, logs, lists, followers, and related social activity.",
+      "Build taste summaries and recommendations from the titles and ratings you choose to record.",
       "Send notifications and emails you opt into.",
       "Improve performance, diagnose issues, and protect the service from abuse.",
       "Respond to support requests and account issues.",
     ],
   },
   {
-    title: "3. How information is shared",
+    title: "3. Legal grounds and service providers",
     body: [
-      "We do not sell your personal information.",
-      "We may share limited information with service providers that help us run Canisterr, such as hosting, authentication, analytics, and notifications.",
-      "Content you choose to make public can be visible to other users or the public depending on your settings.",
+      "We use account information to provide the service you request, use consent where required, and process limited technical information for security, reliability, and legal obligations. The legal ground depends on your location and the specific processing.",
+      "Canisterr uses Firebase services from Google for authentication, database storage, and push delivery; TMDB for film, television, and watch-provider metadata (including JustWatch-sourced availability data); TVmaze for television metadata; and the configured hosting and email providers to operate the service. These providers process information under their own terms and applicable service agreements.",
+      "We do not sell personal information for money. We do not currently run behavior-based advertising. If that changes, we will update this policy and obtain any consent required by law before enabling it.",
     ],
   },
   {
-    title: "4. Public and private content",
+    title: "4. Who can see your content",
     body: [
-      "Canisterr lets you control the visibility of your profile, lists, logs, and activity. If you mark something public, it may be visible to other users or shared through the app.",
-      "If you post or send content through social features, other users may be able to see, save, screenshot, or share that content outside the service.",
+      "Privacy settings let you choose the intended audience for your profile, lists, logs, and activity. Some older app data paths and database access rules are still being migrated to enforce these choices consistently. Until that migration is complete, do not treat a private setting as a guarantee that content is inaccessible to every other signed-in account. The movie page’s Watched by section is designed to show only accepted accounts you follow, but this does not close other direct database access paths.",
+      "Content you choose to make public may be accessible to other users and may be indexed or copied outside Canisterr. Other users can screenshot or share information they can see. Changing a setting cannot remove copies already made elsewhere.",
     ],
   },
   {
-    title: "5. Cookies and similar technologies",
+    title: "5. Cookies and local storage",
     body: [
-      "We may use cookies, local storage, and similar technologies to keep you signed in, remember preferences, support notifications, and improve the experience.",
-      "You can control cookies through your browser settings, but some features may not work properly if you disable them.",
+      "Canisterr uses browser storage and similar technologies for sign-in, user preferences, search history, and service functionality. Optional analytics are not loaded unless you select Allow. You can reject analytics or change your choice later in Privacy settings on that device. If allowed, usage data is processed by our analytics provider under its own terms. Essential sign-in and security technologies remain active. We do not currently run behavioral advertising.",
+      "You can clear browser storage in your browser settings. Doing so may sign you out or reset preferences stored on that device.",
     ],
   },
   {
-    title: "6. Retention",
+    title: "6. Retention and deletion",
     body: [
-      "We keep information for as long as necessary to provide the service, comply with legal obligations, resolve disputes, and enforce our agreements.",
-      "If you delete content or close your account, some records may remain in backups or logs for a limited period, subject to applicable law.",
+      "We keep account information and content while your account is active and as needed to provide the service. You can request an export or permanently delete your account in Account settings. Deletion removes associated account content from the live database; encrypted backups and security records may persist until their scheduled expiry or for a longer period required by law.",
+      "Technical and security records are held only as long as needed for the stated purposes or as required by law. Retention periods depend on the record and provider. Before operating in a jurisdiction that imposes specific log-retention duties, Canisterr must configure those periods and disclose the applicable details here. For example, CERT-In directions require covered entities to retain ICT logs for a rolling 180 days and report specified cyber incidents within six hours.",
     ],
   },
   {
-    title: "7. Security",
+    title: "7. Security and incidents",
     body: [
-      "We use reasonable safeguards to help protect your data, but no system is completely secure.",
-      "You should use a strong password and keep your account credentials private.",
+      "We use access controls and technical safeguards intended to protect account data. No online service can guarantee perfect security. If a reportable incident occurs, we will follow the notification duties that apply to us, which may include notifying regulators and affected people.",
+      "Keep your password private and use a unique password. Contact support promptly if you believe your account is compromised.",
     ],
   },
   {
-    title: "8. Your choices and rights",
+    title: "8. Your rights and choices",
     items: [
-      "Update your profile, privacy settings, and notification settings in the app.",
-      "Delete comments, lists, and other content where the product allows it.",
-      "Deactivate or delete your account from account settings.",
-      "Contact us if you want help with a privacy question or request.",
+      "Update account details, privacy settings, and notification preferences in the app.",
+      "Download a JSON export of account data from Account settings.",
+      "Request access, correction, deletion, withdrawal of consent, or other rights available under the privacy law that applies to you by emailing support@canisterr.com.",
+      "We may need to verify your account before acting on a request. We respond within the time limits required by applicable law and explain if a request cannot be fulfilled.",
     ],
   },
   {
-    title: "9. Children’s privacy",
+    title: "9. Age eligibility",
     body: [
-      "Canisterr is not intended for children under 13, and you should not use the service if you are below the minimum age required in your jurisdiction.",
-      "If you believe a child has provided personal information to us, contact us so we can review and take appropriate action.",
+      "Canisterr accounts are limited to people aged 18 or older under our Terms. Do not create an account for someone under 18 or provide a child’s personal information. If you believe a child has provided information, contact support so we can review and remove it where appropriate.",
+      "This age restriction is a product safeguard, not a substitute for legally required age assurance or parental-consent procedures. We will not knowingly profile or behaviorally monitor children.",
     ],
   },
   {
-    title: "10. International users",
+    title: "10. International processing",
     body: [
-      "If you use Canisterr from India, your information may be transferred to and processed in other countries where our service providers operate.",
+      "Canisterr and its service providers may process data in countries other than the one where you live. Where required, we will use an approved transfer mechanism and additional safeguards. Contact support for information about transfers relevant to your request.",
     ],
   },
   {
-    title: "11. Changes to this policy",
+    title: "11. Complaints and changes",
     body: [
-      "We may update this Privacy Policy from time to time. When we do, we will change the effective date above and may provide additional notice where required.",
+      "For privacy questions or complaints, contact Canisterr Support at support@canisterr.com. We will route privacy and content complaints to the person responsible for handling them.",
+      `This policy version is ${PRIVACY_POLICY_VERSION}. We may update it as the service or applicable law changes. We will update the effective date and provide additional notice or obtain consent where required.`,
     ],
   },
 ];
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-dvh bg-[#090909] px-4 py-8 text-[#f5f0de] sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl">
-        <Link
-          href="/profile/settings"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-white/55 transition hover:text-[#ffb36b]"
-        >
-          Back to settings
-        </Link>
-
-        <section className="mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <div className="border-b border-white/10 px-5 py-5 sm:px-8 sm:py-6">
-            <p className="text-[11px] font-black uppercase tracking-[0.32em] text-[#ffb36b]/80">Privacy Policy</p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">Canisterr Privacy Policy</h1>
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/65 sm:text-base">
-              Effective {effectiveDate}. This policy explains what we collect, how we use it, and the choices you have
-              when using Canisterr.
-            </p>
-          </div>
-
-          <div className="space-y-6 px-5 py-6 sm:px-8 sm:py-8">
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/70">
-              If you need help with your privacy rights or want to ask a question about this policy, contact{" "}
-              <a href="mailto:support@canisterr.com" className="font-semibold text-[#ffb36b] hover:text-[#ff8d3b]">
-                support@canisterr.com
-              </a>
-              .
-            </div>
-
-            {sections.map((section) => (
-              <section key={section.title} className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-                <h2 className="text-xl font-black tracking-tight text-[#f5f0de]">{section.title}</h2>
-                {"body" in section && section.body ? (
-                  <div className="mt-4 space-y-4 text-sm leading-7 text-white/68 sm:text-base">
-                    {section.body.map((paragraph) => (
-                      <p key={paragraph}>{paragraph}</p>
-                    ))}
-                  </div>
-                ) : null}
-                {"items" in section && section.items ? (
-                  <ul className="mt-4 space-y-3 text-sm leading-7 text-white/68 sm:text-base">
-                    {section.items.map((item) => (
-                      <li key={item} className="flex gap-3">
-                        <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-[#ff7a1a]" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </section>
-            ))}
-
-            <section className="rounded-3xl border border-white/10 bg-[#ff7a1a]/10 p-5 sm:p-6">
-              <h2 className="text-xl font-black text-[#f5f0de]">Contact us</h2>
-              <p className="mt-3 text-sm leading-7 text-white/70 sm:text-base">
-                For privacy questions, data requests, or account-related privacy concerns, email{" "}
-                <a href="mailto:support@canisterr.com" className="font-semibold text-[#ffb36b] hover:text-[#ff8d3b]">
-                  support@canisterr.com
-                </a>
-                .
-              </p>
-            </section>
-          </div>
-        </section>
-      </div>
-    </main>
+    <LegalDocument
+      current="privacy"
+      title="Privacy Policy"
+      intro="This policy describes what information Canisterr uses, what we use it for, and the choices available to you."
+      effectiveDate={effectiveDate}
+      version={PRIVACY_POLICY_VERSION}
+      sections={sections}
+    />
   );
 }

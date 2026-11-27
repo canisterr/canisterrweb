@@ -1,15 +1,27 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
+import { getAnalyticsConsent, setAnalyticsConsent, type AnalyticsConsentChoice } from "@/lib/analytics-consent";
 import { useSettingsUser } from "../settings-shared";
 import { SettingLine, SettingsGroup } from "../settings-ui";
-import { Shield, Eye, ListChecks, Lock, Users } from "lucide-react";
 
 const selectClass =
-  "rounded-full border border-white/10 bg-[#101010] px-3 py-1.5 text-xs font-semibold text-[#f5f0de] outline-none transition focus:border-[#0a84ff]";
+  "max-w-28 rounded-md border border-white/15 bg-[#191919] px-2 py-1.5 text-xs font-semibold text-[#f5f0de] outline-none transition focus:border-[#ff7a1a]";
 
 export default function SettingsPrivacyPage() {
   const { user, loading, settings, updateSection, handleSignOut } = useSettingsUser();
+  const [analyticsChoice, setAnalyticsChoice] = useState<AnalyticsConsentChoice | null>(null);
+
+  useEffect(() => {
+    setAnalyticsChoice(getAnalyticsConsent());
+  }, []);
+
+  function chooseAnalytics(choice: AnalyticsConsentChoice) {
+    setAnalyticsConsent(choice);
+    setAnalyticsChoice(choice);
+  }
 
   return (
     <SettingsPageFrame
@@ -20,7 +32,16 @@ export default function SettingsPrivacyPage() {
       description="Profile, list and log visibility in a few small controls."
     >
       <SettingsGroup>
-        <SettingLine icon={Shield} title="Profile visibility" description="Who can open your profile page.">
+        <SettingLine title="Optional analytics" description="Analytics stay off until you allow them. You can change this choice at any time on this device.">
+          <div className="flex flex-col items-end gap-2">
+            <span className="text-xs text-white/55">{analyticsChoice === "accepted" ? "Allowed" : analyticsChoice === "rejected" ? "Rejected" : "No choice yet"}</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => chooseAnalytics("accepted")} className="rounded-md border border-[#ff7a1a]/60 px-3 py-1.5 text-xs font-semibold text-[#ffb36b]">Allow</button>
+              <button type="button" onClick={() => chooseAnalytics("rejected")} className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/70">Turn off</button>
+            </div>
+          </div>
+        </SettingLine>
+        <SettingLine title="Profile visibility" description="Who can open your profile page.">
           <select
             className={selectClass}
             value={settings.privacy.profileVisibility}
@@ -32,7 +53,7 @@ export default function SettingsPrivacyPage() {
           </select>
         </SettingLine>
 
-        <SettingLine icon={Users} title="Who can follow you" description="Who can follow your profile.">
+        <SettingLine title="Who can follow you" description="Who can follow your profile.">
           <select
             className={selectClass}
             value={settings.privacy.followRequests}
@@ -44,7 +65,7 @@ export default function SettingsPrivacyPage() {
           </select>
         </SettingLine>
 
-        <SettingLine icon={ListChecks} title="Lists visibility" description="Who can see your public lists and collection pages.">
+        <SettingLine title="Lists visibility" description="Who can see your public lists and collection pages.">
           <select
             className={selectClass}
             value={settings.privacy.listVisibility}
@@ -56,7 +77,7 @@ export default function SettingsPrivacyPage() {
           </select>
         </SettingLine>
 
-        <SettingLine icon={Eye} title="Logs visibility" description="Who can see your watched logs and activity.">
+        <SettingLine title="Logs visibility" description="Who can see your watched logs and activity.">
           <select
             className={selectClass}
             value={settings.privacy.logVisibility}
@@ -68,7 +89,7 @@ export default function SettingsPrivacyPage() {
           </select>
         </SettingLine>
 
-        <SettingLine icon={Lock} title="Activity visibility" description="Who can see the activity style surfaces on your profile.">
+        <SettingLine title="Activity visibility" description="Who can see the activity style surfaces on your profile.">
           <select
             className={selectClass}
             value={settings.privacy.activityVisibility}
@@ -78,6 +99,15 @@ export default function SettingsPrivacyPage() {
             <option value="followers">Followers</option>
             <option value="private">Private</option>
           </select>
+        </SettingLine>
+      </SettingsGroup>
+
+      <SettingsGroup title="Legal">
+        <SettingLine title="Privacy Policy" description="Read how Canisterr uses and protects account information.">
+          <Link href="/privacy" className="text-sm font-semibold text-[#ffb36b] underline underline-offset-4">Read policy</Link>
+        </SettingLine>
+        <SettingLine title="Terms & Conditions" description="Review the rules for using Canisterr.">
+          <Link href="/terms" className="text-sm font-semibold text-[#ffb36b] underline underline-offset-4">Read terms</Link>
         </SettingLine>
       </SettingsGroup>
     </SettingsPageFrame>

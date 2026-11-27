@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { cache } from "react";
+import { searchTmdbMovies } from "@/lib/tmdb-data";
 import {
   parseMovieSlug,
   logMetadata,
@@ -18,17 +20,9 @@ type Props = {
 };
 
 // Search TMDB by title + optional year, return first result.
-async function searchTmdbMovie(titleHint: string, year: number | null) {
-  const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
-  if (!apiKey) return null;
+const searchTmdbMovie = cache(async (titleHint: string, year: number | null) => {
   try {
-    const qs = new URLSearchParams({ api_key: apiKey, query: titleHint, language: "en-US" });
-    if (year) qs.set("primary_release_year", String(year));
-    const res = await fetch(`https://api.themoviedb.org/3/search/movie?${qs}`, {
-      next: { revalidate: 60 * 60 * 24 },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await searchTmdbMovies(titleHint, { year: year ?? undefined, language: "en-US" });
     return (data.results?.[0] ?? null) as {
       id: number;
       title: string;
@@ -41,7 +35,7 @@ async function searchTmdbMovie(titleHint: string, year: number | null) {
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username, slug } = await params;

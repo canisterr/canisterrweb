@@ -10,11 +10,11 @@ import LogMovieModal from "@/components/LogMovieModal";
 import { User, MovieLogWithContent, Content } from "@/types";
 import { signOut as authSignOut } from "@/lib/auth";
 import { deleteMovieLog, getUserMovieLogs } from "@/lib/logs";
-import { searchMovies } from "@/lib/tmdb";
-import { searchShows } from "@/lib/tvmaze";
+import { searchMulti } from "@/lib/search-multi";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { getBlurDataUrl, getTmdbPosterUrl } from "@/lib/performance";
+import { usePosterAccent } from "@/hooks/usePosterAccent";
 import {
   Calendar,
   ChevronLeft,
@@ -142,24 +142,6 @@ function getLogTitleClass(title: string): string {
   return "text-[0.78rem] sm:text-[0.92rem] lg:text-[0.98rem]";
 }
 
-function colorFromSeed(seed: string): { background: string; foreground: string; border: string } {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  const hue = Math.abs(hash) % 360;
-  const background = `hsl(${hue} 18% 34%)`;
-  const foreground = hue > 35 && hue < 220 ? "#f8f4ea" : "#fffaf0";
-  const border = `hsl(${hue} 16% 24%)`;
-  return { background, foreground, border };
-}
-
-function usePosterAccent(posterUrl: string | null | undefined, seed: string) {
-  void posterUrl;
-  return useMemo(() => colorFromSeed(seed), [seed]);
-}
-
 function monthStart(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
@@ -266,6 +248,7 @@ function LogCard({
   const tvContextLabel = getTvLogContextLabel(log);
   const hasMetaItems = log.reaction != null || hasReview || hasTicketImage || isRewatch;
   const titleClass = getLogTitleClass(log.content.title);
+  const accent = usePosterAccent(log.content.poster_url, `${log.content.title}-${log.id}`);
 
   return (
     <div
@@ -280,7 +263,7 @@ function LogCard({
       }}
       className="group w-full cursor-pointer text-left"
     >
-      <div className="relative overflow-hidden bg-black shadow-[0_16px_35px_rgba(0,0,0,0.22)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_20px_45px_rgba(0,0,0,0.28)]">
+      <div className="relative overflow-hidden shadow-[0_16px_35px_rgba(0,0,0,0.22)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_20px_45px_rgba(0,0,0,0.28)]" style={{ backgroundColor: accent.background }}>
         <div className="grid min-h-[7.1rem] grid-cols-[5.1rem_0.8rem_minmax(0,1fr)_3.6rem] items-stretch sm:min-h-[8.6rem] sm:grid-cols-[6.4rem_1rem_minmax(0,1fr)_4.75rem]">
           <div className="relative m-2 sm:m-3">
             <div className="relative h-full min-h-[5.9rem] w-full overflow-hidden bg-black sm:min-h-[6.9rem]">
@@ -403,15 +386,12 @@ function TicketLogCard({
   const hasTicketImage = Boolean(log.ticket_image_url);
   const tvContextLabel = getTvLogContextLabel(log);
   const accent = usePosterAccent(log.content.poster_url, `${log.content.title}-${log.id}`);
-  const titleClass = getLogTitleClass(log.content.title);
   const detailPanelStyle: CSSProperties = {
     backgroundColor: accent.background,
     color: accent.foreground,
     borderTopColor: accent.border,
   };
   const metaChipStyle: CSSProperties = {
-    borderColor: accent.foreground === "#101010" ? "rgba(16,16,16,0.14)" : "rgba(248,244,234,0.16)",
-    backgroundColor: accent.foreground === "#101010" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.08)",
     color: accent.foreground,
   };
   const subTextStyle: CSSProperties = {
@@ -422,19 +402,16 @@ function TicketLogCard({
     <button
       type="button"
       onClick={() => onOpen(log)}
-      className="group relative aspect-[0.44] w-full overflow-hidden bg-black text-left transition duration-200 hover:-translate-y-1 sm:aspect-[0.54] lg:aspect-[0.48]"
+      className="group relative flex h-full w-full flex-col overflow-hidden rounded-[8px] bg-black text-left shadow-[0_12px_28px_rgba(0,0,0,0.3)] transition duration-200 hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-[#ff7a1a]"
     >
-      <div className="absolute left-0 top-1/2 z-20 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#020202] sm:h-7 sm:w-7" />
-      <div className="absolute right-0 top-1/2 z-20 h-5 w-5 translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#020202] sm:h-7 sm:w-7" />
-
-      <div className="relative h-1/2 overflow-hidden border-b border-dashed border-white/12 bg-[#050505]">
+      <div className="relative aspect-[2/3] w-full shrink-0 overflow-hidden bg-[#050505]">
         {log.content.poster_url ? (
           <Image
             src={log.content.poster_url}
             alt={log.content.title}
             fill
-            sizes="(max-width: 768px) 33vw, 260px"
-            className="object-cover transition duration-300 group-hover:scale-[1.02]"
+            sizes="(max-width: 1023px) 33vw, 25vw"
+            className="object-contain transition duration-300 group-hover:scale-[1.02]"
             placeholder="blur"
             blurDataURL={getBlurDataUrl()}
           />
@@ -443,33 +420,35 @@ function TicketLogCard({
             No poster
           </div>
         )}
-        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black via-black/60 to-transparent" />
       </div>
 
-      <div className="flex h-1/2 flex-col border-t px-2.5 pb-2.5 pt-2 sm:px-3.5 sm:pb-3.5 sm:pt-3.5 lg:px-4 lg:pb-4" style={detailPanelStyle}>
-        <div className="min-h-[2.5rem] sm:min-h-[3.1rem] lg:min-h-[3.5rem]">
-          <p className={`break-words text-balance font-black leading-[1.02] tracking-[-0.04em] ${titleClass}`}>
-            {log.content.title}
+      <div className="relative flex min-h-28 flex-1 flex-col border-t-2 border-dashed px-2.5 pb-2.5 pt-2 sm:min-h-32 sm:px-3.5 sm:pb-3 sm:pt-3" style={detailPanelStyle}>
+        <span className="absolute left-0 top-0 z-20 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#050505] sm:h-6 sm:w-6" aria-hidden="true" />
+        <span className="absolute right-0 top-0 z-20 h-5 w-5 translate-x-1/2 -translate-y-1/2 rounded-full bg-[#050505] sm:h-6 sm:w-6" aria-hidden="true" />
+        <div>
+          <p className="flex items-start gap-1 text-[10px] font-bold leading-tight sm:text-xs">
+            <Calendar className="mt-px h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
+            <span>{formatTicketDate(log.watched_date)}</span>
           </p>
           {tvContextLabel ? (
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.22em] sm:text-[11px]" style={subTextStyle}>
+            <p className="mt-0.5 line-clamp-1 text-[9px] font-bold uppercase tracking-[0.12em] sm:text-[10px]" style={subTextStyle}>
               {tvContextLabel}
             </p>
           ) : null}
         </div>
 
-        <div className="mt-3 flex flex-col items-start gap-1.5 overflow-hidden sm:mt-2.5 sm:gap-1.5 lg:mt-3 lg:gap-2">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1 overflow-hidden sm:mt-2 sm:gap-1.5">
           {log.reaction != null ? (
             <span
-              className="inline-flex min-w-0 flex-shrink rounded-[0.8rem] border px-1.5 py-1 text-[7px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap sm:px-2 sm:text-[9px] lg:px-2.5 lg:text-[11px]"
+              className="inline-flex min-w-0 border-l-2 border-current pl-1.5 text-[9px] font-black uppercase tracking-[0.12em] sm:text-[10px]"
               style={metaChipStyle}
-              title={getReactionLabel(log)}
+              aria-label={`Verdict: ${getReactionLabel(log)}`}
             >
               {getReactionLabel(log)}
             </span>
           ) : null}
           {hasReview || hasTicketImage || isRewatch ? (
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-1.5 lg:gap-2">
+            <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
               {hasReview ? (
                 <span
                   className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center sm:h-7 sm:w-7 lg:h-8 lg:w-8"
@@ -501,19 +480,10 @@ function TicketLogCard({
           ) : null}
         </div>
 
-        <div className="mt-auto min-h-[1.25rem] pt-1.5 sm:min-h-[3.2rem] sm:pt-2.5 lg:min-h-[3.6rem] lg:pt-3">
-          {hasReview ? (
-            <p className="hidden sm:line-clamp-3 sm:block sm:text-[10px] sm:leading-4 lg:text-[12px] lg:leading-5" style={subTextStyle}>
-              {log.notes}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="mt-1.5 flex items-center justify-between border-t pt-1.5 text-[10px] font-medium tracking-[0.01em] sm:mt-2.5 sm:pt-2.5 sm:text-[9px] lg:mt-3 lg:pt-3 lg:text-[11px]" style={{ borderTopColor: accent.foreground === "#101010" ? "rgba(16,16,16,0.14)" : "rgba(248,244,234,0.16)" }}>
-          <span className="inline-flex items-center gap-1.5">
-            <Calendar className="h-3.5 w-3.5 sm:h-3 sm:w-3 lg:h-3.5 lg:w-3.5" />
-            {formatTicketDate(log.watched_date)}
-          </span>
+        <div className="mt-auto border-t pt-1.5 text-[9px] leading-snug sm:pt-2 sm:text-[10px]" style={{ borderTopColor: accent.foreground === "#101010" ? "rgba(16,16,16,0.14)" : "rgba(248,244,234,0.16)" }}>
+          <p className="line-clamp-2" style={subTextStyle} title={hasReview ? log.notes || undefined : undefined}>
+            {hasReview ? log.notes : "No review"}
+          </p>
         </div>
       </div>
     </button>
@@ -553,6 +523,12 @@ export default function LogsPage() {
   const fullHistoryHydratedRef = useRef(false);
   const fullHistoryLoadingRef = useRef(false);
   const logFilterMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRequestRef = useRef(0);
+
+  useEffect(() => () => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -562,6 +538,13 @@ export default function LogsPage() {
 
     router.replace(`/user/${encodeURIComponent(targetUsername)}/logs`);
   }, [router]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const filter = params.get("filter");
+    if (filter === "all" || filter === "movie" || filter === "tv") setLogContentFilter(filter);
+    if (params.get("view") === "all") setListMode("all");
+  }, []);
 
   useEffect(() => {
     if (!bannerMessage) return;
@@ -613,7 +596,7 @@ export default function LogsPage() {
         fullHistoryHydratedRef.current = false;
         fullHistoryLoadingRef.current = false;
 
-        const initialLogs = await getUserMovieLogs(sessionUser.id, INITIAL_LOG_LIMIT, sessionUser);
+        const initialLogs = await getUserMovieLogs(sessionUser.id, INITIAL_LOG_LIMIT, sessionUser, { summaryOnly: true });
         if (cancelled) return;
 
         setLogs(normalizeLogs(initialLogs));
@@ -656,7 +639,7 @@ export default function LogsPage() {
     void (async () => {
       try {
         setLogsLoading(true);
-        const fullLogs = await getUserMovieLogs(user.id, FULL_LOG_LIMIT, user);
+        const fullLogs = await getUserMovieLogs(user.id, FULL_LOG_LIMIT, user, { summaryOnly: true });
         if (cancelled) return;
 
         fullHistoryHydratedRef.current = true;
@@ -787,63 +770,70 @@ export default function LogsPage() {
     }
   };
 
-  const handleSearch = async (queryText: string) => {
+  const handleSearch = (queryText: string) => {
     setSearchQuery(queryText);
+    const requestId = ++searchRequestRef.current;
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
     if (queryText.trim().length < 1) {
       setSearchResults([]);
+      setSearching(false);
       return;
     }
 
     setSearching(true);
-    try {
-      const searchMode = searchFilter;
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const searchMode = searchFilter;
+        const searchResult = await searchMulti(queryText);
+        const movies = searchMode === "tv" ? [] : searchResult.movies;
+        const shows = searchMode === "movie" ? [] : searchResult.shows;
 
-      const movies = searchMode === "tv" ? [] : await searchMovies(queryText);
-      const shows = searchMode === "movie" ? [] : await searchShows(queryText);
+        const movieResults = movies.map((movie) => ({
+          id: movie.id,
+          title: movie.title,
+          poster_url: getTmdbPosterUrl(movie.poster_path, "w500"),
+          genres: (movie.genres || []).map((genreId: number) => String(genreId)),
+          release_date: movie.release_date || "",
+          overview: movie.overview || "",
+          runtime: movie.runtime || 0,
+          rating: typeof movie.vote_average === "number" ? movie.vote_average : 0,
+          type: "movie" as const,
+          platforms: [],
+          director: null,
+          created_at: new Date().toISOString(),
+        }));
 
-      const movieResults = movies.map((movie) => ({
-        id: movie.id,
-        title: movie.title,
-        poster_url: getTmdbPosterUrl(movie.poster_path, "w500"),
-        genres: (movie.genres || []).map((genreId: number) => String(genreId)),
-        release_date: movie.release_date || "",
-        overview: movie.overview || "",
-        runtime: movie.runtime || 0,
-        rating: typeof movie.vote_average === "number" ? movie.vote_average : 0,
-        type: "movie" as const,
-        platforms: [],
-        director: null,
-        created_at: new Date().toISOString(),
-      }));
+        const showResults = shows.map((show) => ({
+          id: show.id,
+          title: show.name || show.title || "",
+          name: show.name,
+          poster_url: show.poster_url || null,
+          genres: show.genres || [],
+          release_date: show.release_date || show.premiered || "",
+          premiered: show.premiered || show.release_date || "",
+          overview: show.overview || "",
+          runtime: show.runtime || 0,
+          rating: typeof show.rating === "number" ? show.rating : 0,
+          type: "tv" as const,
+          status: show.status || null,
+          network: undefined,
+          source: show.source,
+          tmdb_id: show.tmdb_id,
+          tvmaze_id: show.tvmaze_id,
+          created_at: new Date().toISOString(),
+        }));
 
-      const showResults = shows.map((show) => ({
-        id: show.id,
-        title: show.name || show.title || "",
-        name: show.name,
-        poster_url: show.poster_url || null,
-        genres: show.genres || [],
-        release_date: show.release_date || show.premiered || "",
-        premiered: show.premiered || show.release_date || "",
-        overview: show.overview || "",
-        runtime: show.runtime || 0,
-        rating: typeof show.rating === "number" ? show.rating : 0,
-        type: "tv" as const,
-        status: show.status || null,
-        network: undefined,
-        source: show.source,
-        tmdb_id: show.tmdb_id,
-        tvmaze_id: show.tvmaze_id,
-        created_at: new Date().toISOString(),
-      }));
-
-      setSearchResults([...movieResults, ...showResults].slice(0, 20));
-      setShowSearchModal(true);
-    } catch (error) {
-      console.error("Search error:", error);
-    } finally {
-      setSearching(false);
-    }
+        if (requestId === searchRequestRef.current) {
+          setSearchResults([...movieResults, ...showResults].slice(0, 20));
+          setShowSearchModal(true);
+        }
+      } catch (error) {
+        console.error("Search error:", error);
+      } finally {
+        if (requestId === searchRequestRef.current) setSearching(false);
+      }
+    }, 300);
   };
 
   useEffect(() => {
@@ -864,7 +854,7 @@ export default function LogsPage() {
     try {
       setLogsLoading(true);
       const targetLimit = fullHistoryHydratedRef.current ? FULL_LOG_LIMIT : INITIAL_LOG_LIMIT;
-      const userLogs = await getUserMovieLogs(user.id, targetLimit, user);
+      const userLogs = await getUserMovieLogs(user.id, targetLimit, user, { fresh: true, summaryOnly: true });
       setLogs(normalizeLogs(userLogs));
     } catch (error) {
       console.error("Error refreshing logs:", error);
@@ -1221,7 +1211,7 @@ export default function LogsPage() {
             ) : (
               <div className="bg-[#050505] p-1 sm:p-2">
                 {visibleTicketLogs.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3.5 md:grid-cols-3 md:gap-4 xl:grid-cols-4">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-3.5 lg:grid-cols-4 lg:gap-4">
                     {visibleTicketLogs.map((log) => (
                       <TicketLogCard
                         key={log.id}

@@ -1,9 +1,11 @@
 import type { MetadataRoute } from "next";
+import { unstable_cache } from "next/cache";
 import { getFirebaseAdminDatabase } from "@/lib/firebase-admin";
 import { BASE_URL, canonical } from "@/lib/seo";
-import { getMovieDetails } from "@/lib/tmdb";
-import { getShowDetails } from "@/lib/tvmaze";
-import { buildMoviePath, buildTvPath } from "@/lib/content-slugs";
+
+// Building the sitemap scans public content IDs without fetching every title from TMDB.
+// Regenerate a few times daily rather than on every crawler visit.
+export const revalidate = 21600;
 
 type SitemapEntry = MetadataRoute.Sitemap[number];
 
@@ -54,7 +56,7 @@ function addEntry(target: Map<string, SitemapEntry>, entry: SitemapEntry) {
   }
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+async function buildSitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const entries = new Map<string, SitemapEntry>();
 
@@ -70,6 +72,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
+    },
+    {
+      url: canonical("/games"),
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.7,
     },
     {
       url: canonical("/privacy"),
@@ -140,43 +148,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
-    const [movieDetails, tvDetails] = await Promise.all([
-      Promise.all(Array.from(movieIds).map(async (movieId) => getMovieDetails(movieId))),
-      Promise.all(Array.from(tvIds).map(async (showId) => getShowDetails(showId))),
-    ]);
-
-    movieDetails.forEach((movie) => {
-      if (!movie) return;
+    movieIds.forEach((movieId) => {
       addEntry(entries, {
-        url: canonical(
-          buildMoviePath({
-            id: movie.id,
-            title: movie.title,
-            director: movie.director || null,
-            release_date: movie.release_date || null,
-            language: movie.language || undefined,
-          })
-        ),
+        url: canonical(`/movie/${movieId}`),
         lastModified: now,
         changeFrequency: "weekly",
         priority: 0.8,
       });
     });
 
-    tvDetails.forEach((show) => {
-      if (!show) return;
+    tvIds.forEach((showId) => {
       addEntry(entries, {
-        url: canonical(
-          buildTvPath({
-            id: show.id,
-            title: show.title || show.name || "",
-            name: show.title || show.name || "",
-            premiered: show.premiered || show.release_date || undefined,
-            release_date: show.release_date || undefined,
-            language: show.language || undefined,
-            network: show.network || undefined,
-          })
-        ),
+        url: canonical(`/tv/${showId}`),
         lastModified: now,
         changeFrequency: "weekly",
         priority: 0.75,
@@ -187,4 +170,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   return Array.from(entries.values()).sort((a, b) => a.url.localeCompare(b.url));
+}
+
+const getCachedSitemap = unstable_cache(buildSitemap, ["public-sitemap-v2"], {
+  revalidate: 21600,
+});
+
+export default function sitemap(): Promise<MetadataRoute.Sitemap> {
+  return getCachedSitemap();
 }
