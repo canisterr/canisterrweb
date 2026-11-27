@@ -558,17 +558,20 @@ export default function SettingsImportPage() {
         {pendingMatches.length > 0 ? (
           <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#111111]">
             <div className="border-b border-white/10 px-4 py-4 sm:px-6">
-              <h2 className="text-base font-semibold text-[#f5f0de]">Check these movie matches</h2>
-              <p className="mt-1 text-xs text-white/50">Compare the poster and title with your CSV before importing a match.</p>
+              <h2 className="text-base font-semibold text-[#f5f0de]">Review titles we couldn&apos;t match</h2>
+              <p className="mt-1 text-xs text-white/50">Choose a film by its poster, or search another title.</p>
             </div>
-            <div className="space-y-5 p-4 sm:p-6">
+            <div className="divide-y divide-white/[0.08] px-4 sm:px-6">
               {pendingMatches.map((row) => (
-                <div key={row.id} className="border-b border-white/[0.08] pb-5 last:border-b-0 last:pb-0">
-                  <p className="text-sm font-semibold text-[#f5f0de]">
-                    {row.title}{row.year ? <span className="ml-2 text-xs font-medium text-white/45">{row.year}</span> : null}
-                  </p>
+                <div key={row.id} className="py-4 first:pt-4 last:pb-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <p className="text-sm font-semibold text-[#f5f0de]">
+                      {row.title}{row.year ? <span className="ml-2 text-xs font-medium text-white/45">{row.year}</span> : null}
+                    </p>
+                    <span className="text-[11px] text-white/40">Needs a match</span>
+                  </div>
                   {row.options.length ? (
-                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                       {row.options.map((movie) => {
                         const selected = row.selectedId === movie.id;
                         const posterUrl = getTmdbPosterUrl(movie.poster_path);
@@ -578,37 +581,37 @@ export default function SettingsImportPage() {
                             type="button"
                             aria-pressed={selected}
                             onClick={() => setPendingMatches((current) => current.map((item) => item.id === row.id ? { ...item, selectedId: selected ? null : movie.id } : item))}
-                            className={`overflow-hidden rounded-lg border text-left transition ${selected ? "border-[#ff7a1a] ring-1 ring-[#ff7a1a]" : "border-white/10 hover:border-white/35"}`}
+                            className={`flex min-w-0 items-center gap-2 rounded-lg border p-2 text-left transition ${selected ? "border-[#ff7a1a] bg-[#ff7a1a]/[0.08]" : "border-white/10 hover:border-white/25"}`}
                           >
-                            <div className="aspect-[2/3] bg-white/[0.04]">
+                            <div className="h-[72px] w-12 shrink-0 overflow-hidden rounded bg-white/[0.04]">
                               {posterUrl ? (
                                 <img src={posterUrl} alt={`Poster for ${movie.title}`} loading="lazy" className="h-full w-full object-cover" />
                               ) : (
-                                <div className="flex h-full items-center justify-center px-2 text-center text-xs text-white/35">Poster unavailable</div>
+                                <div className="flex h-full items-center justify-center px-1 text-center text-[9px] text-white/35">No poster</div>
                               )}
                             </div>
-                            <span className="block p-2">
-                              <span className="block truncate text-xs font-semibold text-[#f5f0de]">{movie.title}</span>
-                              <span className="mt-0.5 block text-[11px] text-white/45">{movie.release_date?.slice(0, 4) || "Year unknown"}</span>
-                              <span className={`mt-2 block text-[10px] font-bold uppercase tracking-wider ${selected ? "text-[#ff9b52]" : "text-white/35"}`}>{selected ? "Selected" : "Choose"}</span>
+                            <span className="min-w-0">
+                              <span className="block line-clamp-2 text-xs font-semibold leading-snug text-[#f5f0de]">{movie.title}</span>
+                              <span className="mt-1 block text-[11px] text-white/45">{movie.release_date?.slice(0, 4) || "Year unknown"}</span>
+                              <span className={`mt-1 block text-[10px] font-medium ${selected ? "text-[#ff9b52]" : "text-white/35"}`}>{selected ? "Selected" : "Choose film"}</span>
                             </span>
                           </button>
                         );
                       })}
                     </div>
                   ) : (
-                    <p className="mt-2 text-xs text-white/45">No poster results came back for this title, so it has been left out.</p>
+                    <p className="mt-2 text-xs text-white/45">No matches yet. Try a different title below.</p>
                   )}
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); void searchReviewCandidates(row.id); }}>
                     <input
                       value={row.searchText}
                       onChange={(event) => setPendingMatches((current) => current.map((item) => item.id === row.id ? { ...item, searchText: event.target.value } : item))}
-                      aria-label={`Search for a poster match for ${row.title}`}
-                      placeholder="Search another movie title"
-                      className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-[#f5f0de] outline-none placeholder:text-white/30 focus:border-[#ff7a1a]"
+                      aria-label={`Search for ${row.title}`}
+                      placeholder="Try another movie title"
+                      className="h-10 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-[#f5f0de] outline-none placeholder:text-white/35 focus:border-[#ff7a1a]"
                     />
-                    <button type="button" onClick={() => void searchReviewCandidates(row.id)} disabled={busy || !row.searchText.trim()} className="h-9 rounded-lg border border-white/15 px-4 text-xs font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/60 disabled:opacity-40">Search posters</button>
-                  </div>
+                    <button type="submit" disabled={busy || !row.searchText.trim()} className="h-10 rounded-lg border border-white/15 px-4 text-xs font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/60 hover:text-[#ffb36b] disabled:opacity-40">Search</button>
+                  </form>
                 </div>
               ))}
               <div className="flex flex-wrap items-center gap-3">
