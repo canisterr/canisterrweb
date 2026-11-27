@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "@/components/AppImage";
 import { usePathname } from "next/navigation";
 import type { User } from "@/types";
-import { ChevronRight, Clapperboard, Gamepad2, House, LibraryBig, Send, X } from "lucide-react";
+import { ChevronRight, Clapperboard, Gamepad2, House, LibraryBig, Send } from "lucide-react";
 
 interface SidebarProps {
   user: User | null;
@@ -75,14 +75,6 @@ export default function Sidebar({
             <ChevronRight className={`h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 ${isBrutalist ? "text-white/35" : "text-slate-400"}`} />
           </Link>
         ) : <span className={`flex-1 text-sm font-semibold ${isBrutalist ? "text-[#f5f0de]" : "text-slate-900"}`}>Menu</span>}
-        <button
-          type="button"
-          onClick={onCloseMobile}
-          aria-label="Close menu"
-          className={`ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition lg:hidden ${isBrutalist ? "text-white/55 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`}
-        >
-          <X className="h-5 w-5" strokeWidth={1.8} />
-        </button>
       </div>
 
       {/* Navigation */}

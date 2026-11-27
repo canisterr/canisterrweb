@@ -91,7 +91,7 @@ export default function SettingsPrivacyPage() {
           </select>
         </SettingLine>
 
-        <SettingLine title="Activity visibility" description="Who can see the activity style surfaces on your profile.">
+        <SettingLine title="Activity visibility" description="Who can see your activity and individual logs. Summary profile stats remain visible to people who can view your profile.">
           <select
             className={selectClass}
             value={settings.privacy.activityVisibility}

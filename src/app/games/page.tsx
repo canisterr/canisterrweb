@@ -169,13 +169,14 @@ function GameDialog({ puzzle, onClose, onRunUpdate, onStreakUpdate, standalone =
   );
 }
 
-type GeneratedGrid = { id: string; category: string; difficulty: string; rows: string[]; rowProfiles?: Array<string | null>; columns: string[]; uniqueAnswers: boolean; mode: "matrix" | "clue-cells"; cellClues?: Array<{ actor: string; actorProfilePath: string | null; genre: string }>; maxGuesses: number };
+type GeneratedGrid = { id: string; category: string; difficulty: string; rows: string[]; rowProfiles?: Array<string | null>; rowActorIds?: Array<number | null>; columns: string[]; uniqueAnswers: boolean; mode: "matrix" | "clue-cells"; cellClues?: Array<{ actor: string; actorId?: number; actorProfilePath: string | null; genre: string }>; maxGuesses: number };
 type GridResult = { correct: boolean; answer: { title: string; posterPath: string | null; tmdbId: number; mediaType: "movie" | "tv" } };
 
 function GridDialog({ category, onClose, onStreakUpdate, standalone = false, streak = 0 }: { category: GameCategoryId; onClose: () => void; onStreakUpdate?: (value: number) => void; standalone?: boolean; streak?: number }) {
   const difficulty = "medium";
   const [grid, setGrid] = useState<GeneratedGrid | null>(null);
   const [guesses, setGuesses] = useState<string[]>(Array(9).fill(""));
+  const [guessIds, setGuessIds] = useState<Array<number | null>>(Array(9).fill(null));
   const [results, setResults] = useState<GridResult[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -187,6 +188,7 @@ function GridDialog({ category, onClose, onStreakUpdate, standalone = false, str
     setGrid(null);
     setResults(null);
     setGuesses(Array(9).fill(""));
+    setGuessIds(Array(9).fill(null));
     try {
       const response = await fetch(`/api/games/grid?category=${encodeURIComponent(category)}&difficulty=${nextDifficulty}`, { cache: "no-store" });
       const payload = await response.json();
@@ -208,8 +210,8 @@ function GridDialog({ category, onClose, onStreakUpdate, standalone = false, str
 
   async function checkGrid(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!grid || guesses.some((guess) => !guess.trim())) {
-      setError("Add one title to each square before checking.");
+    if (!grid || guesses.some((guess) => !guess.trim()) || guessIds.some((id) => id === null)) {
+      setError("Choose a movie from the search results in each square.");
       return;
     }
     setBusy(true);
@@ -218,7 +220,7 @@ function GridDialog({ category, onClose, onStreakUpdate, standalone = false, str
       const token = await auth.currentUser?.getIdToken();
       const response = await fetch("/api/games/grid", {
         method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ gridId: grid.id, guesses, sessionId: getGuestId() }),
+        body: JSON.stringify({ gridId: grid.id, movieIds: guessIds, sessionId: getGuestId() }),
       });
       const payload = await response.json() as { results?: GridResult[]; streak?: number; error?: string };
       if (!response.ok || !payload.results) throw new Error(payload.error || "Could not check the grid.");
@@ -260,7 +262,7 @@ function GridDialog({ category, onClose, onStreakUpdate, standalone = false, str
                 <div className="relative mx-auto mt-3 aspect-[2/3] w-16 overflow-hidden rounded-sm bg-black/40 sm:w-[4.5rem]">{posterUrl(result.answer.posterPath) && <Image src={posterUrl(result.answer.posterPath)!} alt={`${result.answer.title} poster`} fill sizes="72px" className="object-cover" />}</div>
                 <p className="mt-2 line-clamp-2 text-center text-xs font-semibold leading-tight sm:text-sm">{result.answer.title}</p>
                 {result.correct && <Check className="mx-auto mt-2 h-4 w-4 text-emerald-400" />}
-              </> : <div className="games-grid-search"><Search aria-hidden="true" /><TmdbSearchInput label={`${clue.actor} and ${clue.genre} movie`} kind="title" value={guesses[index]} onChange={(value) => setGuesses((previous) => previous.map((entry, slot) => slot === index ? value : entry))} placeholder="Search a movie" inputClassName="h-10 pl-8 pr-2 text-xs sm:text-sm" showSelectedPoster /></div>}
+              </> : <div className="games-grid-search"><Search aria-hidden="true" /><TmdbSearchInput label={`${clue.actor} and ${clue.genre} movie`} kind="title" value={guesses[index]} onChange={(value) => { setGuesses((previous) => previous.map((entry, slot) => slot === index ? value : entry)); setGuessIds((previous) => previous.map((entry, slot) => slot === index ? null : entry)); }} onSelect={(item) => { if (item.type === "movie") setGuessIds((previous) => previous.map((entry, slot) => slot === index ? item.id : entry)); }} placeholder="Search a movie" inputClassName="h-10 pl-8 pr-2 text-xs sm:text-sm" showSelectedPoster /></div>}
             </div>;
           })}
         </div> : <>
@@ -275,12 +277,12 @@ function GridDialog({ category, onClose, onStreakUpdate, standalone = false, str
                 <div className="relative mx-auto aspect-[2/3] w-16 overflow-hidden rounded-sm bg-black/40 sm:w-[4.5rem]">{posterUrl(result.answer.posterPath) && <Image src={posterUrl(result.answer.posterPath)!} alt={`${result.answer.title} poster`} fill sizes="72px" className="object-cover" />}</div>
                 <p className="mt-2 line-clamp-2 text-center text-xs font-semibold leading-tight sm:text-sm">{result.answer.title}</p>
                 {result.correct && <Check className="mx-auto mt-1 h-3.5 w-3.5 text-emerald-400" />}
-              </> : <div className="games-grid-search"><Search aria-hidden="true" /><TmdbSearchInput label={`${actor} and ${column} movie`} kind="title" value={guesses[index]} onChange={(value) => setGuesses((previous) => previous.map((entry, slot) => slot === index ? value : entry))} placeholder="Search a movie" inputClassName="h-10 pl-8 pr-2 text-xs sm:text-sm" showSelectedPoster /></div>}
+              </> : <div className="games-grid-search"><Search aria-hidden="true" /><TmdbSearchInput label={`${actor} and ${column} movie`} kind="title" value={guesses[index]} onChange={(value) => { setGuesses((previous) => previous.map((entry, slot) => slot === index ? value : entry)); setGuessIds((previous) => previous.map((entry, slot) => slot === index ? null : entry)); }} onSelect={(item) => { if (item.type === "movie") setGuessIds((previous) => previous.map((entry, slot) => slot === index ? item.id : entry)); }} placeholder="Search a movie" inputClassName="h-10 pl-8 pr-2 text-xs sm:text-sm" showSelectedPoster /></div>}
             </div>;
           })}</div>
         </div>)}
         </>}
-        {results ? <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-white/65">{results.filter((result) => result.correct).length} / 9 correct</p><button type="button" onClick={() => void startGrid()} disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-[#ff7a1a] px-4 py-2.5 text-sm font-bold text-black hover:bg-[#ff8d35] disabled:opacity-50"><RotateCcw className="h-4 w-4" />New grid</button></div> : <button type="submit" disabled={busy || !guesses.every((guess) => guess.trim())} className="games-grid-submit mt-5 w-full rounded-xl px-4 py-3 font-bold transition disabled:cursor-not-allowed">{busy ? "Checking…" : "Check answers"}</button>}
+        {results ? <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-white/65">{results.filter((result) => result.correct).length} / 9 correct</p><button type="button" onClick={() => void startGrid()} disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-[#ff7a1a] px-4 py-2.5 text-sm font-bold text-black hover:bg-[#ff8d35] disabled:opacity-50"><RotateCcw className="h-4 w-4" />New grid</button></div> : <button type="submit" disabled={busy || guessIds.some((id) => id === null)} className="games-grid-submit mt-5 w-full rounded-xl px-4 py-3 font-bold transition disabled:cursor-not-allowed">{busy ? "Checking…" : "Check answers"}</button>}
       </form>}
       {error && <p role="alert" className="mt-4 text-sm text-[#ffad74]">{error}</p>}
     </section>

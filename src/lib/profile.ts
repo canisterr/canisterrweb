@@ -463,6 +463,27 @@ function getDetailedStatsSource(userId: string, fresh = false): Promise<Detailed
   return promise;
 }
 
+async function mapWithConcurrency<T>(items: T[], concurrency: number, mapper: (item: T) => Promise<void>) {
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex++];
+      await mapper(item);
+    }
+  }));
+}
+
+function needsStatsMetadata(content: Content | null): boolean {
+  if (!content) return true;
+  const details = content as Content & {
+    cast_details?: Array<{ name?: string | null }>;
+    crew_details?: Array<{ name?: string | null; job?: string | null }>;
+  };
+  const hasActors = Boolean(content.actors?.length || details.cast_details?.some((person) => person.name?.trim()));
+  const hasDirector = Boolean(content.director?.trim() || details.crew_details?.some((person) => person.job === "Director" && person.name?.trim()));
+  return !content.genres?.length || !hasActors || !hasDirector || !content.language || !(Number(content.runtime) > 0);
+}
+
 export async function getDetailedUserStats(
   userId: string,
   options: { startDate?: string; endDate?: string; fresh?: boolean } = {}
@@ -529,18 +550,43 @@ export async function getDetailedUserStats(
     let lowestRatedScore: number | null = null;
 
     const contentByKey = new Map<string, Content | null>();
-    const contentEntries = watchedLogs.map((log) => {
+    const logsByKey = new Map<string, MovieLog>();
+    watchedLogs.forEach((log) => {
       const key = `${log.content_type}-${log.content_id}`;
+      if (!logsByKey.has(key)) logsByKey.set(key, log);
       if (!contentByKey.has(key)) {
-        const cacheKey = log.content_type === "tv"
-          ? `tv:show-details:v1:${log.content_id}`
-          : `tmdb:movie-details:v1:${log.content_id}`;
-        contentByKey.set(key, sharedDetails
-          ? sharedDetails[`${log.content_type}_${log.content_id}`] || null
-          : readBrowserCacheEntry<Content>(cacheKey)?.value ?? null);
+        const cachedDetailsKey = log.content_type === "tv"
+          ? `tv:show-details:v2:${log.content_id}`
+          : `tmdb:movie-details:v2:${log.content_id}`;
+        const stored = sharedDetails?.[`${log.content_type}_${log.content_id}`] || null;
+        const cached = readBrowserCacheEntry<Content>(cachedDetailsKey)?.value ?? null;
+        contentByKey.set(key, stored || cached);
       }
-      return { log, content: contentByKey.get(key) ?? null };
     });
+
+    // Other people’s watched_movies_meta is private, so their public profile
+    // stats must enrich missing title data from the existing public TMDB/TV cache.
+    // Details helpers persist results in the browser and deduplicate in-flight calls.
+    const keysNeedingMetadata = Array.from(contentByKey.entries())
+      .filter(([, content]) => needsStatsMetadata(content))
+      .map(([key]) => key);
+    await mapWithConcurrency(keysNeedingMetadata, 4, async (key) => {
+      const log = logsByKey.get(key);
+      if (!log) return;
+      try {
+        const details = log.content_type === "tv"
+          ? await getShowDetails(log.content_id)
+          : await getMovieDetails(log.content_id);
+        if (details) contentByKey.set(key, details as unknown as Content);
+      } catch {
+        // Counts and ratings still render when public catalog metadata is unavailable.
+      }
+    });
+
+    const contentEntries = watchedLogs.map((log) => ({
+      log,
+      content: contentByKey.get(`${log.content_type}-${log.content_id}`) ?? null,
+    }));
 
     for (const { log, content } of contentEntries) {
       const key = `${log.content_type}-${log.content_id}`;

@@ -13,7 +13,7 @@ import DOMPurify from 'dompurify';
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { get, ref, set } from "firebase/database";
-import { ArrowLeft, Ban, Bell, Filter, Loader2, MoreVertical, Plus, Share2, Upload, X } from "lucide-react";
+import { ArrowLeft, Ban, Bell, Filter, Loader2, MoreVertical, Plus, Search, Share2, Upload, X } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import StatsInsights from "@/components/StatsInsights";
@@ -219,6 +219,7 @@ function ProfilePageInner() {
   const [profileUserSettings, setProfileUserSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
+  const [statsResolvedUserId, setStatsResolvedUserId] = useState<string | null>(null);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [recentMoodGenres, setRecentMoodGenres] = useState<string[]>([]);
@@ -681,12 +682,25 @@ function ProfilePageInner() {
     !!profileUser && (isOwnProfile || canViewListSurface(profileUserSettings, false, isFollowingProfile));
   const canAccessActivity =
     !!profileUser && (isOwnProfile || canViewActivitySurface(profileUserSettings, false, isFollowingProfile));
+  // Aggregate profile stats are visible to people who can view the profile;
+  // the activity privacy setting continues to control the individual log feed.
+  const canAccessStats =
+    !!profileUser && (isOwnProfile || (canAccessProfile && !hasBlockRelationship));
+  const hasStatsToShow = Boolean(stats && stats.totalLogged > 0);
+  const statsResolvedForProfile = statsResolvedUserId === profileUser?.id;
+  const canShowStatsTab = canAccessStats && (!statsResolvedForProfile || hasStatsToShow);
   const canShowSharedMoviesLink =
     !!profileUser &&
     !isOwnProfile &&
     !hasBlockRelationship &&
     isFollowingProfile &&
     canShowSharedMovies(profileUserSettings, false, true);
+
+  useEffect(() => {
+    setStats(null);
+    setStatsResolvedUserId(null);
+    setActiveTab("stats");
+  }, [profileUser?.id]);
   useEffect(() => {
     if (!profileUser || !canAccessActivity) {
       setRecentMoodGenres([]);
@@ -699,7 +713,6 @@ function ProfilePageInner() {
       try {
         const recentLogs = await getUserMovieLogs(profileUser.id, 2, profileUser, {
           contentType: "movie",
-          summaryOnly: true,
         });
         if (cancelled) return;
         setRecentMoodGenres(getCurrentMoodGenres(recentLogs));
@@ -755,7 +768,7 @@ function ProfilePageInner() {
   ]);
 
   useEffect(() => {
-    if (!profileUser || activeProfileTab !== "stats" || !canAccessActivity || invalidDateRange) return;
+    if (!profileUser || activeProfileTab !== "stats" || !canAccessStats || invalidDateRange) return;
 
     let cancelled = false;
 
@@ -780,6 +793,7 @@ function ProfilePageInner() {
 
         if (cancelled) return;
         setStats(statsObj);
+        setStatsResolvedUserId(profileUser.id);
       } catch (error) {
         console.error("[PROFILE] Error loading stats:", error);
       } finally {
@@ -794,7 +808,7 @@ function ProfilePageInner() {
     return () => {
       cancelled = true;
     };
-  }, [activeProfileTab, canAccessActivity, dateRange, invalidDateRange, profileUser]);
+  }, [activeProfileTab, canAccessStats, dateRange, invalidDateRange, profileUser]);
 
   useEffect(() => {
     if (!profileUser || activeProfileTab !== "logs" || !canAccessActivity || invalidDateRange) return;
@@ -1609,20 +1623,20 @@ function ProfilePageInner() {
   }
 
   const dateFilterControl = <div className="relative flex shrink-0 items-center gap-2">
-    {dateRangePreset !== "all" && <span className="hidden text-xs font-medium text-white/50 sm:inline">{dateRangePreset === "month" ? "This month" : dateRangePreset === "year" ? "This year" : customStartDate || customEndDate ? `${customStartDate || "Start"} – ${customEndDate || "Today"}` : "Custom range"}</span>}
-    <button type="button" onClick={() => setDateFilterOpen((open) => !open)} aria-label="Filter watch dates" aria-expanded={dateFilterOpen} className={`flex h-10 w-10 items-center justify-center rounded-full border transition ${dateRangePreset !== "all" ? "border-[#ff7a1a] bg-[#ff7a1a] text-black" : "border-white/15 bg-white/[0.04] text-[#f5f0de] hover:border-white/30"}`}><Filter className="h-4 w-4" /></button>
-    {dateFilterOpen && <div className="absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-white/15 bg-[#171717] p-3 shadow-[0_18px_45px_rgba(0,0,0,0.5)]">
-      <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-[#f5f0de]">Watch dates</h3><button type="button" onClick={() => setDateFilterOpen(false)} aria-label="Close date filter" className="rounded-full p-1 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button></div>
+    {dateRangePreset !== "all" && <span className="hidden text-xs font-medium text-[#0e0d0b]/60 sm:inline">{dateRangePreset === "month" ? "This month" : dateRangePreset === "year" ? "This year" : customStartDate || customEndDate ? `${customStartDate || "Start"} – ${customEndDate || "Today"}` : "Custom range"}</span>}
+    <button type="button" onClick={() => setDateFilterOpen((open) => !open)} aria-label="Filter watch dates" aria-expanded={dateFilterOpen} className={`flex h-10 w-10 items-center justify-center rounded-full border transition ${dateRangePreset !== "all" ? "border-[#c45b2a] bg-[#c45b2a] text-black" : "border-[#0e0d0b]/20 bg-white/50 text-[#0e0d0b] hover:border-[#c45b2a]/50"}`}><Filter className="h-4 w-4" /></button>
+    {dateFilterOpen && <div className="absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-[#e5dac6] bg-[#f5f0de] p-3 text-[#0e0d0b] shadow-[0_18px_45px_rgba(0,0,0,0.3)]">
+      <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-bold text-[#0e0d0b]">Watch dates</h3><button type="button" onClick={() => setDateFilterOpen(false)} aria-label="Close date filter" className="rounded-full p-1 text-[#0e0d0b]/55 hover:bg-[#0e0d0b]/10 hover:text-black"><X className="h-4 w-4" /></button></div>
       <div className="space-y-1">
         {([ ["all", "All time"], ["month", "This month"], ["year", "This year"], ["custom", "Custom range"] ] as const).map(([value, label]) => (
-          <button key={value} type="button" onClick={() => { setDateRangePreset(value); if (value !== "custom") setDateFilterOpen(false); }} aria-pressed={dateRangePreset === value} className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${dateRangePreset === value ? "bg-[#ff7a1a] font-bold text-black" : "text-[#f5f0de]/75 hover:bg-white/5 hover:text-[#f5f0de]"}`}>{label}</button>
+          <button key={value} type="button" onClick={() => { setDateRangePreset(value); if (value !== "custom") setDateFilterOpen(false); }} aria-pressed={dateRangePreset === value} className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${dateRangePreset === value ? "bg-[#c45b2a] font-bold text-black" : "text-[#0e0d0b]/75 hover:bg-[#0e0d0b]/5 hover:text-black"}`}>{label}</button>
         ))}
       </div>
-      {dateRangePreset === "custom" && <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
-        <label className="min-w-0 text-xs font-medium text-white/60">From<input type="date" value={customStartDate} max={customEndDate || undefined} onChange={(event) => setCustomStartDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-white/15 bg-[#111111] px-2 py-2 text-xs text-[#f5f0de] outline-none [color-scheme:dark] focus:border-[#ff7a1a]" /></label>
-        <label className="min-w-0 text-xs font-medium text-white/60">To<input type="date" value={customEndDate} min={customStartDate || undefined} onChange={(event) => setCustomEndDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-white/15 bg-[#111111] px-2 py-2 text-xs text-[#f5f0de] outline-none [color-scheme:dark] focus:border-[#ff7a1a]" /></label>
+      {dateRangePreset === "custom" && <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[#0e0d0b]/10 pt-3">
+        <label className="min-w-0 text-xs font-medium text-[#0e0d0b]/65">From<input type="date" value={customStartDate} max={customEndDate || undefined} onChange={(event) => setCustomStartDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-[#0e0d0b]/15 bg-white px-2 py-2 text-xs text-[#0e0d0b] outline-none [color-scheme:light] focus:border-[#c45b2a]" /></label>
+        <label className="min-w-0 text-xs font-medium text-[#0e0d0b]/65">To<input type="date" value={customEndDate} min={customStartDate || undefined} onChange={(event) => setCustomEndDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-[#0e0d0b]/15 bg-white px-2 py-2 text-xs text-[#0e0d0b] outline-none [color-scheme:light] focus:border-[#c45b2a]" /></label>
       </div>}
-      {invalidDateRange && <p className="mt-2 text-xs text-[#ff9b52]">The end date must be on or after the start date.</p>}
+      {invalidDateRange && <p className="mt-2 text-xs text-rose-800">The end date must be on or after the start date.</p>}
     </div>}
   </div>;
 
@@ -1651,7 +1665,7 @@ function ProfilePageInner() {
             Back to Home
           </button>
           <div ref={profileActionsMenuRef} className="relative ml-auto flex items-center gap-2">
-            <div className="relative">
+            {!isOwnProfile && <div className="relative">
               <button
                 type="button"
                 onClick={() => {
@@ -1720,7 +1734,7 @@ function ProfilePageInner() {
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
 
             <div className="relative">
               <button
@@ -1812,17 +1826,16 @@ function ProfilePageInner() {
               @{DOMPurify.sanitize(visibleUsername)}
             </p>
 
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-white/55 sm:text-base">
+            <div className="mx-auto mt-2 flex w-full flex-wrap items-center justify-center gap-x-5 text-center text-sm sm:text-base">
               <button
                 onClick={() => {
                   setFollowModalType("followers");
                   setFollowSearch("");
                   setIsFollowModalOpen(true);
                 }}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 font-semibold text-white/70 transition hover:border-[#ff7a1a]/30 hover:bg-[#ff7a1a]/10 hover:text-[#f5f0de]"
+                className="inline-flex items-baseline gap-1.5 px-1 py-1 font-medium text-white/60 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff7a1a]"
               >
-                <span className="h-2 w-2 rounded-full bg-[#ff7a1a]" />
-                <span className="font-black text-[#ffb36b]">{formatCompactCount(followerCount)}</span>
+                <span className="font-bold tabular-nums text-[#f5f0de]">{formatCompactCount(followerCount)}</span>
                 <span>followers</span>
               </button>
               <button
@@ -1831,10 +1844,9 @@ function ProfilePageInner() {
                   setFollowSearch("");
                   setIsFollowModalOpen(true);
                 }}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 font-semibold text-white/70 transition hover:border-[#ff7a1a]/30 hover:bg-[#ff7a1a]/10 hover:text-[#f5f0de]"
+                className="inline-flex items-baseline gap-1.5 px-1 py-1 font-medium text-white/60 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff7a1a]"
               >
-                <span className="h-2 w-2 rounded-full bg-[#ffb36b]" />
-                <span className="font-black text-[#ffb36b]">{formatCompactCount(followingCount)}</span>
+                <span className="font-bold tabular-nums text-[#f5f0de]">{formatCompactCount(followingCount)}</span>
                 <span>following</span>
               </button>
             </div>
@@ -1887,13 +1899,13 @@ function ProfilePageInner() {
                   >
                     Edit Profile
                   </Link>
-                  <button
+                  {hasStatsToShow && <button
                     type="button"
                     onClick={handleOpenCinemaCard}
                     className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-[#ff7a1a]/35 bg-[#ff7a1a]/10 px-2 py-2 text-[11px] font-black text-[#ffd7b0] transition hover:bg-[#ff7a1a]/16 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
                   >
                     Cinema Card
-                  </button>
+                  </button>}
                   <Link
                     href="/passport"
                     className="inline-flex w-full min-w-0 items-center justify-center rounded-full border border-[#ff7a1a]/35 bg-[#ff7a1a]/10 px-2 py-2 text-[11px] font-black text-[#ffd7b0] transition hover:bg-[#ff7a1a]/16 sm:w-auto sm:px-5 sm:py-2.5 sm:text-sm"
@@ -1903,7 +1915,7 @@ function ProfilePageInner() {
                 </>
               ) : (
                 <>
-                  {canAccessProfile && !hasBlockRelationship && (
+                  {canAccessProfile && !hasBlockRelationship && hasStatsToShow && (
                     <button
                       type="button"
                       onClick={handleOpenCinemaCard}
@@ -2085,7 +2097,7 @@ function ProfilePageInner() {
                 duration: 0.2,
               }}
             >
-              {canAccessActivity && (
+              {canShowStatsTab && (
                 <button
                   data-id="stats"
                   type="button"
@@ -2126,34 +2138,34 @@ function ProfilePageInner() {
         </section>
 
         {isFollowModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-20 backdrop-blur-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:pb-6">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-20 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:pb-6">
             <button
               type="button"
               className="absolute inset-0 cursor-default"
               onClick={() => setIsFollowModalOpen(false)}
               aria-label="Close people list"
             />
-            <div className="relative w-full max-w-3xl rounded-[2rem] border border-white/10 bg-[#0d0d0d] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+            <div className="relative w-full max-w-3xl border-y border-white/10 bg-[#101010] text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] sm:border-x sm:border-x-white/10">
               <div className="relative p-4 sm:p-6">
                 <div className="mb-3 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setIsFollowModalOpen(false)}
                     aria-label="Close people list"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[#f5f0de] transition hover:bg-white/10"
+                    className="inline-flex h-9 w-9 items-center justify-center text-white/60 transition hover:text-white"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
 
-                <div className="mb-5 grid grid-cols-2 gap-2 rounded-[1.4rem] border border-white/10 bg-black/20 p-1.5">
+                <div className="mb-5 grid grid-cols-2 border-b border-white/10">
                   <button
                     type="button"
                     onClick={() => setFollowModalType("followers")}
-                    className={`flex items-center justify-center rounded-lg border px-4 py-3 text-center transition ${
+                    className={`flex items-center justify-center border-b-2 px-4 py-3 text-center transition ${
                       followModalType === "followers"
-                        ? "border-[#ff7a1a]/40 bg-[#ff7a1a] text-black shadow-[0_0_0_1px_rgba(255,122,26,0.18)]"
-                        : "border-white/10 bg-white/[0.04] text-[#f5f0de] hover:bg-white/[0.07]"
+                        ? "border-[#ff7a1a] text-white"
+                        : "border-transparent text-white/55 hover:text-white"
                     }`}
                   >
                     <span className="flex flex-col items-center gap-1">
@@ -2164,10 +2176,10 @@ function ProfilePageInner() {
                   <button
                     type="button"
                     onClick={() => setFollowModalType("following")}
-                    className={`flex items-center justify-center rounded-lg border px-4 py-3 text-center transition ${
+                    className={`flex items-center justify-center border-b-2 px-4 py-3 text-center transition ${
                       followModalType === "following"
-                        ? "border-[#ff7a1a]/40 bg-[#ff7a1a] text-black shadow-[0_0_0_1px_rgba(255,122,26,0.18)]"
-                        : "border-white/10 bg-white/[0.04] text-[#f5f0de] hover:bg-white/[0.07]"
+                        ? "border-[#ff7a1a] text-white"
+                        : "border-transparent text-white/55 hover:text-white"
                     }`}
                   >
                     <span className="flex flex-col items-center gap-1">
@@ -2178,21 +2190,29 @@ function ProfilePageInner() {
                 </div>
 
                 <div className="mb-5">
-                  <input
-                    value={followSearch}
-                    onChange={(e) => setFollowSearch(e.target.value)}
-                    placeholder={`Search ${followModalType}...`}
-                    className="w-full rounded-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-[#f5f0de] outline-none placeholder:text-white/35 transition focus:border-[#ff7a1a]/50 focus:bg-white/[0.06]"
-                  />
+                  <div className="flex items-center gap-3 rounded-lg bg-[#262626] px-3.5 text-white/55 transition focus-within:ring-1 focus-within:ring-white/25">
+                    <Search aria-hidden="true" className="size-4 shrink-0" />
+                    <input
+                      value={followSearch}
+                      onChange={(e) => setFollowSearch(e.target.value)}
+                      placeholder={`Search ${followModalType}`}
+                      className="h-10 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/45"
+                    />
+                    {followSearch && (
+                      <button type="button" onClick={() => setFollowSearch("")} aria-label="Clear search" className="shrink-0 p-1 text-xs font-semibold text-white/65 hover:text-white">
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="divide-y divide-white/10">
                   {followUsersLoading ? (
-                    <div className="rounded-[1.4rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm text-white/55">
+                    <div className="py-10 text-center text-sm text-white/55">
                       Loading people...
                     </div>
                   ) : shownUsers.length === 0 ? (
-                    <div className="rounded-[1.4rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm text-white/55">
+                    <div className="py-10 text-center text-sm text-white/55">
                       No users found.
                     </div>
                   ) : (
@@ -2220,28 +2240,28 @@ function ProfilePageInner() {
                       return (
                         <div
                           key={listedUser.id}
-                          className="group flex items-center justify-between rounded-[1.4rem] border border-white/10 bg-[#161616] px-4 py-4 transition hover:border-[#ff7a1a]/25 hover:bg-[#1d1d1d]"
+                          className="group flex items-center justify-between px-1 py-3.5 transition hover:bg-white/[0.04]"
                         >
                           <Link href={`/profile/${listedUser.username !== listedUser.id ? listedUser.username : listedUser.id}`} className="flex min-w-0 flex-1 items-center gap-3">
                             {listedUser.avatar_url ? (
                               <img loading="lazy"
                                 src={listedUser.avatar_url}
                                 alt={listedUser.name}
-                                className="h-12 w-12 rounded-full object-cover ring-1 ring-white/10 shadow-[0_0_0_4px_rgba(255,255,255,0.03)]"
+                                className="h-10 w-10 rounded-full object-cover"
                               />
                             ) : (
-                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#30241d] text-sm font-semibold text-[#f5f0de] ring-1 ring-white/10">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f0de] text-sm font-semibold text-[#11100e]">
                                 {getFollowListDisplayName(listedUser).charAt(0).toUpperCase()}
                               </div>
                             )}
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <p className="truncate text-sm font-semibold text-[#f5f0de] group-hover:text-[#ffb36b]">
+                                <p className="truncate text-sm font-semibold text-white group-hover:text-white">
                                   {getFollowListDisplayName(listedUser)}
                                 </p>
                               </div>
                               {getDisplayUserHandle(listedUser, currentUser) ? (
-                                <p className="truncate text-xs text-white/55">{getDisplayUserHandle(listedUser, currentUser)}</p>
+                                <p className="truncate text-xs text-white/50">{getDisplayUserHandle(listedUser, currentUser)}</p>
                               ) : null}
                             </div>
                           </Link>
@@ -2252,7 +2272,7 @@ function ProfilePageInner() {
                                 type="button"
                                 onClick={() => openFollowRemovalPrompt("following", listedUser)}
                                 disabled={followActionLoading === listedUser.id}
-                                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-[#f5f0de] transition hover:border-[#ff7a1a]/25 hover:bg-[#ff7a1a]/10 disabled:opacity-60"
+                                className="border border-white/20 px-3 py-1.5 text-xs font-semibold text-white transition hover:border-white/50 disabled:opacity-60"
                               >
                                 {followActionLoading === listedUser.id ? "Updating..." : "Following"}
                               </button>
@@ -2261,7 +2281,7 @@ function ProfilePageInner() {
                                 type="button"
                                 onClick={() => handleFollowBack(listedUser)}
                                 disabled={followActionLoading === listedUser.id}
-                                className="rounded-full bg-[#ff7a1a] px-3 py-1.5 text-xs font-bold text-black shadow-[0_8px_24px_rgba(255,122,26,0.22)] transition hover:bg-[#ff8d33]"
+                                className="bg-[#ff7a1a] px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-[#ff8b38]"
                               >
                                 {followActionLoading === listedUser.id ? "Sending..." : "Follow Back"}
                               </button>
@@ -2270,7 +2290,7 @@ function ProfilePageInner() {
                                 type="button"
                                 onClick={() => handleFollowBack(listedUser)}
                                 disabled={profileFollowActionLoading}
-                                className="rounded-full bg-[#ff7a1a] px-3 py-1.5 text-xs font-bold text-black shadow-[0_8px_24px_rgba(255,122,26,0.22)] transition hover:bg-[#ff8d33]"
+                                className="bg-[#ff7a1a] px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-[#ff8b38]"
                               >
                                 Follow
                               </button>
@@ -2283,19 +2303,19 @@ function ProfilePageInner() {
                                   onClick={() =>
                                     setOpenFollowMenuUserId((prev) => (prev === listedUser.id ? null : listedUser.id))
                                   }
-                                  className="rounded-lg p-1 text-white/55 hover:bg-white/5 hover:text-[#f5f0de]"
+                                  className="p-1 text-white/50 hover:text-white"
                                   aria-label="Open follower actions"
                                 >
                                   <MoreVertical className="h-4 w-4" />
                                 </button>
 
                                 {isMenuOpen && (
-                                  <div className="absolute right-0 top-8 z-20 min-w-[190px] rounded-2xl border border-white/10 bg-[#111111] p-1 shadow-lg">
+                                  <div className="absolute right-0 top-8 z-20 min-w-[190px] border border-white/10 bg-[#181818] p-1 text-white shadow-lg">
                                     <button
                                       type="button"
                                       onClick={() => openFollowRemovalPrompt("follower", listedUser)}
                                       disabled={followActionLoading === listedUser.id}
-                                      className="w-full rounded-xl px-3 py-2 text-left text-sm text-[#ffb36b] hover:bg-white/5 disabled:opacity-60"
+                                      className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/5 disabled:opacity-60"
                                     >
                                       {followActionLoading === listedUser.id ? "Updating..." : "Remove as follower"}
                                     </button>
@@ -2311,19 +2331,19 @@ function ProfilePageInner() {
                                   onClick={() =>
                                     setOpenFollowMenuUserId((prev) => (prev === listedUser.id ? null : listedUser.id))
                                   }
-                                  className="rounded-lg p-1 text-white/55 hover:bg-white/5 hover:text-[#f5f0de]"
+                                  className="p-1 text-white/50 hover:text-white"
                                   aria-label="Open follow actions"
                                 >
                                   <MoreVertical className="h-4 w-4" />
                                 </button>
 
                                 {isMenuOpen && (
-                                  <div className="absolute right-0 top-8 z-20 min-w-[170px] rounded-2xl border border-white/10 bg-[#111111] p-1 shadow-lg">
+                                  <div className="absolute right-0 top-8 z-20 min-w-[170px] border border-white/10 bg-[#181818] p-1 text-white shadow-lg">
                                     <button
                                       type="button"
                                       onClick={() => openFollowRemovalPrompt("following", listedUser)}
                                       disabled={followActionLoading === listedUser.id}
-                                      className="w-full rounded-xl px-3 py-2 text-left text-sm text-[#ffb36b] hover:bg-white/5 disabled:opacity-60"
+                                      className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/5 disabled:opacity-60"
                                     >
                                       {followActionLoading === listedUser.id ? "Updating..." : "Remove as following"}
                                     </button>
@@ -2349,15 +2369,15 @@ function ProfilePageInner() {
           loading={cinemaCardLoading}
           error={cinemaCardError}
         />
-        {activeProfileTab === "stats" && canAccessActivity && (
+        {activeProfileTab === "stats" && canShowStatsTab && (
           <div className="space-y-6" aria-busy={statsLoading}>
             {!stats ? (
               <div><div className="mb-5 flex items-center justify-between gap-3"><h2 className="text-xl font-black text-[#f5f0de]">Your screen story</h2>{dateFilterControl}</div><div className="rounded-xl border border-white/10 bg-black p-6 text-sm text-white/55 sm:rounded-2xl">Loading stats...</div></div>
             ) : (
               <StatsInsights
                 stats={stats}
-                onStatClick={handleStatDrillDown}
-                onTasteClick={handleTasteDrillDown}
+                onStatClick={canAccessActivity ? handleStatDrillDown : undefined}
+                onTasteClick={canAccessActivity ? handleTasteDrillDown : undefined}
                 filterAction={dateFilterControl}
               />
             )}

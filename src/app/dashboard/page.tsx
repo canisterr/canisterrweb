@@ -567,7 +567,7 @@ export default function DashboardPage() {
       <main className="mx-auto min-h-screen w-full max-w-[860px] bg-black px-1 pb-8 pt-2 text-[#f5f0de] sm:px-4 sm:pt-4">
         {/* Search Bar */}
         <div className="mb-7 sm:mb-8">
-          <div className="relative z-20 w-full">
+          <div className="relative z-30 w-full">
             <Search className="pointer-events-none absolute left-4 top-[23px] z-20 h-[18px] w-[18px] -translate-y-1/2 text-white/40" strokeWidth={2.25} />
             <input
               ref={searchInputRef}
@@ -797,7 +797,7 @@ export default function DashboardPage() {
                       onClick={() => setShowSearchModal(false)}
                       className="group flex items-center gap-3 border-b border-white/[0.07] px-1 py-3 transition-colors last:border-b-0 hover:bg-white/[0.035] sm:px-2"
                     >
-                        <div className="h-11 w-11 flex-shrink-0 overflow-hidden rounded-full border border-white/10 bg-[#1a1a1a]">
+                        <div className="h-11 w-11 flex-shrink-0 overflow-hidden rounded-full border border-[#e7ddc7] bg-[#f5f0de]">
                           {account.avatar_url ? (
                             <img loading="lazy"
                               src={account.avatar_url}
@@ -805,7 +805,7 @@ export default function DashboardPage() {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/55">
+                            <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-[#11100e]">
                               {account.name?.charAt(0)?.toUpperCase() || "U"}
                             </div>
                           )}

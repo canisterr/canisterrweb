@@ -5,6 +5,7 @@ import { getFirebaseAdminApp, getFirebaseAdminDatabase } from "@/lib/firebase-ad
 import { expandGameCategoryCatalogue } from "@/lib/games/category-catalogue";
 import { classifyGameTitle, GAME_CATEGORIES, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle } from "@/lib/games/types";
 import { recordGameStreak } from "@/lib/games/streak";
+import { fetchTmdb } from "@/lib/tmdb-transport";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,7 +17,31 @@ async function getViewerId(request: NextRequest): Promise<string | null> {
 }
 
 type CellAnswer = { key: string; title: string; aliases: string[]; posterPath: string | null; tmdbId: number; mediaType: "movie" | "tv" };
-type GridSecret = { id: string; category: GameCategoryId; difficulty: string; rows: string[]; rowProfiles?: Array<string | null>; columns: string[]; cells: CellAnswer[][]; uniqueAnswers: boolean; mode: "matrix" | "clue-cells"; cellClues?: Array<{ actor: string; actorProfilePath: string | null; genre: string }>; createdAt: number };
+type GridSecret = { id: string; category: GameCategoryId; difficulty: string; rows: string[]; rowProfiles?: Array<string | null>; rowActorIds?: Array<number | null>; columns: string[]; cells: CellAnswer[][]; uniqueAnswers: boolean; mode: "matrix" | "clue-cells"; cellClues?: Array<{ actor: string; actorId?: number; actorProfilePath: string | null; genre: string }>; createdAt: number };
+type GridMovie = { key: string; title: string; posterPath: string | null; tmdbId: number; mediaType: "movie"; genres: string[]; actors: Array<{ id: number; name: string }> };
+
+async function loadGridMovie(tmdbId: number): Promise<GridMovie | null> {
+  const response = await fetchTmdb(`movie/${tmdbId}`, { append_to_response: "credits,alternative_titles" });
+  if (!response.ok) return null;
+  const details = await response.json() as {
+    title?: string;
+    original_title?: string;
+    poster_path?: string | null;
+    genres?: Array<{ name?: string }>;
+    credits?: { cast?: Array<{ id?: number; name?: string }> };
+  };
+  const title = details.title?.trim();
+  if (!title) return null;
+  return {
+    key: `movie_${tmdbId}`,
+    title,
+    posterPath: typeof details.poster_path === "string" ? details.poster_path : null,
+    tmdbId,
+    mediaType: "movie",
+    genres: (details.genres || []).map((genre) => genre.name || "").filter(Boolean),
+    actors: (details.credits?.cast || []).filter((person) => Number.isSafeInteger(person.id) && person.name).map((person) => ({ id: Number(person.id), name: person.name! })),
+  };
+}
 
 function choose<T>(values: T[], amount: number): T[][] {
   const out: T[][] = [];
@@ -76,12 +101,12 @@ function createGrid(titles: GameTitle[], category: GameCategoryId, difficulty: "
     classifyGameTitle(title).includes(category) && Number(title.voteCount) >= 50 && Boolean(title.releaseDate) && title.releaseDate <= utcGameDate()
   );
   const genres = new Map<string, number>();
-  const actors = new Map<string, { count: number; popularity: number; profilePath: string | null }>();
+  const actors = new Map<string, { id: number; count: number; popularity: number; profilePath: string | null }>();
   for (const title of usable) {
     title.genres.forEach((genre) => genres.set(genre, (genres.get(genre) || 0) + 1));
     title.cast.forEach((person) => {
-      const previous = actors.get(person.name) || { count: 0, popularity: 0, profilePath: person.profilePath };
-      actors.set(person.name, { count: previous.count + 1, popularity: previous.popularity + person.popularity, profilePath: previous.profilePath || person.profilePath });
+      const previous = actors.get(person.name) || { id: person.id, count: 0, popularity: 0, profilePath: person.profilePath };
+      actors.set(person.name, { ...previous, count: previous.count + 1, popularity: previous.popularity + person.popularity, profilePath: previous.profilePath || person.profilePath });
     });
   }
   const popularityDirection = difficulty === "hard" ? 1 : -1;
@@ -97,7 +122,7 @@ function createGrid(titles: GameTitle[], category: GameCategoryId, difficulty: "
       if (candidates.some((items) => items.length === 0)) continue;
       const uniqueAssignment = solveDistinct(candidates);
       if (uniqueAssignment) {
-        return { rows: actorSet, rowProfiles: actorSet.map((name) => actors.get(name)?.profilePath || null), columns: genreSet, cells: candidates, uniqueAnswers: true, mode: "matrix" };
+        return { rows: actorSet, rowProfiles: actorSet.map((name) => actors.get(name)?.profilePath || null), rowActorIds: actorSet.map((name) => actors.get(name)?.id || null), columns: genreSet, cells: candidates, uniqueAnswers: true, mode: "matrix" };
       }
     }
   }
@@ -107,7 +132,7 @@ function createGrid(titles: GameTitle[], category: GameCategoryId, difficulty: "
     return {
       rows: [], columns: [], cells: shuffled.map((title) => [toAnswer(title)]), uniqueAnswers: true,
       mode: "clue-cells",
-      cellClues: shuffled.map((title) => ({ actor: title.cast[0].name, actorProfilePath: title.cast[0].profilePath || null, genre: title.genres[0] })),
+      cellClues: shuffled.map((title) => ({ actor: title.cast[0].name, actorId: title.cast[0].id, actorProfilePath: title.cast[0].profilePath || null, genre: title.genres[0] })),
     };
   }
   return null;
@@ -152,7 +177,7 @@ export async function GET(request: NextRequest) {
     const id = randomUUID().replace(/-/g, "");
     const secret: GridSecret = { ...grid, id, category: category as GameCategoryId, difficulty, createdAt: Date.now() };
     await getFirebaseAdminDatabase().ref(`games/grids/${id}`).set(secret);
-    return NextResponse.json({ id, category, difficulty, rows: grid.rows, rowProfiles: grid.rowProfiles, columns: grid.columns, uniqueAnswers: grid.uniqueAnswers, mode: grid.mode, cellClues: grid.cellClues, maxGuesses: 9 }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ id, category, difficulty, rows: grid.rows, rowProfiles: grid.rowProfiles, rowActorIds: grid.rowActorIds, columns: grid.columns, uniqueAnswers: grid.uniqueAnswers, mode: grid.mode, cellClues: grid.cellClues, maxGuesses: 9 }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Could not create games grid:", error);
     return NextResponse.json({ error: process.env.NODE_ENV === "development" && error instanceof Error ? error.message : "Could not start a grid. Try again in a moment." }, { status: 503 });
@@ -160,9 +185,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let body: { gridId?: unknown; guesses?: unknown; sessionId?: unknown };
+  let body: { gridId?: unknown; movieIds?: unknown; sessionId?: unknown };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
-  if (typeof body.gridId !== "string" || !/^[a-f0-9]{32}$/.test(body.gridId) || !Array.isArray(body.guesses) || body.guesses.length !== 9 || body.guesses.some((guess) => typeof guess !== "string" || guess.length > 100) || typeof body.sessionId !== "string" || !/^[a-zA-Z0-9_-]{12,64}$/.test(body.sessionId)) {
+  if (typeof body.gridId !== "string" || !/^[a-f0-9]{32}$/.test(body.gridId) || !Array.isArray(body.movieIds) || body.movieIds.length !== 9 || body.movieIds.some((id) => typeof id !== "number" || !Number.isSafeInteger(id) || id < 1) || typeof body.sessionId !== "string" || !/^[a-zA-Z0-9_-]{12,64}$/.test(body.sessionId)) {
     return NextResponse.json({ error: "Fill all nine squares before checking." }, { status: 400 });
   }
   try {
@@ -173,15 +198,22 @@ export async function POST(request: NextRequest) {
     if (!snapshot.exists()) return NextResponse.json({ error: "This grid expired. Start a new one." }, { status: 404 });
     const puzzle = snapshot.val() as GridSecret;
     if (Date.now() - puzzle.createdAt > 2 * 60 * 60 * 1000) return NextResponse.json({ error: "This grid expired. Start a new one." }, { status: 410 });
+    const chosenMovies = await Promise.all([...new Set(body.movieIds as number[])].map(async (tmdbId) => [tmdbId, await loadGridMovie(tmdbId).catch(() => null)] as const));
+    const moviesById = new Map(chosenMovies);
     const used = new Set<string>();
-    const results = (body.guesses as string[]).map((guess, index) => {
-      const match = puzzle.cells[index].find((answer) =>
-        answer.aliases.some((alias) => normalizeGameAnswer(alias) === normalizeGameAnswer(guess)) &&
-        (!puzzle.uniqueAnswers || !used.has(answer.key))
-      );
-      if (match && puzzle.uniqueAnswers) used.add(match.key);
-      const answer = match || puzzle.cells[index][0];
-      return { correct: Boolean(match), answer: { title: answer.title, posterPath: answer.posterPath, tmdbId: answer.tmdbId, mediaType: answer.mediaType } };
+    const results = (body.movieIds as number[]).map((tmdbId, index) => {
+      const movie = moviesById.get(tmdbId) || null;
+      const clue = puzzle.mode === "clue-cells" ? puzzle.cellClues?.[index] : null;
+      const actorId = clue?.actorId ?? puzzle.rowActorIds?.[Math.floor(index / 3)];
+      const actor = clue?.actor || puzzle.rows[Math.floor(index / 3)];
+      const genre = clue?.genre || puzzle.columns[index % 3];
+      const matchesClues = Boolean(movie && actor && genre &&
+        movie.actors.some((person) => (actorId ? person.id === actorId : normalizeGameAnswer(person.name) === normalizeGameAnswer(actor))) &&
+        movie.genres.some((name) => normalizeGameAnswer(name) === normalizeGameAnswer(genre)));
+      const correct = Boolean(matchesClues && (!puzzle.uniqueAnswers || !used.has(movie!.key)));
+      if (correct && movie) used.add(movie.key);
+      const answer = correct && movie ? movie : puzzle.cells[index][0];
+      return { correct, answer: { title: answer.title, posterPath: answer.posterPath, tmdbId: answer.tmdbId, mediaType: answer.mediaType } };
     });
     const streak = await recordGameStreak(db, ownerKey, "grid", utcGameDate()).catch((error) => {
       console.error("Could not update game streak:", error);

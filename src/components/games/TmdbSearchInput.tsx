@@ -16,6 +16,7 @@ export default function TmdbSearchInput({
   className = "",
   inputClassName = "",
   showSelectedPoster = false,
+  onSelect,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -25,6 +26,7 @@ export default function TmdbSearchInput({
   className?: string;
   inputClassName?: string;
   showSelectedPoster?: boolean;
+  onSelect?: (item: { id: number; type: "movie" | "person"; name: string }) => void;
 }) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -81,6 +83,7 @@ export default function TmdbSearchInput({
 
   function choose(item: SearchResult) {
     onChange(item.name);
+    onSelect?.({ id: item.id, type: item.type, name: item.name });
     setPicked(item);
     setOpen(false);
     setResults([]);
