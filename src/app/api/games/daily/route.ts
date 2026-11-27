@@ -229,6 +229,9 @@ export async function GET(request: NextRequest) {
       connection: activeGameStreak(savedStreaks.connection, date),
       grid: activeGameStreak(savedStreaks.grid, date),
     };
+    const played = {
+      grid: savedStreaks.grid?.lastPlayedDate === date,
+    };
     for (const category of GAME_CATEGORIES) {
       for (const kind of ["reveal", "connection"] as const) {
         const session = sessions[category.id]?.[kind];
@@ -242,7 +245,7 @@ export async function GET(request: NextRequest) {
         }
       }
     }
-    return NextResponse.json({ date, resetTimeZone: "UTC", games, sessions, streaks }, {
+    return NextResponse.json({ date, resetTimeZone: "UTC", games, sessions, streaks, played }, {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch {

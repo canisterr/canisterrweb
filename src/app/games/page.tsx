@@ -11,52 +11,12 @@ import { useCurrentUser } from "@/components/CurrentUserProvider";
 import TmdbSearchInput from "@/components/games/TmdbSearchInput";
 import PageLayout from "@/components/PageLayout";
 import { GAME_CATEGORIES, type GameCategoryId, type PublicDailyGame } from "@/lib/games/types";
+import { getGuestId, invalidateDailyGames, loadDailyGames, type DailyPayload, type SavedRun } from "@/lib/games/client";
 
-type DailyPayload = {
-  date: string;
-  resetTimeZone: string;
-  games: Record<string, { reveal: PublicDailyGame | null; connection: PublicDailyGame | null }>;
-  sessions?: Record<string, Record<string, SavedRun>>;
-  streaks: Record<"reveal" | "connection" | "grid", number>;
-};
-type SavedRun = { attempts: number; complete: boolean; won: boolean; score: number; answer?: string; clue?: string; answerTmdbId?: number; answerMediaType?: "movie" | "tv"; answerPosterPath?: string | null; answerProfilePath?: string | null };
 type AttemptResult = SavedRun & { nextClue?: string | null; cluePosterPath?: string | null; answerProfilePath?: string | null; streak?: number; error?: string };
 const CATEGORY_KEY = "canisterr.games.category.v2";
-const SESSION_KEY = "canisterr.games.guest.v1";
 const IMAGE_ROOT = "https://image.tmdb.org/t/p/w342";
 const PROFILE_IMAGE_ROOT = "https://image.tmdb.org/t/p/w185";
-const DAILY_CACHE_MS = 30_000;
-const dailyRequests = new Map<string, { promise: Promise<DailyPayload>; expiresAt: number }>();
-
-function loadDailyGames(identity: string, category: GameCategoryId, token?: string | null): Promise<DailyPayload> {
-  const cacheKey = `${identity}:${category}`;
-  const cached = dailyRequests.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.promise;
-  const promise = fetch(`/api/games/daily?category=${encodeURIComponent(category)}&sessionId=${encodeURIComponent(getGuestId())}`, {
-    cache: "no-store",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  }).then(async (response) => {
-    if (!response.ok) throw new Error("Could not load today’s games.");
-    return await response.json() as DailyPayload;
-  }).catch((error) => {
-    dailyRequests.delete(cacheKey);
-    throw error;
-  });
-  dailyRequests.set(cacheKey, { promise, expiresAt: Date.now() + DAILY_CACHE_MS });
-  return promise;
-}
-
-function getGuestId(): string {
-  try {
-    const previous = localStorage.getItem(SESSION_KEY);
-    if (previous) return previous;
-    const id = crypto.randomUUID().replace(/-/g, "");
-    localStorage.setItem(SESSION_KEY, id);
-    return id;
-  } catch {
-    return crypto.randomUUID().replace(/-/g, "");
-  }
-}
 
 function posterUrl(path: string | null | undefined) {
   return path ? `${IMAGE_ROOT}${path}` : null;
@@ -108,9 +68,8 @@ function GameDialog({ puzzle, onClose, onRunUpdate, onStreakUpdate, standalone =
         }
         return;
       }
-      // The response contains this user's private saved runs and streak. It is only
-      // memoized in this tab, and a successful guess invalidates it immediately.
-      dailyRequests.clear();
+      // Refresh the in-memory daily payload so the home cards show the new played state.
+      invalidateDailyGames(auth.currentUser?.uid || getGuestId(), puzzle.category);
       const nextRun: SavedRun = { attempts: payload.attempts, complete: payload.complete, won: payload.won, score: payload.score, answer: payload.answer || undefined, clue: payload.nextClue || undefined, answerTmdbId: payload.answerTmdbId, answerMediaType: payload.answerMediaType, answerPosterPath: payload.answerPosterPath, answerProfilePath: payload.answerProfilePath };
       if (typeof payload.streak === "number") onStreakUpdate?.(payload.streak);
       setRun(nextRun);
@@ -263,6 +222,7 @@ function GridDialog({ category, onClose, onStreakUpdate, standalone = false, str
       });
       const payload = await response.json() as { results?: GridResult[]; streak?: number; error?: string };
       if (!response.ok || !payload.results) throw new Error(payload.error || "Could not check the grid.");
+      invalidateDailyGames(auth.currentUser?.uid || getGuestId(), category);
       setResults(payload.results);
       if (typeof payload.streak === "number") onStreakUpdate?.(payload.streak);
       try {
