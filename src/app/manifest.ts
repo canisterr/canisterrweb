@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Canisterr",
     short_name: "Canisterr",
     description: "Share movies with people who matter",
-    start_url: "/",
+    start_url: "/auth/login",
     scope: "/",
     display: "fullscreen",
     background_color: "#090909",
