@@ -219,7 +219,11 @@ export async function completeGoogleSignup(
 }
 
 export async function sendResetPasswordEmail(email: string) {
-  await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+  const continueUrl = new URL("/auth/login", window.location.origin).toString();
+  await sendPasswordResetEmail(auth, email.trim().toLowerCase(), {
+    url: continueUrl,
+    handleCodeInApp: false,
+  });
 }
 
 export async function signOut() {

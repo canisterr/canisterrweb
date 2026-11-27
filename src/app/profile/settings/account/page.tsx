@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { sendPasswordResetEmail } from "firebase/auth";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { useSettingsUser } from "../settings-shared";
 import { SettingLine, SettingsGroup, SettingsMessage } from "../settings-ui";
 import { auth } from "@/lib/firebase";
-import { signOut as authSignOut } from "@/lib/auth";
+import { sendResetPasswordEmail, signOut as authSignOut } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 export default function SettingsAccountPage() {
@@ -27,7 +26,7 @@ export default function SettingsAccountPage() {
     setError("");
     setMessage(null);
     try {
-      await sendPasswordResetEmail(auth, auth.currentUser.email);
+      await sendResetPasswordEmail(auth.currentUser.email);
       setMessage("Password reset email sent.");
     } catch {
       setError("Could not send a password reset email.");
