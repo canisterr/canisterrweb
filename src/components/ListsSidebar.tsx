@@ -64,7 +64,7 @@ export default function ListsSidebar({ user, onCreateClick }: ListsSidebarProps)
       <div className="space-y-2 px-2">
         {lists.length > 0 ? (
           lists.map((list) => (
-            <Link key={list.id} href={`/lists/${list.id}`}>
+            <Link key={list.id} href={`/lists/${list.id}`} prefetch={false}>
               <div className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors group">
                 {/* List Cover Thumbnail */}
                 <div className="w-12 h-12 flex-shrink-0 bg-gradient-to-br from-gray-200 to-gray-300 rounded overflow-hidden">
@@ -72,7 +72,7 @@ export default function ListsSidebar({ user, onCreateClick }: ListsSidebarProps)
                     <div className="w-full h-full grid grid-cols-2">
                       {listCovers[list.id].slice(0, 4).map((url, idx) => (
                         <div key={idx} className="w-full h-full overflow-hidden">
-                          <img
+                          <img loading="lazy"
                             src={url}
                             alt={`Cover ${idx + 1}`}
                             className="w-full h-full object-cover"

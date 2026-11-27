@@ -786,7 +786,7 @@ export default function ListDetailPage() {
                 {list.collaborators && list.collaborators.length > 0 && list.collaborators.slice(0, 5).map((collab) => (
                 <span key={collab.user_id} className="inline-block -ml-2 h-7 w-7 overflow-hidden rounded-full border-2 border-[#111111] bg-[#1a1a1a] first:ml-0 sm:h-8 sm:w-8">
                     {collab.user?.avatar_url ? (
-                      <img src={collab.user.avatar_url} alt={collab.user.name || collab.user.username || "User"} className="w-full h-full object-cover rounded-full" />
+                      <img loading="lazy" src={collab.user.avatar_url} alt={collab.user.name || collab.user.username || "User"} className="w-full h-full object-cover rounded-full" />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center rounded-full bg-[#2a2a2a] text-base font-bold text-[#f5f0de]">
                         {collab.user?.name?.[0]?.toUpperCase() || collab.user?.username?.[0]?.toUpperCase() || "U"}
@@ -958,6 +958,7 @@ export default function ListDetailPage() {
                       href={item.content.type === "tv"
                         ? `/tv/${item.content.id}`
                         : `/movie/${item.content.id}`}
+                      prefetch={false}
                       className={
                         viewType === "list"
                           ? `relative h-20 w-14 flex-shrink-0 overflow-hidden bg-[#1a1a1a] poster-stack-container sm:h-24 sm:w-16 ${
@@ -968,7 +969,7 @@ export default function ListDetailPage() {
                       tabIndex={0}
                     >
                       {posterSrc ? (
-                        <img
+                        <img loading="lazy"
                           src={posterSrc}
                           alt={item.content.title}
                           className="absolute inset-0 h-full w-full object-cover"
@@ -1085,7 +1086,7 @@ export default function ListDetailPage() {
                     className="flex items-center gap-2 border border-white/10 bg-white/[0.03] p-3 transition hover:bg-white/[0.06]"
                   >
                     {collaborator.user.avatar_url && (
-                      <img
+                      <img loading="lazy"
                         src={collaborator.user.avatar_url}
                         alt={collaborator.user.name}
                         className="w-8 h-8 rounded-full"

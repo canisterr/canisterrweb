@@ -341,7 +341,7 @@ export default function EditProfilePage() {
               <div className="h-full w-full" style={{ transform: `scale(${formData.avatar_scale || 1})`, transformOrigin: "center" }}>
                 {formData.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={formData.avatar_url} alt="Profile preview" className="h-full w-full object-cover" />
+                  <img loading="lazy" src={formData.avatar_url} alt="Profile preview" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-white/45"><Camera className="h-6 w-6" /></div>
                 )}

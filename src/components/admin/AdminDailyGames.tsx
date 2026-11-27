@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { Check, Clapperboard, Flame, LoaderCircle, Search, X } from "lucide-react";
 import { GAME_CATEGORIES, utcGameDate, type GameCategoryId } from "@/lib/games/types";
 import { getTmdbPosterUrl } from "@/lib/performance";

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { ArrowRight, Compass } from "lucide-react";
 import type { PosterItem } from "@/lib/posters";
@@ -21,7 +21,7 @@ export default function Hero({ posters }: HeroProps) {
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black">
               <Image
-                src="/logo.png"
+                src="/logo-ui.webp"
                 alt="Canisterr logo"
                 width={44}
                 height={44}

@@ -170,7 +170,7 @@ export default function TvSeasonsPage() {
         <section className="flex items-start gap-5 py-4 sm:gap-7">
             <div className="w-24 shrink-0 overflow-hidden bg-white/5 sm:w-32">
               {show?.poster_url ? (
-                <img
+                <img loading="lazy"
                   src={show.poster_url}
                   alt={show.title || show.name}
                   className="aspect-[2/3] w-full object-cover"
@@ -270,7 +270,7 @@ export default function TvSeasonsPage() {
                   className="flex items-center gap-3 py-3"
                 >
                   <span className="w-7 shrink-0 text-sm font-black text-[#ffb36b]">{String(episode.number).padStart(2, "0")}</span>
-                  {episode.image?.medium && <img src={episode.image.medium} alt="" className="aspect-video w-20 shrink-0 object-cover" />}
+                  {episode.image?.medium && <img loading="lazy" src={episode.image.medium} alt="" className="aspect-video w-20 shrink-0 object-cover" />}
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-[#f5f0de]">{episode.name}</p>
                     <p className="mt-1 text-xs text-white/45">

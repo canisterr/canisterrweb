@@ -19,7 +19,7 @@ export default function PublicLists({ lists }: PublicListsProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {lists.map((list) => (
-          <Link key={list.id} href={`/lists/${list.id}`}>
+          <Link key={list.id} href={`/lists/${list.id}`} prefetch={false}>
             <div className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer h-full">
               <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2">
                 {list.name}

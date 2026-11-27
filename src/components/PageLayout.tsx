@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { User } from "@/types";
@@ -91,7 +91,7 @@ export default function PageLayout({
             aria-label="Open profile"
           >
             {effectiveUser.avatar_url ? (
-              <img
+              <img loading="lazy"
                 src={effectiveUser.avatar_url}
                 alt={effectiveUser.name}
                 className="h-full w-full object-cover"
@@ -125,7 +125,7 @@ export default function PageLayout({
           aria-label={effectiveUser ? "Go to home" : "Sign in"}
         >
           <Image
-            src="/logo.png"
+            src="/logo-ui.webp"
             alt=""
             width={34}
             height={34}

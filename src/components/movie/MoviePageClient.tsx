@@ -552,7 +552,7 @@ export default function MoviePage({ initialResolved }: {
     >
       <div className="h-16 w-12 flex-shrink-0 overflow-hidden bg-white/10">
         {person.profile_url ? (
-          <img src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
+          <img loading="lazy" src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-base font-black text-white/35">
             {person.name.charAt(0).toUpperCase()}
@@ -576,7 +576,7 @@ export default function MoviePage({ initialResolved }: {
     >
       <div className="h-16 w-12 flex-shrink-0 overflow-hidden bg-white/10">
         {person.profile_url ? (
-          <img src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
+          <img loading="lazy" src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-base font-black text-white/35">
             {person.name.charAt(0).toUpperCase()}
@@ -616,7 +616,7 @@ export default function MoviePage({ initialResolved }: {
         <section className={heroImageUrl ? "relative overflow-hidden" : ""}>
           {heroImageUrl ? (
             <div className="relative h-[42svh] min-h-[300px] sm:h-[46svh] sm:min-h-[320px] lg:h-[48svh] lg:min-h-[340px]">
-              <img
+              <img loading="lazy"
                 src={heroImageUrl}
                 alt={`${movie.title} backdrop`}
                 className="absolute inset-0 h-full w-full object-cover object-center"
@@ -831,7 +831,7 @@ export default function MoviePage({ initialResolved }: {
                         <span className="flex min-w-0 flex-col items-center gap-1 sm:flex-row sm:gap-3">
                           <span className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md text-xs sm:h-10 sm:w-10 sm:text-base ${isYou ? "bg-black/15 text-black" : "bg-[#f5f0de] text-black"}`}>
                             {log.user.avatar_url ? (
-                              <img
+                              <img loading="lazy"
                                 src={log.user.avatar_url}
                                 alt=""
                                 className="h-full w-full object-cover"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import SettingsPageFrame from "@/components/SettingsPageFrame";
 import { getAnalyticsConsent, setAnalyticsConsent, type AnalyticsConsentChoice } from "@/lib/analytics-consent";
@@ -12,15 +12,17 @@ const selectClass =
 
 export default function SettingsPrivacyPage() {
   const { user, loading, settings, updateSection, handleSignOut } = useSettingsUser();
-  const [analyticsChoice, setAnalyticsChoice] = useState<AnalyticsConsentChoice | null>(null);
-
-  useEffect(() => {
-    setAnalyticsChoice(getAnalyticsConsent());
-  }, []);
+  const analyticsChoice = useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("canisterr-analytics-consent-change", onChange);
+      return () => window.removeEventListener("canisterr-analytics-consent-change", onChange);
+    },
+    getAnalyticsConsent,
+    () => null,
+  );
 
   function chooseAnalytics(choice: AnalyticsConsentChoice) {
     setAnalyticsConsent(choice);
-    setAnalyticsChoice(choice);
   }
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { ArrowRight, Film } from "lucide-react";
 import type { MovieLog } from "@/types";

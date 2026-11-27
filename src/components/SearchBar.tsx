@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { getBlurDataUrl } from "@/lib/performance";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 

@@ -19,7 +19,7 @@ export default function RecentlyWatched({ movies }: RecentlyWatchedProps) {
             {/* Poster */}
             <div className="relative mb-3 aspect-[3/4] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm transition-shadow hover:shadow-md">
               {item.content.poster_url ? (
-                <img
+                <img loading="lazy"
                   src={item.content.poster_url}
                   alt={item.content.title}
                   className="w-full h-full object-cover"

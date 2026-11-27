@@ -280,7 +280,7 @@ export default function UserProfilePage() {
                 >
                   <div className="flex gap-4">
                     {log.content.poster_url && (
-                      <img
+                      <img loading="lazy"
                         src={log.content.poster_url}
                         alt={log.content.title}
                         className="w-16 h-24 rounded object-cover flex-shrink-0"

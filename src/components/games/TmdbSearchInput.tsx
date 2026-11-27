@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { useEffect, useId, useRef, useState } from "react";
 
 type SearchResult = { id: number; type: "movie" | "person"; name: string; image: string | null; year?: string };

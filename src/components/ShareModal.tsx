@@ -372,7 +372,7 @@ export default function ShareModal({
                   isBrutalist ? "border border-white/10 bg-[#0d0d0d]" : "border border-slate-200 bg-slate-100"
                 }`}>
                   {posterUrl ? (
-                    <img
+                    <img loading="lazy"
                       src={posterUrl}
                       alt={movie?.title || movie?.name}
                       className="h-full w-full object-cover"
@@ -469,7 +469,7 @@ export default function ShareModal({
                       >
                         {!isMine && (
                           reply.user.avatar_url ? (
-                            <img
+                            <img loading="lazy"
                               src={reply.user.avatar_url}
                               alt={reply.user.name}
                               className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
@@ -494,7 +494,7 @@ export default function ShareModal({
                         </div>
                         {isMine && (
                           reply.user.avatar_url ? (
-                            <img
+                            <img loading="lazy"
                               src={reply.user.avatar_url}
                               alt={reply.user.name}
                               className="h-8 w-8 flex-shrink-0 rounded-full object-cover"

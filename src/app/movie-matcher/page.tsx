@@ -148,7 +148,7 @@ export default function MovieMatcherPage() {
                     onClick={() => void selectMatch(match)}
                     className={`flex w-full items-center gap-3 border-b border-[#493323] px-1 py-3 text-left transition ${selected?.userId === match.userId ? "border-l-2 border-l-[#ff7a18] bg-[#20160f] pl-3" : "hover:bg-[#17110d]"}`}
                   >
-                    {match.avatar_url ? <img src={match.avatar_url} alt="" className="h-10 w-10 rounded-full border border-[#795033] object-cover" /> : <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#795033] bg-[#c8b48b] text-sm font-bold text-[#211811]">{match.name.slice(0, 1).toUpperCase()}</span>}
+                    {match.avatar_url ? <img loading="lazy" src={match.avatar_url} alt="" className="h-10 w-10 rounded-full border border-[#795033] object-cover" /> : <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#795033] bg-[#c8b48b] text-sm font-bold text-[#211811]">{match.name.slice(0, 1).toUpperCase()}</span>}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-bold">{match.name}</span>
                       <span className="block truncate text-xs text-[#b3aa9b]">@{match.username} · {match.tasteCount} picks</span>
@@ -176,8 +176,8 @@ export default function MovieMatcherPage() {
               <div className="space-y-7">
                 <div className="flex flex-wrap items-center gap-4 border-b border-[#68452e] pb-5">
                   <div className="flex -space-x-2">
-                    {user.avatar_url ? <img src={user.avatar_url} alt="" className="h-12 w-12 rounded-full border-2 border-[#120e0b] object-cover" /> : <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#120e0b] bg-[#c8b48b] font-bold text-[#211811]">{user.name.slice(0, 1).toUpperCase()}</span>}
-                    {selected.avatar_url ? <img src={selected.avatar_url} alt="" className="h-12 w-12 rounded-full border-2 border-[#120e0b] object-cover" /> : <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#120e0b] bg-[#a85e3b] font-bold text-[#f4ead4]">{selected.name.slice(0, 1).toUpperCase()}</span>}
+                    {user.avatar_url ? <img loading="lazy" src={user.avatar_url} alt="" className="h-12 w-12 rounded-full border-2 border-[#120e0b] object-cover" /> : <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#120e0b] bg-[#c8b48b] font-bold text-[#211811]">{user.name.slice(0, 1).toUpperCase()}</span>}
+                    {selected.avatar_url ? <img loading="lazy" src={selected.avatar_url} alt="" className="h-12 w-12 rounded-full border-2 border-[#120e0b] object-cover" /> : <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#120e0b] bg-[#a85e3b] font-bold text-[#f4ead4]">{selected.name.slice(0, 1).toUpperCase()}</span>}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-[#c2b9a9]">You and @{selected.username}</p>
@@ -208,12 +208,12 @@ export default function MovieMatcherPage() {
 
                 {analysis.commonTasteMovies.length > 0 && <div>
                   <h3 className="mb-3 font-serif text-lg text-[#f4ead4]">You both like</h3>
-                  <div className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4">{analysis.commonTasteMovies.slice(0, 8).map((title) => <Link key={`${title.type}-${title.id}`} href={`/${title.type === "tv" ? "tv" : "movie"}/${title.id}`} className="group min-w-0"><div className="aspect-[2/3] overflow-hidden bg-[#20160f]">{title.poster_url && <img src={title.poster_url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />}</div><p className="mt-2 truncate text-xs text-[#f4ead4] group-hover:text-[#ff9a3d]">{title.title}</p></Link>)}</div>
+                  <div className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4">{analysis.commonTasteMovies.slice(0, 8).map((title) => <Link key={`${title.type}-${title.id}`} href={`/${title.type === "tv" ? "tv" : "movie"}/${title.id}`} prefetch={false} className="group min-w-0"><div className="aspect-[2/3] overflow-hidden bg-[#20160f]">{title.poster_url && <img src={title.poster_url} alt="" loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />}</div><p className="mt-2 truncate text-xs text-[#f4ead4] group-hover:text-[#ff9a3d]">{title.title}</p></Link>)}</div>
                 </div>}
 
                 {analysis.recommendationsForA.length > 0 && <div>
                   <h3 className="mb-3 font-serif text-lg text-[#f4ead4]">Try these next</h3>
-                  <div className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4">{analysis.recommendationsForA.slice(0, 8).map((title) => <Link key={`${title.type}-${title.id}`} href={`/${title.type === "tv" ? "tv" : "movie"}/${title.id}`} className="group min-w-0"><div className="aspect-[2/3] overflow-hidden bg-[#20160f]">{title.poster_url && <img src={title.poster_url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />}</div><p className="mt-2 truncate text-xs text-[#f4ead4] group-hover:text-[#ff9a3d]">{title.title}</p></Link>)}</div>
+                  <div className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-4">{analysis.recommendationsForA.slice(0, 8).map((title) => <Link key={`${title.type}-${title.id}`} href={`/${title.type === "tv" ? "tv" : "movie"}/${title.id}`} prefetch={false} className="group min-w-0"><div className="aspect-[2/3] overflow-hidden bg-[#20160f]">{title.poster_url && <img src={title.poster_url} alt="" loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />}</div><p className="mt-2 truncate text-xs text-[#f4ead4] group-hover:text-[#ff9a3d]">{title.title}</p></Link>)}</div>
                 </div>}
               </div>
             ) : null}

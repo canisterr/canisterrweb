@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { get, onValue, ref } from "firebase/database";
+import { get, ref } from "firebase/database";
 import { Bell, Check, Settings, Trash2, X } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import RouteLoadingSkeleton from "@/components/RouteLoadingSkeleton";
 import { auth, db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
+import { subscribeToUserNotifications } from "@/lib/notification-subscription";
 import { signOut as authSignOut } from "@/lib/auth";
 import type { User } from "@/types";
 import {
@@ -82,16 +83,15 @@ export default function NotificationsPage() {
 
         setUser(currentUser);
 
-        const notificationsRef = ref(db, `notifications/${currentUser.id}`);
-        unsubscribeNotifications = onValue(
-          notificationsRef,
-          (snapshot) => {
-            if (!snapshot.exists()) {
+        unsubscribeNotifications = subscribeToUserNotifications(
+          currentUser.id,
+          (value) => {
+            if (!value) {
               setNotifications([]);
               return;
             }
 
-            setNotifications(sortNotificationItems(parseNotificationItems(snapshot.val())));
+            setNotifications(sortNotificationItems(parseNotificationItems(value)));
           },
           (error) => {
             if (isPermissionDeniedError(error)) {
@@ -244,7 +244,7 @@ export default function NotificationsPage() {
                   <Bell className="h-5 w-5" aria-hidden="true" />
                 </div>
               ) : note.fromUser?.avatar_url ? (
-                <img
+                <img loading="lazy"
                   src={note.fromUser.avatar_url}
                   alt={note.fromUser.name}
                   className="h-11 w-11 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10"

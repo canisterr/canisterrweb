@@ -154,7 +154,7 @@ export default function AcrylicMovieShelf({
                     className="group/item shrink-0 snap-start"
                   >
                     {item.href ? (
-                      <Link href={item.href} aria-label={item.title} className="block cursor-pointer">
+                      <Link href={item.href} prefetch={false} aria-label={item.title} className="block cursor-pointer">
                         {poster}
                       </Link>
                     ) : (

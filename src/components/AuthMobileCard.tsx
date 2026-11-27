@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { ReactNode } from "react";
 
@@ -23,7 +23,7 @@ export default function AuthMobileCard({ title, subtitle, mode, footer, children
       <div className="border-b border-white/10 px-5 pb-5 pt-5 text-[#f5f0de] sm:px-6 sm:pb-6 sm:pt-6">
         <div className="flex items-center gap-3">
           <Image
-            src="/logo.png"
+            src="/logo-ui.webp"
             alt=""
             width={42}
             height={42}

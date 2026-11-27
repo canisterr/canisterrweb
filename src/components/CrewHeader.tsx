@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { ExternalLink } from "lucide-react";
 import type { CrewProfile } from "@/lib/crew";
 

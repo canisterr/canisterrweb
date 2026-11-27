@@ -213,7 +213,7 @@ function ListCard({
             <div className="mb-2 flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5">
                 {attribution.creatorUser?.avatar_url ? (
-                  <img
+                  <img loading="lazy"
                     src={attribution.creatorUser.avatar_url}
                     alt={attribution.creatorName}
                     className="h-full w-full object-cover"

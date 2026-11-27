@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, X } from "lucide-react";
-import { onValue, ref } from "firebase/database";
-import { db } from "@/lib/firebase";
 import { isPermissionDeniedError } from "@/lib/firebase-errors";
+import { subscribeToUserNotifications } from "@/lib/notification-subscription";
 import type { User } from "@/types";
 import { shouldShowNotificationForSettings } from "@/lib/settings";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -41,16 +40,15 @@ export default function NotificationBell({
       return;
     }
 
-    const notificationsRef = ref(db, `notifications/${user.id}`);
-    const unsubscribe = onValue(
-      notificationsRef,
-      (snapshot) => {
-        if (!snapshot.exists()) {
+    const unsubscribe = subscribeToUserNotifications(
+      user.id,
+      (value) => {
+        if (!value) {
           setNotifications([]);
           return;
         }
 
-        setNotifications(sortNotificationItems(parseNotificationItems(snapshot.val())));
+        setNotifications(sortNotificationItems(parseNotificationItems(value)));
       },
       (error) => {
         if (isPermissionDeniedError(error)) {
@@ -166,7 +164,7 @@ export default function NotificationBell({
                     : note.fromUser?.name || note.fromUser?.username || "";
                   const avatarUrl = note.fromUser?.avatar_url || (isHonourNotification ? user.avatar_url : null);
                   const avatar = avatarUrl ? (
-                    <img
+                    <img loading="lazy"
                       src={avatarUrl}
                       alt={senderName}
                       className="h-10 w-10 flex-shrink-0 rounded-full object-cover"

@@ -932,7 +932,7 @@ function SharePageContent() {
                             className="group flex w-full items-center gap-3 border-b border-white/10 px-0 py-2 text-left transition-colors hover:border-white/20"
                           >
                             {item.image && (
-                              <img
+                              <img loading="lazy"
                                 src={item.image}
                                 alt={item.title}
                               className="h-16 w-12 flex-shrink-0 rounded object-cover"
@@ -1149,7 +1149,7 @@ function SharePageContent() {
                           <button type="button" onClick={() => openShareDetails(share)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff7a1a]">
                             <div className="relative aspect-[2/3] overflow-hidden rounded-t-xl bg-[#1a1a1a]">
                               {item?.poster_url ? (
-                                <img src={item.poster_url} alt={item.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+                                <img loading="lazy" src={item.poster_url} alt={item.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
                               ) : (
                                 <div className="flex h-full items-center justify-center text-xs text-white/35">No poster</div>
                               )}

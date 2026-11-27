@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -183,7 +183,7 @@ export default function AuthActionClient() {
     <main lang={action?.lang || "en"} className="min-h-dvh bg-[#0b0b0b] px-5 py-8 text-[#f5f0de] sm:px-8 sm:py-12">
       <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-[30rem] flex-col">
         <Link href="/" aria-label="Canisterr home" className="mx-auto mb-14 inline-flex items-center gap-3 focus-visible:outline-2 focus-visible:outline-[#ff7a1a]">
-          <Image src="/logo.png" alt="" width={48} height={48} priority className="size-11 object-contain" />
+          <Image src="/logo-ui.webp" alt="" width={48} height={48} priority className="size-11 object-contain" />
           <span className="text-2xl font-black tracking-tight">Canisterr</span>
         </Link>
         <section aria-labelledby="action-title" className="my-auto w-full border-y border-white/12 py-8 sm:py-10">

@@ -28,18 +28,15 @@ export default function CompleteGoogleProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [returnPath, setReturnPath] = useState("/dashboard");
+  const [returnPath] = useState(() => typeof window === "undefined"
+    ? "/dashboard"
+    : safeReturnPath(new URLSearchParams(window.location.search).get("redirect")));
   const usernameCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const usernameValidationError = getUsernameValidationError(username);
 
   useEffect(() => {
     if (usernameCheckTimer.current) clearTimeout(usernameCheckTimer.current);
-    if (usernameValidationError) {
-      setUsernameAvailable(null);
-      setCheckingUsername(false);
-      return;
-    }
-    setCheckingUsername(true);
+    if (usernameValidationError) return;
     usernameCheckTimer.current = setTimeout(() => {
       void checkUsernameAvailability(username).then(setUsernameAvailable).catch(() => setUsernameAvailable(null)).finally(() => setCheckingUsername(false));
     }, 450);
@@ -49,7 +46,6 @@ export default function CompleteGoogleProfilePage() {
   }, [username, usernameValidationError]);
 
   useEffect(() => {
-    setReturnPath(safeReturnPath(new URLSearchParams(window.location.search).get("redirect")));
     return onAuthStateChanged(auth, (user) => {
       if (!user) {
         window.location.replace("/auth/signup");
@@ -64,6 +60,8 @@ export default function CompleteGoogleProfilePage() {
         }
         setCurrentUser(user);
         setUsername(makeUsername(storedUsername || user.displayName || user.email?.split("@")[0] || "cinephile"));
+        setUsernameAvailable(null);
+        setCheckingUsername(true);
         setLoading(false);
       }).catch(() => {
         setError("Could not load your account profile. Please try again.");
@@ -108,7 +106,12 @@ export default function CompleteGoogleProfilePage() {
         {error ? <p role="alert" className="text-sm text-[#ff9d62]">{error}</p> : null}
         <div className="space-y-1">
           <label htmlFor="google-profile-username" className={authLabelClass}>Username</label>
-          <input id="google-profile-username" value={username} onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ""))} required minLength={3} maxLength={20} autoComplete="username" aria-describedby="google-username-status" className={authInputClass} />
+          <input id="google-profile-username" value={username} onChange={(event) => {
+            const nextUsername = event.target.value.toLowerCase().replace(/[^a-z0-9._]/g, "");
+            setUsername(nextUsername);
+            setUsernameAvailable(null);
+            setCheckingUsername(!getUsernameValidationError(nextUsername));
+          }} required minLength={3} maxLength={20} autoComplete="username" aria-describedby="google-username-status" className={authInputClass} />
           <p id="google-username-status" aria-live="polite" className={`pt-1 text-xs ${usernameValidationError || usernameAvailable === false ? "text-[#ff9d62]" : "text-white/40"}`}>
             {usernameValidationError || (checkingUsername ? "Checking username…" : usernameAvailable === true ? "Username available" : usernameAvailable === false ? "Username is taken" : "3–20 letters, numbers, dots, or underscores")}
           </p>

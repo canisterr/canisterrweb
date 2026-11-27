@@ -163,7 +163,7 @@ function PeopleCard({ title, items, tone, onItemClick, onViewMore }: { title: st
         <span className="relative flex aspect-[2/3] w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#f5f0de]/10 bg-[#25211d] text-sm font-black text-[#d46b35] sm:w-16 sm:text-lg lg:w-20">
           {item.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+            <img loading="lazy" src={item.imageUrl} alt="" className="h-full w-full object-cover" />
           ) : item.label.slice(0, 1).toUpperCase()}
         </span>
         <span className={`flex min-h-8 min-w-0 items-center justify-center text-[9px] font-bold leading-tight sm:min-h-10 sm:text-sm sm:leading-snug ${isCream ? "text-[#0e0d0b]" : "text-[#f5f0de]"}`}><span className="line-clamp-2 break-words">{item.label}</span></span>
@@ -196,7 +196,7 @@ function PeopleRankingModal({ title, items, onClose, onItemClick }: { title: str
           <span className="flex h-12 w-9 shrink-0 items-center justify-center overflow-hidden rounded border border-[#f5f0de]/10 bg-[#25211d] text-sm font-bold text-[#d46b35]">
             {item.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+              <img loading="lazy" src={item.imageUrl} alt="" className="h-full w-full object-cover" />
             ) : item.label.slice(0, 1).toUpperCase()}
           </span>
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.label}</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import {

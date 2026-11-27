@@ -110,7 +110,7 @@ export default function ExploreLists({ userId }: { userId: string }) {
         className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {lists.map((list) => (
-          <Link key={list.id} href={`/lists/${list.id}`} className="group w-[min(84vw,340px)] shrink-0 snap-start overflow-hidden rounded-xl border border-white/10 bg-[#111111] transition hover:border-[#ff7a1a]/50">
+          <Link key={list.id} href={`/lists/${list.id}`} prefetch={false} className="group w-[min(84vw,340px)] shrink-0 snap-start overflow-hidden rounded-xl border border-white/10 bg-[#111111] transition hover:border-[#ff7a1a]/50">
             <div className="flex h-28 items-end gap-2 overflow-hidden bg-[#191613] px-3 pt-3 sm:h-32">
               {list.posters.length > 0 ? list.posters.map((poster, index) => (
                 <div key={`${list.id}-${index}`} className="relative h-full min-w-0 flex-1 overflow-hidden rounded-t-sm bg-black/50">

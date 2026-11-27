@@ -77,7 +77,7 @@ function ProfileListShelfCard({ list, owner, covers, itemCount }: { list: List; 
       <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 text-[10px] font-bold text-[#f5f0de]">
         {owner.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={owner.avatar_url} alt="" className="h-full w-full object-cover" />
+          <img loading="lazy" src={owner.avatar_url} alt="" className="h-full w-full object-cover" />
         ) : owner.name.charAt(0).toUpperCase()}
       </span>
       <span className="text-xs font-medium text-[#f5f0de] sm:text-sm">{owner.name}{list.owner_id === owner.id ? "" : " · collaborator"}</span>
@@ -1782,7 +1782,7 @@ function ProfilePageInner() {
                     transformOrigin: "center",
                   }}
                 >
-                  <img
+                  <img loading="lazy"
                     src={profileUser.avatar_url}
                     alt={profileUser.name}
                     className="h-full w-full object-cover"
@@ -2045,11 +2045,12 @@ function ProfilePageInner() {
                           <Link
                             key={item.id}
                             href={item.content_type === "movie" ? `/movie/${item.content_id}` : `/tv/${item.content_id}`}
+                            prefetch={false}
                             className="group w-[5.5rem] shrink-0 sm:w-[120px]"
                           >
                             <div className="relative overflow-hidden rounded-[0.9rem] border border-white/10 bg-white/5 shadow-sm transition duration-300 group-hover:-translate-y-1 group-hover:border-[#ff7a1a]/30 group-hover:bg-white/10">
                               {item.content?.poster_url ? (
-                                <img
+                                <img loading="lazy"
                                   src={item.content.poster_url}
                                   alt={title}
                                   className="aspect-[2/3] w-full object-cover"
@@ -2223,7 +2224,7 @@ function ProfilePageInner() {
                         >
                           <Link href={`/profile/${listedUser.username !== listedUser.id ? listedUser.username : listedUser.id}`} className="flex min-w-0 flex-1 items-center gap-3">
                             {listedUser.avatar_url ? (
-                              <img
+                              <img loading="lazy"
                                 src={listedUser.avatar_url}
                                 alt={listedUser.name}
                                 className="h-12 w-12 rounded-full object-cover ring-1 ring-white/10 shadow-[0_0_0_4px_rgba(255,255,255,0.03)]"

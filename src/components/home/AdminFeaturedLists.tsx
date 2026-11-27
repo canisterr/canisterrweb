@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from "react";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import type { FeaturedList } from "@/lib/featured-lists";
 
@@ -80,7 +80,7 @@ export default function AdminFeaturedLists() {
               "left-[4%] top-5 z-10 -rotate-[9deg] sm:left-[7%]",
               "right-[4%] top-5 z-10 rotate-[9deg] sm:right-[7%]",
             ];
-            return <Link key={`${item.media_type}:${item.media_id}`} href={listHref} aria-label={`Open ${featured.title}`} style={{ zIndex: index === 0 ? 20 : 10 }} className={`absolute h-[120px] w-[80px] overflow-hidden border border-[#f4efdf]/35 bg-[#1a1917] shadow-[0_7px_14px_rgba(0,0,0,.4)] transition-transform hover:-translate-y-1 sm:h-[140px] sm:w-[94px] ${positions[index] || "hidden"}`}>
+            return <Link key={`${item.media_type}:${item.media_id}`} href={listHref} prefetch={false} aria-label={`Open ${featured.title}`} style={{ zIndex: index === 0 ? 20 : 10 }} className={`absolute h-[120px] w-[80px] overflow-hidden border border-[#f4efdf]/35 bg-[#1a1917] shadow-[0_7px_14px_rgba(0,0,0,.4)] transition-transform hover:-translate-y-1 sm:h-[140px] sm:w-[94px] ${positions[index] || "hidden"}`}>
               {item.poster_url ? <Image src={item.poster_url} alt={item.title} fill sizes="114px" className="object-cover"/> : <span className="grid h-full place-items-center p-2 text-center text-xs text-white/50">{item.title}</span>}
             </Link>;
           })}

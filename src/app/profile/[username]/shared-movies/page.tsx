@@ -208,11 +208,11 @@ export default function SharedMoviesPage() {
               key={item.key}
               className="group shrink-0 snap-start basis-[44%] sm:basis-[30%] md:basis-[24%] lg:basis-[19%] xl:basis-[18%]"
             >
-              <Link href={item.type === "movie" ? `/movie/${item.content.id}` : `/tv/${item.content.id}`} className="block">
+              <Link href={item.type === "movie" ? `/movie/${item.content.id}` : `/tv/${item.content.id}`} prefetch={false} className="block">
                 <div className="relative overflow-hidden rounded-[1.4rem] bg-[#111111] transition duration-300 group-hover:-translate-y-1">
                   <div className="relative aspect-[2/3] w-full">
                     {item.content.poster_url ? (
-                      <img src={item.content.poster_url} alt={item.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                      <img loading="lazy" src={item.content.poster_url} alt={item.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center bg-[#111111] text-sm text-[#f5f0de]/45">No poster</div>
                     )}

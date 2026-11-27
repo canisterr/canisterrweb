@@ -254,7 +254,7 @@ export default function AddItemsToListPage() {
                   {/* Poster */}
                   <div className="relative aspect-[3/4] overflow-hidden bg-black">
                     {content.poster_url ? (
-                      <img
+                      <img loading="lazy"
                         src={content.poster_url}
                         alt={content.title}
                         className="w-full h-full object-cover"

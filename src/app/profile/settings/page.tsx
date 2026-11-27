@@ -41,7 +41,7 @@ export default function ProfileSettingsIndexPage() {
         <section className="rounded-xl border border-white/10 bg-[#111] p-3 sm:p-4">
           <div className="flex items-center gap-4 px-2 py-2 sm:px-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-[#242424] text-[#f5f0de]">
-              {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : user?.name?.charAt(0).toUpperCase() || "?"}
+              {user?.avatar_url ? <img loading="lazy" src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : user?.name?.charAt(0).toUpperCase() || "?"}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-lg font-semibold text-[#f5f0de]">{user?.name || "User"}</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { Movie, TVShow, Content } from "@/types";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { Heart, Flame } from "lucide-react";
 import { getBlurDataUrl } from "@/lib/performance";
@@ -129,5 +129,5 @@ export default function MovieCard({
   if (disableLink) {
     return cardContent;
   }
-  return <Link href={detailPageLink}>{cardContent}</Link>;
+  return <Link href={detailPageLink} prefetch={false}>{cardContent}</Link>;
 }

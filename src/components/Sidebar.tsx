@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { usePathname } from "next/navigation";
 import type { User } from "@/types";
 import { ChevronRight, Clapperboard, Gamepad2, House, LibraryBig, Send, X } from "lucide-react";

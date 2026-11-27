@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { useRouter } from "next/navigation";
 import PageLayout from "@/components/PageLayout";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -721,6 +721,7 @@ export default function DashboardPage() {
                     <Link
                       key={`${result.type}-${result.id}`}
                       href={result.type === "tv" ? `/tv/${result.id}` : `/movie/${result.id}`}
+                      prefetch={false}
                       onClick={() => setShowSearchModal(false)}
                       className="group flex min-w-0 items-center gap-4 border-b border-white/[0.07] px-1 py-3 transition-colors last:border-b-0 hover:bg-white/[0.035] sm:px-2"
                     >
@@ -764,6 +765,7 @@ export default function DashboardPage() {
                         <Link
                           key={`crew-${result.id}`}
                           href={buildCrewPath(result)}
+                          prefetch={false}
                           onClick={() => setShowSearchModal(false)}
                           className="group flex items-center gap-3 border-b border-white/[0.07] px-1 py-3 transition-colors last:border-b-0 hover:bg-white/[0.035] sm:px-2"
                         >
@@ -791,12 +793,13 @@ export default function DashboardPage() {
                     <Link
                       key={`account-${account.id || account.username}`}
                       href={`/profile/${account.username}`}
+                      prefetch={false}
                       onClick={() => setShowSearchModal(false)}
                       className="group flex items-center gap-3 border-b border-white/[0.07] px-1 py-3 transition-colors last:border-b-0 hover:bg-white/[0.035] sm:px-2"
                     >
                         <div className="h-11 w-11 flex-shrink-0 overflow-hidden rounded-full border border-white/10 bg-[#1a1a1a]">
                           {account.avatar_url ? (
-                            <img
+                            <img loading="lazy"
                               src={account.avatar_url}
                               alt={account.name}
                               className="h-full w-full object-cover"

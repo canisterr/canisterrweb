@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { buildCrewPath, getCrewKnownWorks } from "@/lib/crew";
 import type { TMDBPersonSearchResult } from "@/types";
@@ -19,6 +19,7 @@ export default function CrewSearchCard({ person, href, onClick }: CrewSearchCard
   return (
     <Link
       href={targetHref}
+      prefetch={false}
       onClick={onClick}
       className="flex items-center gap-3 border-b border-white/10 p-3 transition-colors hover:bg-white/5"
     >

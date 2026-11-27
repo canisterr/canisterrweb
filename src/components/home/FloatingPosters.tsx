@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { motion, useReducedMotion } from "framer-motion";
 import type { PosterItem } from "@/lib/posters";
 

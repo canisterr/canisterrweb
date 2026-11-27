@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { Activity, BarChart3, Check, Clapperboard, Film, ListPlus, LoaderCircle, Plus, RefreshCw, Search, Trash2, Tv, Users, X } from "lucide-react";
 import { auth } from "@/lib/firebase";

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, Film, Share2, X } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
@@ -251,6 +251,7 @@ function CountrySheet({ country, onClose }: { country: PassportCountry; onClose:
                 <Link
                   key={film.id}
                   href={`/movie/${film.content_id}`}
+                  prefetch={false}
                   className="group flex gap-4 py-4 transition hover:bg-white/[0.035] focus-visible:outline-2 focus-visible:outline-[#ff9b52]"
                 >
                   <div className="h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-white/5 sm:h-28 sm:w-[74px]">

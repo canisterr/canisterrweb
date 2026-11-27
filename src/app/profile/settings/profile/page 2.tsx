@@ -21,7 +21,7 @@ export default function SettingsProfilePage() {
         <div className="space-y-2">
           <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
             {user.avatar_url ? (
-              <img src={user.avatar_url} alt={user.name} className="h-12 w-12 rounded-full object-cover" />
+              <img loading="lazy" src={user.avatar_url} alt={user.name} className="h-12 w-12 rounded-full object-cover" />
             ) : (
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">
                 {user.name.charAt(0).toUpperCase()}

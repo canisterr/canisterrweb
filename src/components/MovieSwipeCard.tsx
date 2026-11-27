@@ -164,7 +164,7 @@ export default function MovieSwipeCard({
             {/* Poster Image */}
             <div className="relative w-full h-5/6 bg-gray-200 overflow-hidden">
               {posterUrl ? (
-                <img
+                <img loading="lazy"
                   src={posterUrl}
                   alt={movie.title}
                   className="w-full h-full object-cover"

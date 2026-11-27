@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image from "@/components/AppImage";
 
 export default function CountryFlag({ code, className = "", position = "relative" }: { code: string | null | undefined; className?: string; position?: "relative" | "absolute" }) {
   const normalized = code?.toUpperCase();

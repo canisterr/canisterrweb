@@ -1,7 +1,7 @@
 "use client";
 
 import { User } from "@/types";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 
 interface UserCardProps {
   user: User;

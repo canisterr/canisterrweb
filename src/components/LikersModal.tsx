@@ -10,7 +10,7 @@ export function Avatar({ user, size = 10 }: { user: User; size?: number }) {
 
   if (user.avatar_url) {
     return (
-      <img
+      <img loading="lazy"
         src={user.avatar_url}
         alt={user.name}
         style={style}

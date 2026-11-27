@@ -656,7 +656,7 @@ export default function LogMovieModal({
             <div className="relative aspect-[2/3] w-full overflow-hidden border border-white/12 bg-black shadow-[0_20px_60px_rgba(0,0,0,0.38)]">
               {content.poster_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={content.poster_url} alt={content.title} className="h-full w-full object-contain" />
+                <img loading="lazy" src={content.poster_url} alt={content.title} className="h-full w-full object-contain" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center px-8 text-center text-sm uppercase tracking-[0.22em] text-white/38">
                   No poster

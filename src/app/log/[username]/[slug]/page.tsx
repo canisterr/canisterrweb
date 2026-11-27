@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { ArrowLeft, Calendar, Star, ImageIcon } from "lucide-react";
 import { parseMovieSlug, slugify } from "@/lib/seo";

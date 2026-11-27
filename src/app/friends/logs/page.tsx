@@ -116,7 +116,7 @@ export default function FriendLogsPage() {
                 {/* Poster */}
                 {log.content.poster_url && (
                   <div className="relative aspect-[2/3] overflow-hidden bg-[#1a1a1a]">
-                    <img
+                    <img loading="lazy"
                       src={log.content.poster_url}
                       alt={log.content.title}
                       className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"

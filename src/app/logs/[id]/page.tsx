@@ -122,7 +122,7 @@ function TicketActionsModal({
 
         {imageUrl && (
           <div className="mb-4 overflow-hidden bg-black">
-            <img src={imageUrl} alt={`${title} ticket preview`} className="h-56 w-full object-cover" />
+            <img loading="lazy" src={imageUrl} alt={`${title} ticket preview`} className="h-56 w-full object-cover" />
           </div>
         )}
 
@@ -232,7 +232,7 @@ function CommentThread({
           className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-white/15 bg-[#f5f0de]"
         >
           {comment.user.avatar_url ? (
-            <img
+            <img loading="lazy"
               src={comment.user.avatar_url}
               alt={comment.user.name}
               className="h-full w-full object-cover"
@@ -942,11 +942,11 @@ export default function LogDetailPage() {
             <div className="min-w-0">
               <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-black shadow-xl">
                 {hasTicketImage ? (
-                  <img src={ticketImageUrl || ""} alt={`${log.content.title} ticket`} className="h-full w-full object-cover" />
+                  <img loading="lazy" src={ticketImageUrl || ""} alt={`${log.content.title} ticket`} className="h-full w-full object-cover" />
                 ) : (
                   <Link href={contentHref} className="absolute inset-0 block" aria-label={`Open ${log.content.title}`}>
                     {log.content.poster_url ? (
-                      <img src={log.content.poster_url} alt={log.content.title} className="h-full w-full object-cover" />
+                      <img loading="lazy" src={log.content.poster_url} alt={log.content.title} className="h-full w-full object-cover" />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center bg-white/3 text-xs text-white/35">No poster</span>
                     )}
@@ -1021,7 +1021,7 @@ export default function LogDetailPage() {
                   aria-label={`Open ${log.user.name}'s profile`}
                 >
                   {log.user.avatar_url ? (
-                    <img
+                    <img loading="lazy"
                       src={log.user.avatar_url}
                       alt={log.user.name}
                       className="h-full w-full object-cover"
@@ -1229,7 +1229,7 @@ export default function LogDetailPage() {
               aria-label="Open your profile"
             >
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt={user.name} className="h-full w-full object-cover" />
+                <img loading="lazy" src={user.avatar_url} alt={user.name} className="h-full w-full object-cover" />
               ) : (
                 user.name?.charAt(0)?.toUpperCase() || "U"
               )}

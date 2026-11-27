@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
@@ -104,7 +104,7 @@ export default function WatchlistPage() {
             const poster = getTmdbPosterUrl(log.poster_url_snapshot || log.content?.poster_url, "w342");
             const releaseDate = releaseLabel(log);
             return <article key={log.id} className="group relative min-w-0 border border-white/10 bg-[#141414]">
-              <Link href={log.content_type === "tv" ? `/tv/${log.content_id}` : `/movie/${log.content_id}`} className="block">
+              <Link href={log.content_type === "tv" ? `/tv/${log.content_id}` : `/movie/${log.content_id}`} prefetch={false} className="block">
                 <div className="relative aspect-[2/3] bg-[#202020]">
                   {poster ? <Image src={poster} alt="" fill sizes="(max-width: 639px) 50vw, (max-width: 1023px) 33vw, 25vw" className="object-cover" placeholder="blur" blurDataURL={getBlurDataUrl()} /> : <Film className="absolute inset-0 m-auto h-8 w-8 text-white/25" />}
                 </div>

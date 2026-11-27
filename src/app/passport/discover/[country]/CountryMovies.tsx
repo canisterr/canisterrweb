@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { ArrowLeft, RotateCcw } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import CountryFlag from "@/components/passport/CountryFlag";

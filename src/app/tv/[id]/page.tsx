@@ -436,7 +436,7 @@ export default function TVShowPage() {
     >
       <div className="h-16 w-12 flex-shrink-0 overflow-hidden bg-white/10">
         {person.profile_url ? (
-          <img src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
+          <img loading="lazy" src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-base font-black text-white/35">
             {person.name.charAt(0).toUpperCase()}
@@ -460,7 +460,7 @@ export default function TVShowPage() {
     >
       <div className="h-16 w-12 flex-shrink-0 overflow-hidden bg-white/10">
         {person.profile_url ? (
-          <img src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
+          <img loading="lazy" src={person.profile_url} alt={person.name} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-base font-black text-white/35">
             {person.name.charAt(0).toUpperCase()}
@@ -500,7 +500,7 @@ export default function TVShowPage() {
         <section className={showBackdropUrl ? "relative overflow-hidden" : ""}>
           {showBackdropUrl ? (
             <div className="relative h-[42svh] min-h-[300px] sm:h-[46svh] sm:min-h-[320px] lg:h-[48svh] lg:min-h-[340px]">
-              <img
+              <img loading="lazy"
                 src={showBackdropUrl}
                 alt={`${show.title || show.name} backdrop`}
                 className={`absolute inset-0 h-full w-full object-cover object-center ${hasWideBackdrop ? "" : "scale-110 opacity-60 blur-xl"}`}
@@ -712,7 +712,7 @@ export default function TVShowPage() {
                   {userLogHistory.map((log) => (
                     <Link key={log.id} href={`/logs/${log.id}`} className="group flex min-w-0 items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
                       <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#f5f0de] text-sm font-black text-[#0a0a0a]">
-                        {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : (user?.name || "You").charAt(0).toUpperCase()}
+                        {user?.avatar_url ? <img loading="lazy" src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : (user?.name || "You").charAt(0).toUpperCase()}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-[#f5f0de] group-hover:text-[#ffb36b]">
@@ -746,7 +746,7 @@ export default function TVShowPage() {
                       title={`View ${log.user.name}'s log`}
                     >
                       <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#f5f0de] text-sm font-black text-[#0a0a0a]">
-                        {log.user.avatar_url ? <img src={log.user.avatar_url} alt="" className="h-full w-full object-cover" /> : log.user.name.charAt(0).toUpperCase()}
+                        {log.user.avatar_url ? <img loading="lazy" src={log.user.avatar_url} alt="" className="h-full w-full object-cover" /> : log.user.name.charAt(0).toUpperCase()}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-[#f5f0de] group-hover:text-[#ffb36b]">{log.user.name}</span>
@@ -835,7 +835,7 @@ export default function TVShowPage() {
                         <h3 className="mb-3 text-xs uppercase tracking-[0.2em] text-white/45">Stills</h3>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {show.backdrop_gallery_urls.slice(0, 6).map((url) => (
-                            <img key={url} src={url} alt={`${show.title || show.name} still`} className="aspect-video w-full object-cover" />
+                            <img loading="lazy" key={url} src={url} alt={`${show.title || show.name} still`} className="aspect-video w-full object-cover" />
                           ))}
                         </div>
                       </div>

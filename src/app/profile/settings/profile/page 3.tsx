@@ -24,7 +24,7 @@ export default function SettingsProfilePage() {
               <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-[#242424] text-base font-bold text-[#f5f0de]">
                 {user.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+                  <img loading="lazy" src={user.avatar_url} alt="" className="h-full w-full object-cover" />
                 ) : user.name.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -28,7 +28,7 @@ export default function AuthShell({ mode, children }: { mode: "login" | "signup"
 
         <div className="relative -mt-5 flex flex-1 flex-col rounded-t-[2rem] bg-[#0b0b0b] px-7 pb-10 pt-8 min-[540px]:mt-0 min-[540px]:rounded-none min-[540px]:bg-black min-[540px]:px-12 min-[540px]:pt-10 lg:px-[clamp(2.5rem,6vw,8rem)]">
           <div className="mb-7 flex items-center justify-center gap-2 text-[1.75rem] font-black tracking-tight text-[#f5f0de] lg:mb-0 lg:gap-3 lg:text-4xl">
-            <Image src="/logo.png" alt="" width={64} height={64} className="h-12 w-12 object-contain lg:h-16 lg:w-16" priority />
+            <Image src="/logo-ui.webp" alt="" width={64} height={64} className="h-12 w-12 object-contain lg:h-16 lg:w-16" priority />
             <span>Canisterr</span>
           </div>
           <nav aria-label="Account" className="grid grid-cols-2 rounded-full border border-white/15 bg-[#1c1c1c] p-1 text-center text-sm font-semibold lg:hidden">

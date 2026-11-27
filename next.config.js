@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async headers() {
+    const stablePublicImages = ["cinema card.png", "review.png", "list.png", "STATS.png", "logo.png", "logo-ui.webp", "share.png", "log.png"];
+    return stablePublicImages.map((asset) => ({
+      source: `/${asset}`,
+      headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+    }));
+  },
   async rewrites() {
     return [
       // Keep Firebase's sign-in helper on Canisterr's domain so Google

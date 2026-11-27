@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { useState } from "react";
 import { landingPosters, type LandingPoster } from "./landing-data";
@@ -45,7 +45,7 @@ export default function LandingExperience() {
     <div className="canisterr-landing">
       <header className="canisterr-site-header">
         <Link href="/" className="canisterr-wordmark" aria-label="Canisterr home">
-          <Image src="/logo.png" alt="" width={38} height={38} loading="eager" />
+          <Image src="/logo-ui.webp" alt="" width={38} height={38} loading="eager" />
           <span>canisterr<span className="wordmark-period">.</span></span>
         </Link>
         <nav className="canisterr-main-nav" aria-label="Main navigation">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import { landingPosters } from "@/components/home/landing-data";
 import LetterboxdMark from "@/components/LetterboxdMark";
 

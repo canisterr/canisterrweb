@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -25,7 +25,7 @@ const CATEGORY_KEY = "canisterr.games.category.v2";
 const SESSION_KEY = "canisterr.games.guest.v1";
 const IMAGE_ROOT = "https://image.tmdb.org/t/p/w342";
 const PROFILE_IMAGE_ROOT = "https://image.tmdb.org/t/p/w185";
-const DAILY_CACHE_MS = 5_000;
+const DAILY_CACHE_MS = 30_000;
 const dailyRequests = new Map<string, { promise: Promise<DailyPayload>; expiresAt: number }>();
 
 function loadDailyGames(identity: string, category: GameCategoryId, token?: string | null): Promise<DailyPayload> {
@@ -108,6 +108,9 @@ function GameDialog({ puzzle, onClose, onRunUpdate, onStreakUpdate, standalone =
         }
         return;
       }
+      // The response contains this user's private saved runs and streak. It is only
+      // memoized in this tab, and a successful guess invalidates it immediately.
+      dailyRequests.clear();
       const nextRun: SavedRun = { attempts: payload.attempts, complete: payload.complete, won: payload.won, score: payload.score, answer: payload.answer || undefined, clue: payload.nextClue || undefined, answerTmdbId: payload.answerTmdbId, answerMediaType: payload.answerMediaType, answerPosterPath: payload.answerPosterPath, answerProfilePath: payload.answerProfilePath };
       if (typeof payload.streak === "number") onStreakUpdate?.(payload.streak);
       setRun(nextRun);

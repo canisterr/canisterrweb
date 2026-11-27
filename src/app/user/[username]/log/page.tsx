@@ -190,7 +190,7 @@ function LogCard({
         <div className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[3.5rem_minmax(0,1fr)]">
           <div className="relative overflow-hidden rounded-lg border border-white/10 bg-white/5 shadow-sm">
             {log.content.poster_url ? (
-              <img
+              <img loading="lazy"
                 src={log.content.poster_url}
                 alt={log.content.title}
                 className="h-[4.3rem] w-full object-cover sm:h-[5rem]"
@@ -659,7 +659,7 @@ export default function UserLogPage() {
                         <div className="relative flex h-full w-full items-center justify-center">
                           {dayLogsInCell.slice(0, 3).map((log, idx) =>
                             log.content.poster_url ? (
-                              <img
+                              <img loading="lazy"
                                 key={log.id}
                                 src={log.content.poster_url}
                                 alt={log.content.title}
@@ -836,7 +836,7 @@ export default function UserLogPage() {
 
             <div className="p-5 space-y-5">
               <div className="flex gap-4">
-                <img
+                <img loading="lazy"
                   src={activeLog.content.poster_url || undefined}
                   alt={activeLog.content.title}
                   className="w-24 h-36 rounded object-cover"

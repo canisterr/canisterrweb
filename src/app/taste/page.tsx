@@ -452,7 +452,7 @@ export default function TastePage() {
             {tastes.filter((taste) => taste.content && taste.content.title).map((taste) => (
               <div key={taste.id} className="flex flex-col">
                 <div className={`relative w-full aspect-[3/4] rounded-lg overflow-hidden shadow-md transition-shadow mb-3 group ${lastAddedKey === `${taste.content_type}:${taste.content_id}` ? "border-2 border-[#ff7a18]" : "border border-transparent"}`}>
-                  <img
+                  <img loading="lazy"
                     src={taste.content?.poster_url || ""}
                     alt={taste.content?.title || "Movie"}
                     className="w-full h-full object-cover"
@@ -593,7 +593,7 @@ export default function TastePage() {
                           const isHighlighted = isAlreadyAdded || addingContent === `${contentType}-${result.id}`;
                           return <button key={result.id} type="button" aria-pressed={isAlreadyAdded} aria-label={`${isAlreadyAdded ? "Already added" : "Add"} ${result.title} to Your Taste`} onClick={() => void handleAddToTaste(result.id)} disabled={isAlreadyAdded || addingContent === `${contentType}-${result.id}`} className="group min-w-0 text-left">
                             <div className={`relative aspect-[2/3] overflow-hidden bg-white/[0.04] transition ${isHighlighted ? "border-2 border-[#ff7a18]" : "border border-transparent group-hover:border-[#ff7a18]/60"}`}>
-                              {result.poster_url ? <img src={result.poster_url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" /> : <div className="h-full w-full bg-white/[0.03]" />}
+                              {result.poster_url ? <img loading="lazy" src={result.poster_url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" /> : <div className="h-full w-full bg-white/[0.03]" />}
                             </div>
                           </button>;
                         })}
@@ -613,7 +613,7 @@ export default function TastePage() {
                       return (
                         <button key={`${contentType}-${result.id}`} type="button" aria-pressed={isAlreadyAdded} aria-label={`${isAlreadyAdded ? "Already added" : "Add"} ${result.title || result.name} to Your Taste`} onClick={() => void handleAddToTaste(result.id)} disabled={isAlreadyAdded || addingContent === `${contentType}-${result.id}`} className="group min-w-0 text-left">
                           <span className={`relative block aspect-[2/3] overflow-hidden bg-white/[0.04] transition ${isHighlighted ? "border-2 border-[#ff7a18]" : "border border-transparent group-hover:border-[#ff7a18]/60"}`}>
-                            {posterUrl ? <img src={posterUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]" /> : <span className="block h-full w-full bg-white/[0.03]" />}
+                            {posterUrl ? <img loading="lazy" src={posterUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]" /> : <span className="block h-full w-full bg-white/[0.03]" />}
                           </span>
                         </button>
                       );
@@ -627,7 +627,7 @@ export default function TastePage() {
                 <aside key={selectedAdded.id} aria-label={`Added ${selectedAdded.title}; similar picks`} className={`${styles.similarPanel} min-h-0 border-t border-white/10 pt-5 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0`} aria-live="polite">
                   <div className="mb-5 flex items-center gap-3">
                     <div className="h-[4.5rem] w-12 flex-shrink-0 overflow-hidden border-2 border-[#ff7a18] bg-white/5">
-                      {selectedAdded.poster_url && <img src={selectedAdded.poster_url} alt="" className="h-full w-full object-cover" />}
+                      {selectedAdded.poster_url && <img loading="lazy" src={selectedAdded.poster_url} alt="" className="h-full w-full object-cover" />}
                     </div>
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ff7a18]">Added to your taste</p>
@@ -641,7 +641,7 @@ export default function TastePage() {
                       {similarRecommendations.slice(0, 5).map((movie, index) => (
                         <button key={movie.id} type="button" aria-label={`Add ${movie.title} to Your Taste`} onClick={() => void handleAddToTaste(movie.id)} disabled={addingContent === `${contentType}-${movie.id}`} className={`${styles.similarPoster} group min-w-0 text-left disabled:opacity-50`} style={{ animationDelay: `${index * 55}ms` }}>
                           <span className="relative block aspect-[2/3] overflow-hidden border border-transparent bg-white/[0.04] transition group-hover:border-[#ff7a18]/60">
-                            {movie.poster_url ? <img src={movie.poster_url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.05]" /> : <span className="block h-full w-full bg-white/[0.03]" />}
+                            {movie.poster_url ? <img loading="lazy" src={movie.poster_url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.05]" /> : <span className="block h-full w-full bg-white/[0.03]" />}
                           </span>
                         </button>
                       ))}

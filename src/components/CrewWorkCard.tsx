@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/AppImage";
 import Link from "next/link";
 import type { CrewWorkCardData } from "@/lib/crew";
 
@@ -12,6 +12,7 @@ export default function CrewWorkCard({ item }: CrewWorkCardProps) {
   return (
     <Link
       href={item.href}
+      prefetch={false}
       className="group flex h-full gap-4 border-b border-white/10 py-5 transition hover:bg-white/[0.02]"
     >
       <div className="relative h-[132px] w-[88px] flex-shrink-0 overflow-hidden border border-white/10 bg-[#191919]">
