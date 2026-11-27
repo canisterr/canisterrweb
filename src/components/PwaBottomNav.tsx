@@ -26,7 +26,7 @@ export default function PwaBottomNav() {
       aria-label="Bottom navigation"
     >
       <div className="pointer-events-auto mx-auto w-full max-w-md">
-        <div className="grid min-h-[4.7rem] grid-cols-4 items-stretch rounded-[32px] border border-[#ff7a1a]/35 bg-[linear-gradient(180deg,rgba(20,20,20,0.88),rgba(8,8,8,0.92))] px-1.5 py-1 shadow-[0_20px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,122,26,0.06),0_0_24px_rgba(255,122,26,0.14)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[linear-gradient(180deg,rgba(22,22,22,0.74),rgba(8,8,8,0.82))]">
+        <div className="grid min-h-[3.9rem] grid-cols-4 items-stretch rounded-[28px] border border-[#ff7a1a]/35 bg-[linear-gradient(180deg,rgba(20,20,20,0.88),rgba(8,8,8,0.92))] px-1 py-0.5 shadow-[0_20px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,122,26,0.06),0_0_24px_rgba(255,122,26,0.14)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[linear-gradient(180deg,rgba(22,22,22,0.74),rgba(8,8,8,0.82))]">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`);
             return (
@@ -35,7 +35,7 @@ export default function PwaBottomNav() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 aria-label={label}
-                className="group relative flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-[26px] px-1 pb-1.5 pt-1.5 text-center transition-transform duration-200 active:scale-[0.97]"
+                className="group relative flex min-h-[3.4rem] flex-col items-center justify-center gap-1 rounded-[22px] px-1 py-1 text-center transition-transform duration-200 active:scale-[0.97]"
               >
                 <span className={`absolute inset-x-2 top-1 h-px rounded-full transition-opacity duration-200 ${active ? "bg-[#ff7a1a]/40 opacity-100" : "bg-transparent opacity-0"}`} />
                 <Icon className={`h-[18px] w-[18px] transition-colors duration-200 ${active ? "text-[#ff7a1a]" : "text-white/55 group-hover:text-white/72"}`} strokeWidth={1.8} />

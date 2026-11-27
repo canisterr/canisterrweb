@@ -20,7 +20,7 @@ export default function HomeGamesStrip() {
             href={game.href}
             prefetch={false}
             aria-label={`Play ${game.name}`}
-            className="group relative flex min-h-[82px] items-center justify-center gap-2 rounded-xl border border-[#ad9c7c] bg-[#c1b395] px-2 py-3 text-[#11100e] transition-colors hover:border-[#d46b35] hover:bg-[#b6a686] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d46b35] sm:min-h-[94px] sm:gap-3 sm:px-4"
+            className="group relative flex min-h-[64px] items-center justify-center gap-2 rounded-xl border border-[#ad9c7c] bg-[#c1b395] px-2 py-2 text-[#11100e] transition-colors hover:border-[#d46b35] hover:bg-[#b6a686] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d46b35] sm:min-h-[76px] sm:gap-3 sm:px-4"
           >
             {game.mark === "?" ? (
               <span aria-hidden="true" className="text-4xl font-black leading-none text-[#d46b35] sm:text-5xl">?</span>
