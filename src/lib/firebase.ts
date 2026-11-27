@@ -5,7 +5,7 @@ import { ensureLocalStorageHeadroom, installLocalStorageQuotaGuard } from "./sto
 
 const firebaseConfig = {
   apiKey: "AIzaSyC_RylgN_XYnCFcUo-n9vSNWddwHHzwqqU",
-  authDomain: "canisterr.com",
+  authDomain: "www.canisterr.com",
   projectId: "filmshare-72c31",
   databaseURL: "https://filmshare-72c31-default-rtdb.asia-southeast1.firebasedatabase.app",
   storageBucket: "filmshare-72c31.appspot.com",
