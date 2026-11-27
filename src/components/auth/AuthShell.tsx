@@ -12,10 +12,9 @@ export default function AuthShell({ mode, children }: { mode: "login" | "signup"
         <div className="relative hidden min-h-full overflow-hidden bg-black lg:block">
           <Image src="https://image.tmdb.org/t/p/w1280/gknAq4pAuToh1Aq5CJfVkGQkExT.jpg" alt="Dune: Part Three poster" fill sizes="43vw" className="object-cover object-center" priority />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/25 via-transparent to-black/35" />
-          <nav aria-label="Account" className="absolute -right-px top-1/2 z-10 flex w-44 -translate-y-1/2 flex-col gap-2 text-sm font-bold uppercase tracking-wide">
+          <nav aria-label="Account" className="absolute -right-px top-1/2 z-10 flex w-40 -translate-y-1/2 flex-col gap-2 text-sm font-bold uppercase tracking-wide">
             <Link href="/auth/signup" aria-current={mode === "signup" ? "page" : undefined} className={`rounded-l-full px-7 py-4 transition ${mode === "signup" ? "bg-black text-[#ff7a1a]" : "bg-black/60 text-[#f5f0de] hover:bg-black/80"}`}>Sign up</Link>
             <Link href="/auth/login" aria-current={mode === "login" ? "page" : undefined} className={`rounded-l-full px-7 py-4 transition ${mode === "login" ? "bg-black text-[#ff7a1a]" : "bg-black/60 text-[#f5f0de] hover:bg-black/80"}`}>Login</Link>
-            <Link href="/auth/forgot-password" aria-current={mode === "forgot" ? "page" : undefined} className={`rounded-l-full px-7 py-4 transition ${mode === "forgot" ? "bg-black text-[#ff7a1a]" : "bg-black/60 text-[#f5f0de] hover:bg-black/80"}`}>Forgot password</Link>
           </nav>
         </div>
         <figure className="flex h-44 shrink-0 flex-col items-center justify-center px-3 pb-5 text-center text-[#0b0b0b] min-[540px]:hidden">
@@ -32,15 +31,12 @@ export default function AuthShell({ mode, children }: { mode: "login" | "signup"
             <Image src="/logo.png" alt="" width={64} height={64} className="h-12 w-12 object-contain lg:h-16 lg:w-16" priority />
             <span>Canisterr</span>
           </div>
-          <nav aria-label="Account" className="grid grid-cols-3 rounded-full border border-white/15 bg-[#1c1c1c] p-1 text-center text-xs font-semibold sm:text-sm lg:hidden">
-            <Link href="/auth/login" aria-current={mode === "login" ? "page" : undefined} className={`rounded-full px-2 py-2.5 transition ${mode === "login" ? "bg-[#f5f0de] text-[#0b0b0b]" : "text-white/65 hover:text-white"}`}>
+          <nav aria-label="Account" className="grid grid-cols-2 rounded-full border border-white/15 bg-[#1c1c1c] p-1 text-center text-sm font-semibold lg:hidden">
+            <Link href="/auth/login" aria-current={mode === "login" ? "page" : undefined} className={`rounded-full px-4 py-2.5 transition ${mode === "login" ? "bg-[#f5f0de] text-[#0b0b0b]" : "text-white/65 hover:text-white"}`}>
               Login
             </Link>
-            <Link href="/auth/signup" aria-current={mode === "signup" ? "page" : undefined} className={`rounded-full px-2 py-2.5 transition ${mode === "signup" ? "bg-[#f5f0de] text-[#0b0b0b]" : "text-white/65 hover:text-white"}`}>
+            <Link href="/auth/signup" aria-current={mode === "signup" ? "page" : undefined} className={`rounded-full px-4 py-2.5 transition ${mode === "signup" ? "bg-[#f5f0de] text-[#0b0b0b]" : "text-white/65 hover:text-white"}`}>
               Sign up
-            </Link>
-            <Link href="/auth/forgot-password" aria-current={mode === "forgot" ? "page" : undefined} className={`rounded-full px-2 py-2.5 transition ${mode === "forgot" ? "bg-[#f5f0de] text-[#0b0b0b]" : "text-white/65 hover:text-white"}`}>
-              Forgot password
             </Link>
           </nav>
 
