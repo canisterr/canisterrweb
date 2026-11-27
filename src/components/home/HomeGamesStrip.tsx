@@ -66,8 +66,8 @@ export default function HomeGamesStrip() {
             className="group relative flex min-h-[82px] items-center justify-center gap-2 rounded-xl border border-white/15 bg-[#12110f] px-2 py-3 text-[#f5f0de] transition-colors hover:border-[#d46b35]/70 hover:bg-[#171512] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d46b35] sm:min-h-[94px] sm:gap-3 sm:px-4"
           >
             {playedToday[game.kind] && (
-              <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300 sm:right-3 sm:top-3 sm:px-2 sm:text-[10px]">
-                <Check aria-hidden="true" className="size-3" /> Played
+              <span aria-hidden="true" className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300 sm:right-3 sm:top-3">
+                <Check className="size-3.5" strokeWidth={3} />
               </span>
             )}
             {game.mark === "?" ? (
