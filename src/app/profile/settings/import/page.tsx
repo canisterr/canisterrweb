@@ -8,11 +8,12 @@ import LetterboxdMark from "@/components/LetterboxdMark";
 import { useSettingsUser } from "../settings-shared";
 import { SettingLine, SettingsGroup, SettingsMessage } from "../settings-ui";
 import { auth, db } from "@/lib/firebase";
-import { createMovieLog } from "@/lib/logs";
+import { createImportedMovieLogs } from "@/lib/logs";
 import { scheduleHonoursRecalculation } from "@/lib/honours-client";
-import { searchMovies } from "@/lib/tmdb";
+import { searchMoviesForImport } from "@/lib/tmdb";
+import { getTmdbPosterUrl } from "@/lib/performance";
 import { getAuthorizedListData } from "@/lib/authorized-list-data";
-import type { MovieLog } from "@/types";
+import type { MovieLog, TMDBMovie } from "@/types";
 
 function parseCsvLine(line: string): string[] {
   const values: string[] = [];
@@ -154,12 +155,24 @@ function downloadJsonFile(filename: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
+type PendingImportMatch = {
+  id: string;
+  title: string;
+  year: string;
+  watchedDate: string;
+  reaction: MovieLog["reaction"];
+  options: TMDBMovie[];
+  selectedId: number | null;
+  searchText: string;
+};
+
 export default function SettingsImportPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { user, loading, handleSignOut } = useSettingsUser();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [pendingMatches, setPendingMatches] = useState<PendingImportMatch[]>([]);
   const [badMaxInput, setBadMaxInput] = useState(String(DEFAULT_RATING_BOUNDS.badMax));
   const [averageMaxInput, setAverageMaxInput] = useState(String(DEFAULT_RATING_BOUNDS.averageMax));
   const [goodMaxInput, setGoodMaxInput] = useState(String(DEFAULT_RATING_BOUNDS.goodMax));
@@ -183,71 +196,153 @@ export default function SettingsImportPage() {
       const rows = parseRatingsCsv(await file.text());
       let imported = 0;
       let skipped = 0;
+      const skippedTitles: string[] = [];
+      const reviewRows: PendingImportMatch[] = [];
+      const resolvedEntries: Array<{
+        contentId: number;
+        watchedDate: string;
+        reaction: MovieLog["reaction"];
+        contentSummary: { title: string; poster_url: string | null };
+      }> = [];
+      const matchCache = new Map<string, TMDBMovie | null>();
+      const candidateCache = new Map<string, TMDBMovie[]>();
 
-      for (const row of rows) {
+      for (const [rowIndex, row] of rows.entries()) {
         const title = row.name?.trim();
         const ratingValue = parseRatingValue(row.rating);
         if (!title || ratingValue === null) {
           skipped += 1;
+          if (title) skippedTitles.push(title);
           continue;
         }
 
         const targetTitle = normalizeTitle(title);
-        const targetYear = row.year?.trim();
-        const queryCandidates = Array.from(
-          new Set(
-            [targetYear ? `${title} ${targetYear}` : "", targetYear ? `${title.replace(/\(\d{4}\)\s*$/, "").trim()} ${targetYear}` : "", title, title.replace(/\(\d{4}\)\s*$/, "").trim()].filter(Boolean)
-          )
-        );
+        const rawYear = row.year?.trim() || "";
+        const targetYear = /^\d{4}$/.test(rawYear) ? rawYear : "";
+        const matchKey = `${targetTitle}-${targetYear}`;
+        let match = matchCache.get(matchKey);
+        let candidateResults: TMDBMovie[] = candidateCache.get(matchKey) || [];
 
-        const allResults: any[] = [];
-        for (const query of queryCandidates) {
-          const results = await searchMovies(query, 1);
-          if (results.length > 0) allResults.push(...results);
+        if (!matchCache.has(matchKey)) {
+          const searchQuery = title.replace(/\(\d{4}\)\s*$/, "").trim();
+          const results = await searchMoviesForImport(searchQuery, targetYear ? Number(targetYear) : undefined);
+          candidateResults = results;
+          const exactYearMatch = results
+            .map((movie) => {
+              const movieTitle = normalizeTitle(movie.title || "");
+              const movieYear = movie.release_date?.split("-")[0] || "";
+              let score = 0;
+              if (movieTitle === targetTitle) score += 100;
+              else if (movieTitle.includes(targetTitle) || targetTitle.includes(movieTitle)) score += 50;
+              if (targetYear) score = movieYear === targetYear ? score + 1000 : -1;
+              return { movie, score };
+            })
+            .filter((entry) => entry.score >= 0)
+            .sort((a, b) => b.score - a.score);
+          match = exactYearMatch[0]?.movie || (!targetYear ? results[0] : null) || null;
+
+          // TMDB sometimes omits the release year. Retry without the year, but
+          // only accept an exact title with the requested year or no year at all.
+          if (!match && targetYear) {
+            const fallbackResults = await searchMoviesForImport(searchQuery);
+            candidateResults = Array.from(new Map([...results, ...fallbackResults].map((movie) => [movie.id, movie])).values());
+            match = fallbackResults.find((movie) => {
+              const sameTitle = normalizeTitle(movie.title || "") === targetTitle;
+              const movieYear = movie.release_date?.split("-")[0] || "";
+              return sameTitle && (!movieYear || movieYear === targetYear);
+            }) || null;
+          }
+          matchCache.set(matchKey, match);
+          candidateCache.set(matchKey, candidateResults);
         }
-
-        const uniqueResults = Array.from(new Map(allResults.map((movie) => [movie.id, movie])).values());
-        const scored = uniqueResults
-          .map((movie) => {
-            const movieTitle = normalizeTitle(movie.title || "");
-            const movieYear = movie.release_date?.split("-")[0] || "";
-            let score = 0;
-            if (movieTitle === targetTitle) score += 100;
-            else if (movieTitle.includes(targetTitle) || targetTitle.includes(movieTitle)) score += 50;
-            if (targetYear) score = movieYear === targetYear ? score + 1000 : -1;
-            return { movie, score };
-          })
-          .filter((entry) => entry.score >= 0)
-          .sort((a, b) => b.score - a.score);
-
-        const match = targetYear ? scored[0]?.movie || null : scored[0]?.movie || uniqueResults[0] || null;
         if (!match) {
           skipped += 1;
+          skippedTitles.push(title);
+          const watchedDate = isValidDateString(row.date) ? row.date : new Date().toISOString().split("T")[0];
+          reviewRows.push({
+            id: `${rowIndex}-${matchKey}`,
+            title,
+            year: targetYear,
+            watchedDate,
+            reaction: getReactionFromRating(ratingValue, ratingBounds),
+            options: candidateResults.slice(0, 8),
+            selectedId: null,
+            searchText: title,
+          });
           continue;
         }
 
         const watchedDate = isValidDateString(row.date) ? row.date : new Date().toISOString().split("T")[0];
-        await createMovieLog(
-          auth.currentUser.uid,
-          match.id,
-          "movie",
+        resolvedEntries.push({
+          contentId: match.id,
           watchedDate,
-          getReactionFromRating(ratingValue, ratingBounds),
-          "",
-          undefined,
-          undefined,
-          undefined,
-          true
-        );
+          reaction: getReactionFromRating(ratingValue, ratingBounds),
+          contentSummary: {
+            title: match.title,
+            poster_url: getTmdbPosterUrl(match.poster_path),
+          },
+        });
         imported += 1;
       }
 
-      setMessage(`Imported ${imported} row${imported === 1 ? "" : "s"}. Skipped ${skipped}.`);
+      const createdCount = await createImportedMovieLogs(auth.currentUser.uid, resolvedEntries);
+      setPendingMatches(reviewRows);
+      const unreviewableSkipped = skippedTitles.length - reviewRows.length;
+      const skippedSummary = reviewRows.length
+        ? ` ${reviewRows.length} title${reviewRows.length === 1 ? "" : "s"} need your match check below.`
+        : "";
+      const duplicateCount = imported - createdCount;
+      setMessage(`Imported ${createdCount} row${createdCount === 1 ? "" : "s"}.${duplicateCount > 0 ? ` Left ${duplicateCount} already imported row${duplicateCount === 1 ? "" : "s"} unchanged.` : ""}${unreviewableSkipped > 0 ? ` Skipped ${unreviewableSkipped} row${unreviewableSkipped === 1 ? "" : "s"} with missing title or rating.` : ""}${skippedSummary}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import CSV file.");
     } finally {
       setBusy(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const importReviewedMatches = async () => {
+    if (!auth.currentUser) return;
+    const selectedRows = pendingMatches.filter((row) => row.selectedId !== null);
+    if (!selectedRows.length) return;
+    setBusy(true);
+    setError("");
+    try {
+      const entries = selectedRows.flatMap((row) => {
+        const movie = row.options.find((option) => option.id === row.selectedId);
+        if (!movie) return [];
+        return [{
+          contentId: movie.id,
+          watchedDate: row.watchedDate,
+          reaction: row.reaction,
+          contentSummary: { title: movie.title, poster_url: getTmdbPosterUrl(movie.poster_path) },
+        }];
+      });
+      const createdCount = await createImportedMovieLogs(auth.currentUser.uid, entries);
+      setPendingMatches((current) => current.filter((row) => row.selectedId === null));
+      setMessage(`Imported ${createdCount} reviewed title${createdCount === 1 ? "" : "s"}.${createdCount < entries.length ? ` Left ${entries.length - createdCount} already imported title${entries.length - createdCount === 1 ? "" : "s"} unchanged.` : ""}`);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Could not import the reviewed titles.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const searchReviewCandidates = async (rowId: string) => {
+    const row = pendingMatches.find((item) => item.id === rowId);
+    if (!row || !row.searchText.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const results = await searchMoviesForImport(row.searchText.trim());
+      setPendingMatches((current) => current.map((item) => item.id === rowId
+        ? { ...item, options: results.slice(0, 8), selectedId: null }
+        : item));
+      if (!results.length) setError(`No movie results found for “${row.searchText.trim()}”.`);
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : "Could not search for that movie.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -459,6 +554,77 @@ export default function SettingsImportPage() {
               </div>
           </details>
         </section>
+
+        {pendingMatches.length > 0 ? (
+          <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#111111]">
+            <div className="border-b border-white/10 px-4 py-4 sm:px-6">
+              <h2 className="text-base font-semibold text-[#f5f0de]">Check these movie matches</h2>
+              <p className="mt-1 text-xs text-white/50">Compare the poster and title with your CSV before importing a match.</p>
+            </div>
+            <div className="space-y-5 p-4 sm:p-6">
+              {pendingMatches.map((row) => (
+                <div key={row.id} className="border-b border-white/[0.08] pb-5 last:border-b-0 last:pb-0">
+                  <p className="text-sm font-semibold text-[#f5f0de]">
+                    {row.title}{row.year ? <span className="ml-2 text-xs font-medium text-white/45">{row.year}</span> : null}
+                  </p>
+                  {row.options.length ? (
+                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                      {row.options.map((movie) => {
+                        const selected = row.selectedId === movie.id;
+                        const posterUrl = getTmdbPosterUrl(movie.poster_path);
+                        return (
+                          <button
+                            key={movie.id}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => setPendingMatches((current) => current.map((item) => item.id === row.id ? { ...item, selectedId: selected ? null : movie.id } : item))}
+                            className={`overflow-hidden rounded-lg border text-left transition ${selected ? "border-[#ff7a1a] ring-1 ring-[#ff7a1a]" : "border-white/10 hover:border-white/35"}`}
+                          >
+                            <div className="aspect-[2/3] bg-white/[0.04]">
+                              {posterUrl ? (
+                                <img src={posterUrl} alt={`Poster for ${movie.title}`} loading="lazy" className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full items-center justify-center px-2 text-center text-xs text-white/35">Poster unavailable</div>
+                              )}
+                            </div>
+                            <span className="block p-2">
+                              <span className="block truncate text-xs font-semibold text-[#f5f0de]">{movie.title}</span>
+                              <span className="mt-0.5 block text-[11px] text-white/45">{movie.release_date?.slice(0, 4) || "Year unknown"}</span>
+                              <span className={`mt-2 block text-[10px] font-bold uppercase tracking-wider ${selected ? "text-[#ff9b52]" : "text-white/35"}`}>{selected ? "Selected" : "Choose"}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-white/45">No poster results came back for this title, so it has been left out.</p>
+                  )}
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      value={row.searchText}
+                      onChange={(event) => setPendingMatches((current) => current.map((item) => item.id === row.id ? { ...item, searchText: event.target.value } : item))}
+                      aria-label={`Search for a poster match for ${row.title}`}
+                      placeholder="Search another movie title"
+                      className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-xs text-[#f5f0de] outline-none placeholder:text-white/30 focus:border-[#ff7a1a]"
+                    />
+                    <button type="button" onClick={() => void searchReviewCandidates(row.id)} disabled={busy || !row.searchText.trim()} className="h-9 rounded-lg border border-white/15 px-4 text-xs font-semibold text-[#f5f0de] transition hover:border-[#ff7a1a]/60 disabled:opacity-40">Search posters</button>
+                  </div>
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void importReviewedMatches()}
+                  disabled={busy || !pendingMatches.some((row) => row.selectedId !== null)}
+                  className="inline-flex h-10 items-center rounded-full bg-[#ff7a1a] px-5 text-sm font-bold text-[#101010] transition hover:bg-[#ff9142] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {`Import selected (${pendingMatches.filter((row) => row.selectedId !== null).length})`}
+                </button>
+                <button type="button" onClick={() => setPendingMatches([])} disabled={busy} className="text-xs font-semibold text-white/45 transition hover:text-[#f5f0de] disabled:opacity-50">Leave unchecked titles out</button>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <SettingsGroup title="Export">
           <SettingLine title="Export data" description="Download your data as JSON." stacked>

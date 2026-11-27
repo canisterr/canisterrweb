@@ -558,6 +558,29 @@ export async function searchMovies(query: string, page: number = 1) {
   }
 }
 
+/** One-request movie lookup for bulk CSV imports; skips per-query catalog/person searches. */
+export async function searchMoviesForImport(query: string, year?: number) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
+
+  const cacheQuery = year ? `${trimmedQuery} ${year}` : trimmedQuery;
+  const cacheKey = getSearchCacheKey("movie-import", cacheQuery, 1);
+  const cached = readBrowserCacheEntry<TMDBMovie[]>(cacheKey);
+  if (cached && !cached.isStale) return cached.value || [];
+
+  const response = await fetchTmdb("search/movie", {
+    query: trimmedQuery,
+    page: 1,
+    ...(year ? { year } : {}),
+  });
+  if (!response.ok) throw new Error("Could not search movie titles for this import.");
+
+  const data = await response.json() as TMDBSearchResponse;
+  const results = Array.isArray(data.results) ? data.results : [];
+  writeBrowserCache(cacheKey, results, SEARCH_CACHE_TTL_MS);
+  return results;
+}
+
 export async function discoverMoviesByProductionCountry(countryCode: string): Promise<TMDBMovie[]> {
   if (!/^[A-Z]{2}$/.test(countryCode)) return [];
   try {

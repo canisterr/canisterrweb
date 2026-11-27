@@ -338,6 +338,101 @@ export async function createMovieLog(
   return newLog;
 }
 
+/** Batch Letterboxd imports so per-log side effects do not fan out into reads and refreshes. */
+export async function createImportedMovieLogs(
+  userId: string,
+  entries: Array<{
+    contentId: number;
+    watchedDate: string;
+    reaction: MovieLog["reaction"];
+    contentSummary?: { title: string; poster_url: string | null };
+  }>
+): Promise<number> {
+  if (!entries.length) return 0;
+
+  const dbRef = ref(db);
+  const watchedQuery = query(ref(db, "watched_movies"), orderByChild("user_id"), equalTo(userId));
+  const logsQuery = query(ref(db, "movie_logs"), orderByChild("user_id"), equalTo(userId));
+  const [watchedSnapshot, logsSnapshot] = await Promise.all([get(watchedQuery), get(logsQuery)]);
+  const existingImportedCounts = new Map<string, number>();
+  const existingLogs = logsSnapshot.exists()
+    ? Object.values(logsSnapshot.val() as Record<string, MovieLog>)
+    : [];
+  for (const log of existingLogs) {
+    if (!isImportedRatingsCsvLog(log)) continue;
+    const key = `${log.content_id}-${log.watched_date}`;
+    existingImportedCounts.set(key, (existingImportedCounts.get(key) || 0) + 1);
+  }
+  const entriesToWrite = entries.filter((entry) => {
+    const key = `${entry.contentId}-${entry.watchedDate}`;
+    const duplicateCount = existingImportedCounts.get(key) || 0;
+    if (duplicateCount <= 0) return true;
+    existingImportedCounts.set(key, duplicateCount - 1);
+    return false;
+  });
+  if (!entriesToWrite.length) return 0;
+
+  const watchedRows = watchedSnapshot.exists()
+    ? Object.values(watchedSnapshot.val() as Record<string, { content_id?: number; content_type?: string; logged?: boolean; list_marked?: boolean; created_at?: string }>)
+    : [];
+  const watchedByKey = new Map(
+    watchedRows.map((row) => [`${row.content_type}-${row.content_id}`, row] as const)
+  );
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = {};
+
+  for (const entry of entriesToWrite) {
+    const logRef = push(ref(db, "movie_logs"));
+    const logId = logRef.key;
+    if (!logId) throw new Error("Failed to generate an imported log ID.");
+
+    const log: MovieLog = {
+      id: logId,
+      user_id: userId,
+      content_id: entry.contentId,
+      content_type: "movie",
+      watched_date: entry.watchedDate,
+      reaction: entry.reaction ?? null,
+      notes: "",
+      created_at: now,
+      updated_at: now,
+      imported_from_csv: true,
+      ...(entry.contentSummary ? { content_summary: entry.contentSummary } : {}),
+    };
+    updates[`movie_logs/${logId}`] = log;
+
+    const watchedId = `${userId}__movie__${entry.contentId}`;
+    const existing = watchedByKey.get(`movie-${entry.contentId}`);
+    watchedByKey.set(`movie-${entry.contentId}`, {
+      content_id: entry.contentId,
+      content_type: "movie",
+      logged: true,
+      list_marked: Boolean(existing?.list_marked),
+      created_at: existing?.created_at || now,
+    });
+    updates[`watched_movies/${watchedId}`] = {
+      id: watchedId,
+      user_id: userId,
+      content_id: entry.contentId,
+      content_type: "movie",
+      logged: true,
+      list_marked: Boolean(existing?.list_marked),
+      created_at: existing?.created_at || now,
+      updated_at: now,
+    };
+  }
+
+  const paths = Object.entries(updates);
+  for (let offset = 0; offset < paths.length; offset += 400) {
+    await update(dbRef, Object.fromEntries(paths.slice(offset, offset + 400)));
+  }
+
+  invalidateUserLogsCache(userId);
+  scheduleHonoursRecalculation(userId);
+  triggerTasteSignatureRefresh(userId);
+  return entriesToWrite.length;
+}
+
 /**
  * Refresh the cached Movie Matcher taste signature after a log changes.
  * Reaction, notes, and watched_date all feed the signature's weighting, so

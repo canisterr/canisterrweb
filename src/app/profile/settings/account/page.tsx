@@ -15,6 +15,8 @@ export default function SettingsAccountPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [confirmLogs, setConfirmLogs] = useState(false);
+  const [logConfirmation, setLogConfirmation] = useState("");
 
   const resetPassword = async () => {
     if (!auth.currentUser?.email) {
@@ -108,6 +110,30 @@ export default function SettingsAccountPage() {
     }
   };
 
+  const deleteAllLogs = async () => {
+    if (logConfirmation !== "DELETE" || !auth.currentUser) return;
+    setBusy(true);
+    setError("");
+    setMessage(null);
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const response = await fetch("/api/account/logs", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null) as { error?: string; deletedCount?: number } | null;
+      if (!response.ok) throw new Error(payload?.error || "Could not delete your logs.");
+      setMessage(`${payload?.deletedCount ?? 0} log${payload?.deletedCount === 1 ? "" : "s"} deleted.`);
+      setConfirmLogs(false);
+      setLogConfirmation("");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not delete your logs.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <SettingsPageFrame
       user={user}
@@ -142,7 +168,48 @@ export default function SettingsAccountPage() {
         </SettingLine>
         </SettingsGroup>
 
-        <SettingsGroup title="Danger zone">
+        <SettingsGroup>
+        <SettingLine title="Delete all logs" description="Permanently remove every movie and TV entry you have logged, along with activity on those logs." danger>
+          <button
+            type="button"
+            onClick={() => { setConfirmLogs(true); setError(""); setMessage(null); }}
+            disabled={busy}
+            className="rounded-md border border-red-500/35 px-3 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
+          >
+            Delete logs
+          </button>
+        </SettingLine>
+        {confirmLogs ? (
+          <div className="border-b border-white/10 bg-red-500/[0.04] px-4 py-4 sm:px-5">
+            <p className="text-sm font-semibold text-[#f5f0de]">This permanently deletes all your logs.</p>
+            <p className="mt-1 text-xs text-white/45">Type DELETE to confirm. Your account will stay active.</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                value={logConfirmation}
+                onChange={(event) => setLogConfirmation(event.target.value)}
+                aria-label="Type DELETE to confirm log deletion"
+                autoComplete="off"
+                className="h-10 min-w-0 flex-1 rounded-md border border-white/15 bg-black/40 px-3 text-sm text-[#f5f0de] outline-none focus:border-red-400/60"
+              />
+              <button
+                type="button"
+                onClick={() => void deleteAllLogs()}
+                disabled={busy || logConfirmation !== "DELETE"}
+                className="h-10 rounded-md border border-red-500/35 px-4 text-xs font-semibold text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {busy ? "Deleting…" : "Delete all logs"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setConfirmLogs(false); setLogConfirmation(""); }}
+                disabled={busy}
+                className="h-10 rounded-md border border-white/15 px-4 text-xs font-semibold text-white/65 transition hover:bg-white/[0.06] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
         <SettingLine title="Delete profile" description="Remove the profile and related data permanently." danger>
           <button onClick={deleteAccount} disabled={busy} className="rounded-md border border-red-500/35 px-3 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/10 disabled:opacity-50">
             Delete
