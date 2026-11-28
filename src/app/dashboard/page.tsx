@@ -567,7 +567,7 @@ export default function DashboardPage() {
       <main className="mx-auto min-h-screen w-full max-w-[860px] bg-black px-1 pb-8 pt-2 text-[#f5f0de] sm:px-4 sm:pt-4">
         {/* Search Bar */}
         <div className="mb-7 sm:mb-8">
-          <div className="relative z-30 w-full">
+          <div className="relative z-20 w-full">
             <Search className="pointer-events-none absolute left-4 top-[23px] z-20 h-[18px] w-[18px] -translate-y-1/2 text-white/40" strokeWidth={2.25} />
             <input
               ref={searchInputRef}
