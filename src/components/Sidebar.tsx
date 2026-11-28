@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "@/components/AppImage";
 import { usePathname } from "next/navigation";
 import type { User } from "@/types";
-import { ChevronRight, Clapperboard, Gamepad2, House, LibraryBig, Send } from "lucide-react";
+import { ChevronRight, Clapperboard, Gamepad2, House, LibraryBig, Send, ShieldCheck } from "lucide-react";
+import { auth } from "@/lib/firebase";
 
 interface SidebarProps {
   user: User | null;
@@ -25,6 +26,24 @@ export default function Sidebar({
   const pathname = usePathname();
   const isBrutalist = theme === "brutalist";
   const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const userId = user?.id;
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsAdmin(false);
+    const currentUser = auth.currentUser;
+    if (!userId || !currentUser || currentUser.uid !== userId) return;
+
+    void currentUser.getIdToken().then((token) => fetch("/api/admin/access", {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })).then((response) => response.ok ? response.json() as Promise<{ isAdmin?: boolean }> : { isAdmin: false })
+      .then((result) => { if (!cancelled) setIsAdmin(result.isAdmin === true); })
+      .catch(() => { if (!cancelled) setIsAdmin(false); });
+
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const isActive = (path: string) => pathname.startsWith(path);
 
@@ -46,6 +65,7 @@ export default function Sidebar({
     { href: "/share?panel=share", label: "Recommend", icon: Send },
     { href: "/logs", label: "Log", icon: Clapperboard },
   ];
+  if (isAdmin) navItems.push({ href: "/admin", label: "Studio", icon: ShieldCheck });
 
   // Sidebar classes for mobile/desktop
   const sidebarBase = isBrutalist

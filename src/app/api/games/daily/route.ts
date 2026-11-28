@@ -3,7 +3,8 @@ import { NextRequest } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { getFirebaseAdminApp, getFirebaseAdminDatabase } from "@/lib/firebase-admin";
 import { expandGameCategoryCatalogue } from "@/lib/games/category-catalogue";
-import { classifyGameTitle, GAME_CATEGORIES, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle, type PublicDailyGame } from "@/lib/games/types";
+import { buildRevealClues, classifyGameTitle, GAME_CATEGORIES, hasDocumentaryGenre, isDocumentaryGameTitle, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle, type PublicDailyGame } from "@/lib/games/types";
+import { ensureProductionCompanies } from "@/lib/games/production-companies";
 import { activeGameStreak, type GameStreak, type GameStreakKind } from "@/lib/games/streak";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +36,20 @@ function storedMovieIds(daily: Record<string, unknown> | null, titles: GameTitle
   return ids;
 }
 
+function puzzleContainsDocumentary(puzzle: Record<string, unknown> | null, documentaryIds: Set<number>, documentaryNames: Set<string>): boolean {
+  if (!puzzle) return false;
+  if (hasDocumentaryGenre(puzzle.genres)) return true;
+  if (typeof puzzle.answerTmdbId === "number" && documentaryIds.has(puzzle.answerTmdbId)) return true;
+  return Array.isArray(puzzle.pair) && puzzle.pair.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    const movie = item as Record<string, unknown>;
+    return (typeof movie.tmdbId === "number" && documentaryIds.has(movie.tmdbId))
+      || (typeof movie.title === "string" && documentaryNames.has(normalizeGameAnswer(movie.title)));
+  });
+}
+
 function createMissingDailyGames(titles: GameTitle[], category: GameCategoryId, date: string, usedIds: Set<number>, needReveal: boolean, needConnection: boolean) {
-  const pool = titles.filter((title) => title?.mediaType === "movie" && title.title && classifyGameTitle(title).includes(category) && Number(title.voteCount) >= 50 && title.releaseDate && title.releaseDate <= date);
+  const pool = titles.filter((title) => title?.mediaType === "movie" && title.title && !isDocumentaryGameTitle(title) && classifyGameTitle(title).includes(category) && Number(title.voteCount) >= 50 && title.releaseDate && title.releaseDate <= date);
   const available = pool.filter((title) => !usedIds.has(title.tmdbId));
   let reveal: Record<string, unknown> | null = null;
   const chosenIds = new Set(usedIds);
@@ -49,7 +62,6 @@ function createMissingDailyGames(titles: GameTitle[], category: GameCategoryId, 
     const categoryOffset = [...category].reduce((sum, character) => sum + character.charCodeAt(0), 0);
     const title = sorted[((day + categoryOffset) % sorted.length + sorted.length) % sorted.length];
     chosenIds.add(title.tmdbId);
-    const year = title.releaseDate.slice(0, 4);
     const lead = title.cast?.[0]?.name || null;
     reveal = {
       category, kind: "reveal", answer: title.title,
@@ -58,7 +70,7 @@ function createMissingDailyGames(titles: GameTitle[], category: GameCategoryId, 
       posterPath: title.posterPath, backdropPath: title.backdropPath, releaseDate: title.releaseDate,
       genres: title.genres, runtime: title.runtime, seasons: null, directorOrCreator: title.directorOrCreator,
       leadCast: lead,
-      clues: [title.genres.length ? `Its genres include ${title.genres.slice(0, 2).join(" and ").toLowerCase()}.` : "It is a feature film.", title.runtime ? `It runs for about ${Math.round(title.runtime / 10) * 10} minutes.` : "It was released before today.", year ? `Released in ${year}.` : "Think about the decade.", title.directorOrCreator ? `Directed by ${title.directorOrCreator}.` : "Think about who made it.", lead ? `Featuring ${lead}.` : "A lead performer appears in another film.", "Poster clue unlocked."],
+      clues: buildRevealClues(title), clueVersion: 2,
       pointsPerSolve: 25, date,
     };
   }
@@ -90,6 +102,22 @@ function createMissingDailyGames(titles: GameTitle[], category: GameCategoryId, 
 async function ensureCategoryPuzzles(db: ReturnType<typeof getFirebaseAdminDatabase>, date: string, category: GameCategoryId, allDaily: Record<string, unknown> | null, current: Record<string, unknown> | null) {
   const currentReveal = current?.reveal && typeof current.reveal === "object" ? current.reveal as Record<string, unknown> : null;
   const currentConnection = current?.connection && typeof current.connection === "object" ? current.connection as Record<string, unknown> : null;
+  const catalogue = await db.ref("games/catalogue").get();
+  let titles = Object.values((catalogue.val() || {}) as Record<string, GameTitle>);
+  if (currentReveal && currentReveal.clueVersion !== 2 && currentReveal.answerMediaType === "movie") {
+    const answerId = typeof currentReveal.answerTmdbId === "number" ? currentReveal.answerTmdbId : null;
+    const selectedTitle = titles.find((title) => title.tmdbId === answerId);
+    if (selectedTitle) {
+      const enrichedTitle = await ensureProductionCompanies(selectedTitle);
+      const clues = buildRevealClues(enrichedTitle);
+      currentReveal.clues = clues;
+      currentReveal.firstClue = clues[0];
+      currentReveal.clueVersion = 2;
+      await db.ref(`games/daily/${date}/${category}/reveal`).update({ clues, firstClue: clues[0], clueVersion: 2 });
+    }
+  }
+  const documentaryIds = new Set(titles.filter(isDocumentaryGameTitle).map((title) => title.tmdbId));
+  const documentaryNames = new Set(titles.filter(isDocumentaryGameTitle).map((title) => normalizeGameAnswer(title.title)));
   const externalIds = storedMovieIds(allDaily, [], category);
   const currentRevealId = currentReveal?.answerMediaType === "movie" && typeof currentReveal.answerTmdbId === "number" ? currentReveal.answerTmdbId : null;
   const adminReveal = currentReveal?.adminSet === true;
@@ -99,11 +127,15 @@ async function ensureCategoryPuzzles(db: ReturnType<typeof getFirebaseAdminDatab
     const pair = item as Record<string, unknown>;
     return pair.mediaType === "movie" && typeof pair.tmdbId === "number" ? [pair.tmdbId] : [];
   });
-  const replaceReveal = !adminReveal && (currentReveal?.answerMediaType === "tv" || Boolean(currentRevealId && (externalIds.has(currentRevealId) || currentConnectionIds.includes(currentRevealId))));
-  const replaceConnection = !adminConnection && ((Array.isArray(currentConnection?.pair) && currentConnection.pair.some((item) => item && typeof item === "object" && (item as Record<string, unknown>).mediaType === "tv")) || currentConnectionIds.some((id) => externalIds.has(id) || id === currentRevealId));
+  const revealAlreadyUsed = Boolean(currentRevealId && (externalIds.has(currentRevealId) || currentConnectionIds.includes(currentRevealId)));
+  const connectionHasTv = Array.isArray(currentConnection?.pair)
+    && currentConnection.pair.some((item) => item && typeof item === "object" && (item as Record<string, unknown>).mediaType === "tv");
+  const connectionAlreadyUsed = currentConnectionIds.some((id) => externalIds.has(id) || id === currentRevealId);
+  const replaceReveal = puzzleContainsDocumentary(currentReveal, documentaryIds, documentaryNames)
+    || (!adminReveal && (currentReveal?.answerMediaType === "tv" || revealAlreadyUsed));
+  const replaceConnection = puzzleContainsDocumentary(currentConnection, documentaryIds, documentaryNames)
+    || (!adminConnection && (connectionHasTv || connectionAlreadyUsed));
   if (current?.reveal && current?.connection && !replaceReveal && !replaceConnection) return current;
-  const catalogue = await db.ref("games/catalogue").get();
-  let titles = Object.values((catalogue.val() || {}) as Record<string, GameTitle>);
   const needReveal = !current?.reveal || replaceReveal;
   const needConnection = !current?.connection || replaceConnection;
   const usedIds = storedMovieIds(allDaily, titles, category);
@@ -116,6 +148,15 @@ async function ensureCategoryPuzzles(db: ReturnType<typeof getFirebaseAdminDatab
     created = create();
   }
   if ((needReveal && !created.reveal) || (needConnection && !created.connection)) return current;
+  if (needReveal && created.reveal) {
+    const answerId = Number(created.reveal.answerTmdbId);
+    const selectedTitle = titles.find((title) => title.tmdbId === answerId);
+    if (selectedTitle) {
+      const enrichedTitle = await ensureProductionCompanies(selectedTitle);
+      const clues = buildRevealClues(enrichedTitle);
+      created.reveal = { ...created.reveal, clues, firstClue: clues[0], clueVersion: 2 };
+    }
+  }
   const next = { ...(current || {}), ...(needReveal ? { reveal: created.reveal } : {}), ...(needConnection ? { connection: created.connection } : {}) };
   await db.ref(`games/daily/${date}/${category}`).transaction((stored: Record<string, unknown> | null) => {
     const reveal = stored?.reveal && typeof stored.reveal === "object" ? stored.reveal as Record<string, unknown> : null;
@@ -142,10 +183,11 @@ async function bootstrapLocalGames(date: string, requestUrl: string) {
   try { await job; } finally { bootstrapJobs.delete(date); }
 }
 
-function toPublicPuzzle(id: string, raw: Record<string, unknown>): PublicDailyGame | null {
+function toPublicPuzzle(id: string, raw: Record<string, unknown>, documentaryIds: Set<number>, documentaryNames: Set<string>): PublicDailyGame | null {
   const kind = raw.kind === "connection" ? "connection" : raw.kind === "reveal" ? "reveal" : null;
   if (!kind || typeof raw.category !== "string") return null;
   if (raw.answerMediaType === "tv") return null;
+  if (puzzleContainsDocumentary(raw, documentaryIds, documentaryNames)) return null;
   if (kind === "connection" && Array.isArray(raw.pair) && raw.pair.some((item) => item && typeof item === "object" && (item as Record<string, unknown>).mediaType === "tv")) return null;
   const clues = Array.isArray(raw.clues) ? raw.clues : [];
   return {
@@ -214,12 +256,16 @@ export async function GET(request: NextRequest) {
       }
     }
     const stored = snapshot.val() as Record<string, Record<string, unknown>> | null;
+    const catalogueSnapshot = await db.ref("games/catalogue").get();
+    const catalogueTitles = Object.values((catalogueSnapshot.val() || {}) as Record<string, GameTitle>);
+    const documentaryIds = new Set(catalogueTitles.filter(isDocumentaryGameTitle).map((title) => title.tmdbId));
+    const documentaryNames = new Set(catalogueTitles.filter(isDocumentaryGameTitle).map((title) => normalizeGameAnswer(title.title)));
     const games: Partial<Record<GameCategoryId, { reveal: PublicDailyGame | null; connection: PublicDailyGame | null }>> = {};
     for (const category of GAME_CATEGORIES) {
       const row = stored?.[category.id] as Record<string, Record<string, unknown>> | undefined;
       games[category.id] = {
-        reveal: row?.reveal ? toPublicPuzzle(`${date}:${category.id}:reveal`, row.reveal) : null,
-        connection: row?.connection ? toPublicPuzzle(`${date}:${category.id}:connection`, row.connection) : null,
+        reveal: row?.reveal ? toPublicPuzzle(`${date}:${category.id}:reveal`, row.reveal, documentaryIds, documentaryNames) : null,
+        connection: row?.connection ? toPublicPuzzle(`${date}:${category.id}:connection`, row.connection, documentaryIds, documentaryNames) : null,
       };
     }
     const sessions = (sessionsSnapshot?.val() || {}) as Record<string, Record<string, Record<string, unknown>>>;
@@ -236,7 +282,14 @@ export async function GET(request: NextRequest) {
       for (const kind of ["reveal", "connection"] as const) {
         const session = sessions[category.id]?.[kind];
         const puzzle = (stored?.[category.id] as Record<string, Record<string, unknown>> | undefined)?.[kind];
-        if (session?.complete && Number(session.attempts) > 0 && puzzle) {
+        if (session && puzzle && puzzleContainsDocumentary(puzzle, documentaryIds, documentaryNames)) {
+          delete session.answer;
+          delete session.answerTmdbId;
+          delete session.answerMediaType;
+          delete session.answerPosterPath;
+          delete session.answerProfilePath;
+        }
+        if (session?.complete && Number(session.attempts) > 0 && puzzle && !puzzleContainsDocumentary(puzzle, documentaryIds, documentaryNames)) {
           session.answer = puzzle.answer || null;
           session.answerTmdbId = puzzle.answerTmdbId || null;
           session.answerMediaType = puzzle.answerMediaType || null;

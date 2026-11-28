@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
       }
       const name = typeof item.title === "string" ? item.title : "";
       if (!name) return [];
+      if (Array.isArray(item.genre_ids) && item.genre_ids.includes(99)) return [];
       const date = String(item.release_date || "");
       return [{ id: Number(item.id), type: "movie", name, image: typeof item.poster_path === "string" ? item.poster_path : null, year: date.slice(0, 4) }];
     }).slice(0, 8);

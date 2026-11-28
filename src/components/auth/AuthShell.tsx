@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Image from "@/components/AppImage";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -6,11 +9,29 @@ export const authInputClass = "w-full rounded-none border-0 border-b border-whit
 export const authLabelClass = "block text-sm font-semibold text-[#f5f0de]";
 
 export default function AuthShell({ mode, children }: { mode: "login" | "signup" | "forgot"; children: ReactNode }) {
+  const [loginPoster, setLoginPoster] = useState({
+    title: "Dune: Part Three",
+    poster_url: "https://image.tmdb.org/t/p/w1280/gknAq4pAuToh1Aq5CJfVkGQkExT.jpg",
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/login-poster", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<{ title?: string; poster_url?: string }> : null)
+      .then((poster) => {
+        if (!cancelled && poster?.poster_url?.startsWith("https://")) {
+          setLoginPoster({ title: poster.title || "Featured film", poster_url: poster.poster_url });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <main className="min-h-dvh bg-[#ff7a1a] text-[#f5f0de] min-[540px]:bg-black">
       <div className="mx-auto flex min-h-dvh w-full max-w-[32rem] flex-col overflow-hidden bg-[#ff7a1a] min-[540px]:max-w-none min-[540px]:bg-black lg:grid lg:grid-cols-[43%_57%]">
         <div className="relative hidden min-h-full overflow-hidden bg-black lg:block">
-          <Image src="https://image.tmdb.org/t/p/w1280/gknAq4pAuToh1Aq5CJfVkGQkExT.jpg" alt="Dune: Part Three poster" fill sizes="43vw" className="object-cover object-center" priority />
+          <Image src={loginPoster.poster_url} alt={`${loginPoster.title} poster`} fill sizes="43vw" className="object-cover object-center" priority />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/25 via-transparent to-black/35" />
           <nav aria-label="Account" className="absolute -right-px top-1/2 z-10 flex w-40 -translate-y-1/2 flex-col gap-2 text-sm font-bold uppercase tracking-wide">
             <Link href="/auth/signup" aria-current={mode === "signup" ? "page" : undefined} className={`rounded-l-full px-7 py-4 transition ${mode === "signup" ? "bg-black text-[#ff7a1a]" : "bg-black/60 text-[#f5f0de] hover:bg-black/80"}`}>Sign up</Link>

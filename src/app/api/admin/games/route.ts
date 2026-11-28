@@ -2,12 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFirebaseAdminDatabase } from "@/lib/firebase-admin";
 import { getAdminIdentity } from "@/lib/admin-auth";
 import { fetchTmdb } from "@/lib/tmdb-transport";
-import { classifyGameTitle, GAME_CATEGORIES, utcGameDate, type GameCategoryId, type GameTitle } from "@/lib/games/types";
+import { buildRevealClues, classifyGameTitle, GAME_CATEGORIES, hasDocumentaryGenre, isDocumentaryGameTitle, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle } from "@/lib/games/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type DailyPuzzle = Record<string, unknown>;
+
+function isDocumentaryPuzzle(puzzle: DailyPuzzle | null | undefined, documentaryIds: Set<number>, documentaryNames: Set<string>): boolean {
+  if (!puzzle) return false;
+  if (hasDocumentaryGenre(puzzle.genres)) return true;
+  if (typeof puzzle.answerTmdbId === "number" && documentaryIds.has(puzzle.answerTmdbId)) return true;
+  return Array.isArray(puzzle.pair) && puzzle.pair.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    const movie = item as Record<string, unknown>;
+    return (typeof movie.tmdbId === "number" && documentaryIds.has(movie.tmdbId))
+      || (typeof movie.title === "string" && documentaryNames.has(normalizeGameAnswer(movie.title)));
+  });
+}
 
 function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -31,13 +43,14 @@ async function getMovie(id: number): Promise<GameTitle> {
   if (!name) throw new Error("That movie could not be found.");
   const genres = (Array.isArray(raw.genres) ? raw.genres as Array<Record<string, unknown>> : []).map((genre) => asText(genre.name)).filter(Boolean);
   const director = crew.find((person) => person.job === "Director");
+  const productionCompanies = (Array.isArray(raw.production_companies) ? raw.production_companies as Array<Record<string, unknown>> : []).map((company) => asText(company.name)).filter(Boolean);
   const productionCountries = (Array.isArray(raw.production_countries) ? raw.production_countries as Array<Record<string, unknown>> : []).map((country) => asText(country.iso_3166_1)).filter(Boolean);
   return {
     key: `movie_${id}`, tmdbId: id, mediaType: "movie", title: name,
     originalTitle: asText(raw.original_title) || name,
     aliases: [...new Set(altTitles.map((item) => asText(item.title)).filter(Boolean))],
     originalLanguage: asText(raw.original_language), productionCountries,
-    releaseDate: asText(raw.release_date), genres,
+    releaseDate: asText(raw.release_date), genres, productionCompanies,
     runtime: typeof raw.runtime === "number" ? raw.runtime : null, seasons: null,
     cast: cast.slice(0, 30).flatMap((person) => {
       const personName = asText(person.name); const personId = asNumber(person.id);
@@ -53,8 +66,9 @@ async function resolveMovie(id: number): Promise<GameTitle> {
   const db = getFirebaseAdminDatabase();
   const snapshot = await db.ref(`games/catalogue/movie_${id}`).get();
   const saved = snapshot.val() as GameTitle | null;
-  if (saved?.title && saved.cast?.length && saved.genres?.length) return saved;
+  if (saved?.title && saved.cast?.length && saved.genres?.length && !isDocumentaryGameTitle(saved)) return saved;
   const movie = await getMovie(id);
+  if (isDocumentaryGameTitle(movie)) throw new Error("Documentaries can’t be scheduled in games.");
   await db.ref(`games/catalogue/movie_${id}`).set(movie);
   return movie;
 }
@@ -68,22 +82,14 @@ function makePuzzle(date: string, category: GameCategoryId, kind: "reveal" | "co
   if (kind === "reveal") {
     const movie = movies[0];
     const lead = movie.cast[0]?.name || null;
-    const year = movie.releaseDate.slice(0, 4);
-    const clues = [
-      movie.genres.length ? `Its genres include ${movie.genres.slice(0, 2).join(" and ").toLowerCase()}.` : "It is a feature film.",
-      movie.runtime ? `It runs for about ${Math.round(movie.runtime / 10) * 10} minutes.` : "Think about its story and setting.",
-      year ? `Released in ${year}.` : "Think about when it reached cinemas.",
-      movie.directorOrCreator ? `Directed by ${movie.directorOrCreator}.` : "Think about the filmmakers behind it.",
-      lead ? `Featuring ${lead}.` : "Think about its leading performers.",
-      "Poster clue unlocked.",
-    ];
+    const clues = buildRevealClues(movie);
     return {
       category, kind, answer: movie.title,
       acceptedAnswers: [...new Set([movie.title, movie.originalTitle, ...movie.aliases].filter(Boolean))],
       answerTmdbId: movie.tmdbId, answerMediaType: "movie", answerPosterPath: movie.posterPath,
       posterPath: movie.posterPath, backdropPath: movie.backdropPath, releaseDate: movie.releaseDate,
       genres: movie.genres, runtime: movie.runtime, seasons: null, directorOrCreator: movie.directorOrCreator,
-      leadCast: lead, clues, firstClue: clues[0], pointsPerSolve: 25, date, adminSet: true,
+      leadCast: lead, clues, firstClue: clues[0], clueVersion: 2, pointsPerSolve: 25, date, adminSet: true,
     };
   }
   const actors = sharedCast(movies[0], movies[1]);
@@ -125,8 +131,19 @@ export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get("category") || "english";
   if (!validDate(date) || !GAME_CATEGORIES.some((item) => item.id === category)) return NextResponse.json({ error: "Choose a valid date and cinema." }, { status: 400 });
   try {
-    const row = (await getFirebaseAdminDatabase().ref(`games/daily/${date}/${category}`).get()).val() as Record<string, DailyPuzzle> | null;
-    return NextResponse.json({ date, category, games: { reveal: row?.reveal || null, connection: row?.connection || null } }, { headers: { "Cache-Control": "private, no-store" } });
+    const db = getFirebaseAdminDatabase();
+    const [rowSnapshot, catalogueSnapshot] = await Promise.all([
+      db.ref(`games/daily/${date}/${category}`).get(),
+      db.ref("games/catalogue").get(),
+    ]);
+    const row = rowSnapshot.val() as Record<string, DailyPuzzle> | null;
+    const titles = Object.values((catalogueSnapshot.val() || {}) as Record<string, GameTitle>);
+    const documentaryIds = new Set(titles.filter(isDocumentaryGameTitle).map((movie) => movie.tmdbId));
+    const documentaryNames = new Set(titles.filter(isDocumentaryGameTitle).map((movie) => normalizeGameAnswer(movie.title)));
+    return NextResponse.json({ date, category, games: {
+      reveal: isDocumentaryPuzzle(row?.reveal, documentaryIds, documentaryNames) ? null : row?.reveal || null,
+      connection: isDocumentaryPuzzle(row?.connection, documentaryIds, documentaryNames) ? null : row?.connection || null,
+    } }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Could not load the scheduled games." }, { status: 503 });
   }
@@ -146,6 +163,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const movies = await Promise.all((ids as number[]).map(resolveMovie));
+    if (movies.some(isDocumentaryGameTitle)) return NextResponse.json({ error: "Documentaries can’t be scheduled in games." }, { status: 400 });
     const categoryId = category as GameCategoryId;
     if (movies.some((movie) => !classifyGameTitle(movie).includes(categoryId))) {
       return NextResponse.json({ error: "One or more movies do not belong to this cinema category." }, { status: 400 });

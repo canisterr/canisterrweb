@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getFirebaseAdminDatabase } from "@/lib/firebase-admin";
 import { fetchTmdb } from "@/lib/tmdb-transport";
-import { classifyGameTitle, GAME_CATEGORIES, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle } from "@/lib/games/types";
+import { buildRevealClues, classifyGameTitle, GAME_CATEGORIES, hasDocumentaryGenre, isDocumentaryGameTitle, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle } from "@/lib/games/types";
+import { ensureProductionCompanies } from "@/lib/games/production-companies";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -49,6 +50,7 @@ function mapDetails(mediaType: "movie" | "tv", raw: Record<string, any>): GameTi
     originalLanguage: String(raw.original_language || ""),
     productionCountries: [...(raw.production_countries || []).map((country: any) => String(country.iso_3166_1 || "")), ...(raw.origin_country || [])].filter(Boolean),
     releaseDate, genres, runtime: mediaType === "movie" && typeof raw.runtime === "number" ? raw.runtime : null,
+    productionCompanies: (raw.production_companies || []).map((company: Record<string, unknown>) => String(company.name || "")).filter(Boolean),
     seasons: mediaType === "tv" && typeof raw.number_of_seasons === "number" ? raw.number_of_seasons : null,
     cast, directorOrCreator: typeof director === "string" ? director : null,
     posterPath: typeof raw.poster_path === "string" ? raw.poster_path : null,
@@ -74,23 +76,15 @@ function movieFallback(mediaType: "movie" | "tv", item: Record<string, any>, cou
 }
 
 function dailyReveal(title: GameTitle, category: GameCategoryId, date: string) {
-  const year = title.releaseDate.slice(0, 4);
   const lead = title.cast[0]?.name || null;
-  const clues = [
-    title.genres.length ? `Its genres include ${title.genres.slice(0, 2).join(" and ").toLowerCase()}.` : "It is a feature film.",
-    title.runtime ? `It runs for about ${Math.round(title.runtime / 10) * 10} minutes.` : "It was released before today.",
-    year ? `Released in ${year}.` : "Think about the decade.",
-    title.directorOrCreator ? `Directed or created by ${title.directorOrCreator}.` : "Think about who made it.",
-    lead ? `Featuring ${lead}.` : "A lead performer appears in another popular title.",
-    "Poster clue unlocked.",
-  ];
+  const clues = buildRevealClues(title);
   return {
     category, kind: "reveal", answer: title.title,
     acceptedAnswers: [...new Set([title.title, title.originalTitle, ...title.aliases].filter(Boolean))],
     answerTmdbId: title.tmdbId, answerMediaType: title.mediaType, answerPosterPath: title.posterPath,
     posterPath: title.posterPath, backdropPath: title.backdropPath, releaseDate: title.releaseDate,
     genres: title.genres, runtime: title.runtime, seasons: title.seasons, directorOrCreator: title.directorOrCreator,
-    leadCast: lead, clues, pointsPerSolve: 25, date,
+    leadCast: lead, clues, firstClue: clues[0], clueVersion: 2, pointsPerSolve: 25, date,
   };
 }
 
@@ -140,6 +134,7 @@ export async function GET(request: Request) {
         sort_by: "vote_average.desc",
         "vote_count.gte": 100,
         "primary_release_date.lte": targetDate,
+        without_genres: 99,
         page,
       };
       if (!broadBootstrap) {
@@ -150,6 +145,7 @@ export async function GET(request: Request) {
       discoveries += 1;
       const rows = (response.results || []) as Record<string, any>[];
       for (const row of rows.slice(0, discoveryLimit)) {
+        if (Array.isArray(row.genre_ids) && row.genre_ids.includes(99)) continue;
         const key = `${mediaType}_${Number(row.id)}`;
         if (catalog[key] && Date.now() - Number(catalog[key].updatedAt || 0) < 45 * 86_400_000) continue;
         try {
@@ -165,9 +161,14 @@ export async function GET(request: Request) {
         }
       }
     }
+    const documentaryIds = new Set(Object.values(catalog).filter(isDocumentaryGameTitle).map((title) => title.tmdbId));
+    const documentaryNames = new Set(Object.values(catalog).filter(isDocumentaryGameTitle).map((title) => normalizeGameAnswer(title.title)));
+    for (const [key, title] of Object.entries(catalog)) {
+      if (isDocumentaryGameTitle(title)) delete catalog[key];
+    }
     await db.ref("games/catalogue").set(catalog);
 
-    const allTitles = Object.values(catalog).filter((title) => title && title.title && title.tmdbId);
+    const allTitles = Object.values(catalog).filter((title) => title && title.title && title.tmdbId && !isDocumentaryGameTitle(title));
     const dailyRef = db.ref(`games/daily/${targetDate}`);
     const existingDaily = await dailyRef.get();
     const existingGames = (existingDaily.val() || {}) as Record<string, Record<string, unknown>>;
@@ -204,7 +205,7 @@ export async function GET(request: Request) {
         const offset = [...category.id].reduce((sum, character) => sum + character.charCodeAt(0), 0);
         const day = Math.floor(Date.parse(`${targetDate}T00:00:00Z`) / 86_400_000);
         const selected = candidates[(day + offset) % candidates.length];
-        generated[category.id] = { reveal: dailyReveal(selected, category.id, targetDate) };
+        generated[category.id] = { reveal: dailyReveal(await ensureProductionCompanies(selected), category.id, targetDate) };
         usedMovieIds.add(selected.tmdbId);
       }
       const connectionPool = pool.filter((title) => title.cast.length >= 2 && !usedMovieIds.has(title.tmdbId));
@@ -226,8 +227,15 @@ export async function GET(request: Request) {
     for (const [category, existing] of Object.entries(existingGames)) {
       const oldReveal = existing.reveal && typeof existing.reveal === "object" ? existing.reveal as Record<string, unknown> : null;
       const oldConnection = existing.connection && typeof existing.connection === "object" ? existing.connection as Record<string, unknown> : null;
-      const keepReveal = oldReveal?.answerMediaType === "movie";
-      const keepConnection = Array.isArray(oldConnection?.pair) && oldConnection.pair.every((item) => item && typeof item === "object" && (item as Record<string, unknown>).mediaType === "movie");
+      const revealId = typeof oldReveal?.answerTmdbId === "number" ? oldReveal.answerTmdbId : null;
+      const keepReveal = oldReveal?.answerMediaType === "movie" && !hasDocumentaryGenre(oldReveal.genres) && !(revealId && documentaryIds.has(revealId));
+      const keepConnection = Array.isArray(oldConnection?.pair) && oldConnection.pair.every((item) => {
+        if (!item || typeof item !== "object") return false;
+        const movie = item as Record<string, unknown>;
+        if (movie.mediaType !== "movie") return false;
+        if (typeof movie.tmdbId === "number" && documentaryIds.has(movie.tmdbId)) return false;
+        return typeof movie.title !== "string" || !documentaryNames.has(normalizeGameAnswer(movie.title));
+      });
       mergedGames[category] = { ...(mergedGames[category] || {}), ...(keepReveal ? { reveal: oldReveal } : {}), ...(keepConnection ? { connection: oldConnection } : {}) };
     }
     await dailyRef.set(mergedGames);

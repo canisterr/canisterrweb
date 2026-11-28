@@ -22,6 +22,7 @@ export type GameTitle = {
   productionCountries: string[];
   releaseDate: string;
   genres: string[];
+  productionCompanies?: string[];
   runtime: number | null;
   seasons: number | null;
   cast: Array<{ id: number; name: string; popularity: number; profilePath: string | null }>;
@@ -33,6 +34,36 @@ export type GameTitle = {
   voteAverage?: number;
   updatedAt: number;
 };
+
+export function buildRevealClues(title: Pick<GameTitle, "productionCompanies" | "genres" | "releaseDate" | "cast" | "directorOrCreator">): string[] {
+  const actors = [...new Set(title.cast.map((person) => person.name).filter(Boolean))];
+  const company = title.productionCompanies?.find(Boolean);
+  const year = title.releaseDate.slice(0, 4);
+  return [
+    company ? `Production house: ${company}.` : "Production house isn’t listed in the film credits.",
+    title.genres.length ? `Genre: ${title.genres[0].toLowerCase()}.` : "Its genre isn’t listed in the film credits.",
+    year ? `Released in ${year}.` : "Think about when it was released.",
+    actors[0] ? `Featuring ${actors[0]}.` : "Think about one of its leading performers.",
+    title.directorOrCreator ? `Directed by ${title.directorOrCreator}.` : "Think about who directed it.",
+    actors[1] ? `Also featuring ${actors[1]}.` : "Another credited performer appears in the film.",
+  ];
+}
+
+export function hasDocumentaryGenre(genres: unknown): boolean {
+  return Array.isArray(genres) && genres.some((genre) => {
+    if (genre === 99) return true;
+    const name = typeof genre === "string"
+      ? genre
+      : genre && typeof genre === "object" && "name" in genre && typeof genre.name === "string"
+        ? genre.name
+        : "";
+    return name.trim().toLowerCase() === "documentary";
+  });
+}
+
+export function isDocumentaryGameTitle(title: Pick<GameTitle, "genres"> | null | undefined): boolean {
+  return hasDocumentaryGenre(title?.genres);
+}
 
 export type PublicDailyGame = {
   id: string;

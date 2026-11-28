@@ -15,11 +15,13 @@ function normalizeTitle(value: unknown): FeaturedTitle | null {
   const media_type = item.media_type === "tv" ? "tv" : item.media_type === "movie" ? "movie" : null;
   const media_id = Number(item.media_id);
   const poster_url = typeof item.poster_url === "string" ? item.poster_url.trim() : "";
+  const frame_url = typeof item.frame_url === "string" ? item.frame_url.trim() : "";
   if (!title || !media_type || !Number.isSafeInteger(media_id) || media_id <= 0 || href !== `/${media_type}/${media_id}`) return null;
   if (poster_url && !poster_url.startsWith("https://")) return null;
+  if (frame_url && !frame_url.startsWith("https://")) return null;
   const releaseYear = typeof item.release_year === "string" ? item.release_year.slice(0, 4) : "";
   const note = typeof item.note === "string" ? item.note.trim().slice(0, 160) : "";
-  return { title, href, poster_url, media_type, media_id, ...(releaseYear ? { release_year: releaseYear } : {}), ...(note ? { note } : {}) };
+  return { title, href, poster_url, media_type, media_id, ...(typeof item.show_in_preview === "boolean" ? { show_in_preview: item.show_in_preview } : {}), ...(frame_url ? { frame_url } : {}), ...(releaseYear ? { release_year: releaseYear } : {}), ...(note ? { note } : {}) };
 }
 
 function isIsoDate(value: string): boolean {
@@ -54,8 +56,9 @@ export async function POST(request: Request) {
   const description = typeof body.description === "string" ? body.description.trim().slice(0, 280) : "";
   const expiresAt = typeof body.expires_at === "string" && body.expires_at ? body.expires_at : "";
   const items = Array.isArray(body.items) ? body.items.map(normalizeTitle) : [];
+  const previewCount = items.filter((item) => item?.show_in_preview).length;
   const validExpiry = !expiresAt || isIsoDate(expiresAt);
-  if (!title || !validExpiry || !Array.isArray(body.items) || items.length < 1 || items.length > 50 || items.some((item) => !item)) {
+  if (!title || !validExpiry || !Array.isArray(body.items) || items.length < 1 || items.length > 50 || items.some((item) => !item) || previewCount > 3) {
     return NextResponse.json({ error: "Add a title, an optional valid expiry date, and between 1 and 50 movie or TV picks." }, { status: 400 });
   }
   try {

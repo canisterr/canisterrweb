@@ -20,7 +20,7 @@ export default function HomeGamesStrip() {
             href={game.href}
             prefetch={false}
             aria-label={`Play ${game.name}`}
-            className="group relative flex min-h-[64px] items-center justify-center gap-2 rounded-xl border border-[#ad9c7c] bg-[#c1b395] px-2 py-2 text-[#11100e] transition-colors hover:border-[#d46b35] hover:bg-[#b6a686] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d46b35] sm:min-h-[76px] sm:gap-3 sm:px-4"
+            className="group relative flex min-h-[64px] items-center justify-center gap-2 rounded-xl border border-[#ad9c7c] bg-[#c1b395] px-2 py-2 text-black transition-colors hover:border-[#d46b35] hover:bg-[#b6a686] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d46b35] sm:min-h-[76px] sm:gap-3 sm:px-4"
           >
             {game.mark === "?" ? (
               <span aria-hidden="true" className="text-4xl font-black leading-none text-[#d46b35] sm:text-5xl">?</span>
@@ -31,7 +31,7 @@ export default function HomeGamesStrip() {
                 {Array.from({ length: 9 }, (_, index) => <i key={index} className={`border border-[#d46b35] ${index === 4 ? "bg-[#d46b35]" : "bg-transparent"}`} />)}
               </span>
             )}
-            <span className="text-center text-[11px] font-bold leading-tight text-[#11100e] sm:text-sm">{game.name}</span>
+            <span className="text-center text-[11px] font-extrabold leading-tight text-black sm:text-sm">{game.name}</span>
           </Link>
         ))}
       </div>

@@ -4,6 +4,8 @@ export type FeaturedTitle = {
   poster_url: string;
   media_type: "movie" | "tv";
   media_id: number;
+  show_in_preview?: boolean;
+  frame_url?: string;
   release_year?: string;
   note?: string;
 };

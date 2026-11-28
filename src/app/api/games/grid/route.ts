@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getAuth } from "firebase-admin/auth";
 import { getFirebaseAdminApp, getFirebaseAdminDatabase } from "@/lib/firebase-admin";
 import { expandGameCategoryCatalogue } from "@/lib/games/category-catalogue";
-import { classifyGameTitle, GAME_CATEGORIES, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle } from "@/lib/games/types";
+import { classifyGameTitle, GAME_CATEGORIES, hasDocumentaryGenre, isDocumentaryGameTitle, normalizeGameAnswer, utcGameDate, type GameCategoryId, type GameTitle } from "@/lib/games/types";
 import { recordGameStreak } from "@/lib/games/streak";
 import { fetchTmdb } from "@/lib/tmdb-transport";
 
@@ -16,7 +16,7 @@ async function getViewerId(request: NextRequest): Promise<string | null> {
   try { return (await getAuth(getFirebaseAdminApp()).verifyIdToken(token)).uid; } catch { return null; }
 }
 
-type CellAnswer = { key: string; title: string; aliases: string[]; posterPath: string | null; tmdbId: number; mediaType: "movie" | "tv" };
+type CellAnswer = { key: string; title: string; aliases: string[]; posterPath: string | null; tmdbId: number; mediaType: "movie" | "tv"; genres?: string[] };
 type GridSecret = { id: string; category: GameCategoryId; difficulty: string; rows: string[]; rowProfiles?: Array<string | null>; rowActorIds?: Array<number | null>; columns: string[]; cells: CellAnswer[][]; uniqueAnswers: boolean; mode: "matrix" | "clue-cells"; cellClues?: Array<{ actor: string; actorId?: number; actorProfilePath: string | null; genre: string }>; createdAt: number };
 type GridMovie = { key: string; title: string; posterPath: string | null; tmdbId: number; mediaType: "movie"; genres: string[]; actors: Array<{ id: number; name: string }> };
 
@@ -87,7 +87,7 @@ function solveDistinct(cells: CellAnswer[][]): CellAnswer[] | null {
 }
 
 function toAnswer(title: GameTitle): CellAnswer {
-  return { key: title.key, title: title.title, aliases: [title.title, title.originalTitle, ...title.aliases].filter(Boolean), posterPath: title.posterPath, tmdbId: title.tmdbId, mediaType: title.mediaType };
+  return { key: title.key, title: title.title, aliases: [title.title, title.originalTitle, ...title.aliases].filter(Boolean), posterPath: title.posterPath, tmdbId: title.tmdbId, mediaType: title.mediaType, genres: title.genres };
 }
 
 function createGrid(titles: GameTitle[], category: GameCategoryId, difficulty: "easy" | "medium" | "hard", usedIds: Set<number>): Omit<GridSecret, "id" | "createdAt" | "category" | "difficulty"> | null {
@@ -96,7 +96,7 @@ function createGrid(titles: GameTitle[], category: GameCategoryId, difficulty: "
     !usedIds.has(title.tmdbId) &&
     Array.isArray(title?.cast) && title.cast.length > 0 &&
     Array.isArray(title?.genres) && title.genres.length > 0 &&
-    !title.genres.some((genre) => genre.trim().toLowerCase() === "documentary") &&
+    !isDocumentaryGameTitle(title) &&
     Array.isArray(title?.productionCountries) &&
     classifyGameTitle(title).includes(category) && Number(title.voteCount) >= 50 && Boolean(title.releaseDate) && title.releaseDate <= utcGameDate()
   );
@@ -198,6 +198,12 @@ export async function POST(request: NextRequest) {
     if (!snapshot.exists()) return NextResponse.json({ error: "This grid expired. Start a new one." }, { status: 404 });
     const puzzle = snapshot.val() as GridSecret;
     if (Date.now() - puzzle.createdAt > 2 * 60 * 60 * 1000) return NextResponse.json({ error: "This grid expired. Start a new one." }, { status: 410 });
+    const answerIds = new Set(puzzle.cells.flat().map((answer) => answer.tmdbId));
+    const catalogue = Object.values(((await db.ref("games/catalogue").get()).val() || {}) as Record<string, GameTitle>);
+    const documentaryIds = new Set(catalogue.filter(isDocumentaryGameTitle).map((title) => title.tmdbId));
+    if (puzzle.cells.flat().some((answer) => !Array.isArray(answer.genres) || hasDocumentaryGenre(answer.genres) || documentaryIds.has(answer.tmdbId)) || [...answerIds].some((id) => documentaryIds.has(id))) {
+      return NextResponse.json({ error: "This grid included an unavailable title. Start a new one." }, { status: 410 });
+    }
     const chosenMovies = await Promise.all([...new Set(body.movieIds as number[])].map(async (tmdbId) => [tmdbId, await loadGridMovie(tmdbId).catch(() => null)] as const));
     const moviesById = new Map(chosenMovies);
     const used = new Set<string>();
@@ -208,6 +214,7 @@ export async function POST(request: NextRequest) {
       const actor = clue?.actor || puzzle.rows[Math.floor(index / 3)];
       const genre = clue?.genre || puzzle.columns[index % 3];
       const matchesClues = Boolean(movie && actor && genre &&
+        !movie.genres.some((name) => normalizeGameAnswer(name) === "documentary") &&
         movie.actors.some((person) => (actorId ? person.id === actorId : normalizeGameAnswer(person.name) === normalizeGameAnswer(actor))) &&
         movie.genres.some((name) => normalizeGameAnswer(name) === normalizeGameAnswer(genre)));
       const correct = Boolean(matchesClues && (!puzzle.uniqueAnswers || !used.has(movie!.key)));

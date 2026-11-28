@@ -1,6 +1,6 @@
 import { getFirebaseAdminDatabase } from "@/lib/firebase-admin";
 import { fetchTmdb } from "@/lib/tmdb-transport";
-import { GAME_CATEGORIES, utcGameDate, type GameCategoryId, type GameTitle } from "./types";
+import { GAME_CATEGORIES, hasDocumentaryGenre, isDocumentaryGameTitle, utcGameDate, type GameCategoryId, type GameTitle } from "./types";
 
 type MovieDetails = {
   credits?: { cast?: Array<Record<string, unknown>>; crew?: Array<Record<string, unknown>> };
@@ -20,6 +20,7 @@ export async function expandGameCategoryCatalogue(category: GameCategoryId, exis
   const discover = await fetchTmdb("discover/movie", {
     sort_by: "vote_average.desc", "vote_count.gte": 100,
     "primary_release_date.lte": utcGameDate(),
+    without_genres: 99,
     with_original_language: config.language,
     ...(config.country ? { with_origin_country: config.country } : {}), page: 1,
   });
@@ -31,10 +32,11 @@ export async function expandGameCategoryCatalogue(category: GameCategoryId, exis
     if (!Number.isFinite(id) || id < 1) return null;
     const key = `${mediaType}_${id}`;
     const cached = existing.find((title) => title.key === key);
-    if (cached?.cast?.length && cached.genres?.length) return cached;
+    if (cached?.cast?.length && cached.genres?.length && !isDocumentaryGameTitle(cached)) return cached;
     const response = await fetchTmdb(`${mediaType}/${id}`, { append_to_response: "credits,alternative_titles" });
-    if (!response.ok) return cached || null;
+    if (!response.ok) return cached && !isDocumentaryGameTitle(cached) ? cached : null;
     const raw = await response.json() as MovieDetails;
+    if (hasDocumentaryGenre(raw.genres)) return null;
     const credits = raw.credits || {};
     const cast = (credits.cast || []).slice(0, 12).map((person) => ({
       id: number(person.id), name: text(person.name), popularity: number(person.popularity),
@@ -55,6 +57,7 @@ export async function expandGameCategoryCatalogue(category: GameCategoryId, exis
       productionCountries: [...(raw.production_countries || []).map((country) => text(country.iso_3166_1)), ...(raw.origin_country || [])].filter(Boolean),
       releaseDate,
       genres: (raw.genres || []).map((genre) => text(genre.name)).filter(Boolean),
+      productionCompanies: (Array.isArray(raw.production_companies) ? raw.production_companies : []).map((company) => text(company.name)).filter(Boolean),
       runtime: typeof raw.runtime === "number" ? raw.runtime : null,
       seasons: null,
       cast, directorOrCreator,
@@ -63,7 +66,12 @@ export async function expandGameCategoryCatalogue(category: GameCategoryId, exis
       popularity: number(raw.popularity, number(row.popularity)), voteCount: number(raw.vote_count, number(row.vote_count)), voteAverage: number(raw.vote_average, number(row.vote_average)), updatedAt: Date.now(),
     };
   }));
-  const merged = new Map(existing.map((title) => [title.key, title]));
+  const documentaryKeys = existing.filter(isDocumentaryGameTitle).map((title) => title.key);
+  if (documentaryKeys.length) {
+    const removals = Object.fromEntries(documentaryKeys.map((key) => [key, null]));
+    await getFirebaseAdminDatabase().ref("games/catalogue").update(removals);
+  }
+  const merged = new Map(existing.filter((title) => !isDocumentaryGameTitle(title)).map((title) => [title.key, title]));
   const updates: Record<string, GameTitle> = {};
   for (const title of additions) if (title?.title) { merged.set(title.key, title); updates[title.key] = title; }
   if (Object.keys(updates).length) await getFirebaseAdminDatabase().ref("games/catalogue").update(updates);
