@@ -902,6 +902,17 @@ export async function addToWatchlist(
   }
 }
 
+export async function setWatchlistCountdown(logId: string, countdownDate: string | null): Promise<void> {
+  const snapshot = await get(ref(db, `movie_logs/${logId}`));
+  if (!snapshot.exists() || snapshot.val()?.watch_later !== true) {
+    throw new Error("This tracked title is no longer on the Watchlist.");
+  }
+  if (countdownDate && (!/^\d{4}-\d{2}-\d{2}$/.test(countdownDate) || countdownDate <= new Date().toISOString().slice(0, 10))) {
+    throw new Error("Choose a future release date for the countdown.");
+  }
+  await updateMovieLog(logId, { countdown_date: countdownDate || undefined });
+}
+
 export async function removeFromWatchlist(log: Pick<MovieLog, "id">): Promise<void> {
   const snapshot = await get(ref(db, `movie_logs/${log.id}`));
   const userId = snapshot.exists() ? (snapshot.val() as MovieLog).user_id : null;

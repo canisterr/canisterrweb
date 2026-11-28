@@ -11,6 +11,7 @@ import ReleaseDay from "@/components/home/ReleaseDay";
 import AdminFeaturedLists from "@/components/home/AdminFeaturedLists";
 import HomeGamesStrip from "@/components/home/HomeGamesStrip";
 import HomeStatsBento from "@/components/home/HomeStatsBento";
+import CountdownBar from "@/components/home/CountdownBar";
 import NewUserGuide from "@/components/home/NewUserGuide";
 import ExploreLists from "@/components/home/ExploreLists";
 import { User, Content, MovieLog, MovieLogWithContent, TMDBPersonSearchResult } from "@/types";
@@ -561,12 +562,14 @@ export default function DashboardPage() {
       searching ||
       searchFilter === "accounts");
   const hasFriendActivity = friendActivity.length > 0;
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const hasCountdown = Boolean(ownLogs?.some((log) => typeof log.countdown_date === "string" && log.countdown_date > todayDate));
 
   return (
     <PageLayout user={user} onSignOut={handleSignOut} theme="brutalist">
       <main className="mx-auto min-h-screen w-full max-w-[860px] bg-black px-1 pb-8 pt-2 text-[#f5f0de] sm:px-4 sm:pt-4">
         {/* Search Bar */}
-        <div className="mb-7 sm:mb-8">
+        <div className={`${hasCountdown ? "mb-3" : "mb-7 sm:mb-8"}`}>
           <div className="relative z-20 w-full">
             <Search className="pointer-events-none absolute left-4 top-[23px] z-20 h-[18px] w-[18px] -translate-y-1/2 text-white/40" strokeWidth={2.25} />
             <input
@@ -858,6 +861,7 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        {ownLogs && <CountdownBar logs={ownLogs} />}
         {/* Recently Watched Section (Current User) removed as requested */}
 
         {!user || (ownLogs !== null && !ownLogs.some((log) => !log.watch_later && Boolean(log.watched_date)) && friendActivityStatus === "ready" && (!hasFriendActivity || showNewUserPreview)) ? <NewUserGuide /> : null}

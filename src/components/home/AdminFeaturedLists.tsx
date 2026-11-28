@@ -128,7 +128,6 @@ export default function AdminFeaturedLists() {
     {list && renderList(list)}
     {lists.length > 1 && <nav className="mt-2 flex items-center justify-center gap-2" aria-label="Choose a featured list">
       {lists.map((item, index) => <button key={item.id} type="button" onClick={() => setActiveIndex(index)} aria-label={`Show list ${index + 1}: ${item.title}`} aria-current={activeIndex === index ? "true" : undefined} className={`h-1.5 rounded-full transition-all duration-300 ${activeIndex === index ? "w-5 bg-[#ff7a1a]" : "w-1.5 bg-white/30 hover:bg-white/60"}`} />)}
-      <span className="ml-1 text-[10px] tabular-nums text-white/45">{String(activeIndex + 1).padStart(2, "0")} / {String(lists.length).padStart(2, "0")}</span>
     </nav>}
   </section>;
 }

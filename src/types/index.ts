@@ -269,6 +269,7 @@ export interface MovieLog {
   mood?: string; // How they felt (e.g., "happy", "sad", "excited")
   watch_later?: boolean; // For watchlist - movie to watch later (not watched yet)
   release_date_snapshot?: string | null;
+  countdown_date?: string;
   title_snapshot?: string;
   poster_url_snapshot?: string | null;
   release_notify?: boolean;

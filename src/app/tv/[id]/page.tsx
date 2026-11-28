@@ -5,7 +5,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import { ArrowLeft, Plus, Share2 } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, Plus, Share2 } from "lucide-react";
 import PageLayout from "@/components/PageLayout";
 import TopActionBanner from "@/components/TopActionBanner";
 import AddToListModal from "@/components/AddToListModal";
@@ -14,7 +14,7 @@ import { auth, db } from "@/lib/firebase";
 import { TMDB_TV_ID_OFFSET, type ShowDetails } from "@/lib/tvmaze";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
-import { getLogsForUser, getTvEpisodeLabel, getVisibleLogNotes } from "@/lib/logs";
+import { addToWatchlist, getLogsForUser, getTvEpisodeLabel, getVisibleLogNotes, setWatchlistCountdown } from "@/lib/logs";
 import { signOut as authSignOut } from "@/lib/auth";
 import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
 import DivideScoreDisplay from "@/components/DivideScoreDisplay";
@@ -107,6 +107,9 @@ export default function TVShowPage() {
   const [reviewsEngagement, setReviewsEngagement] = useState<Record<string, LogEngagementSnapshot>>({});
   const [showAddToListModal, setShowAddToListModal] = useState(false);
   const [showLogMovieModal, setShowLogMovieModal] = useState(false);
+  const [watchlistState, setWatchlistState] = useState<"idle" | "saving" | "saved">("idle");
+  const [watchlistLogId, setWatchlistLogId] = useState<string | null>(null);
+  const [countdownState, setCountdownState] = useState<"idle" | "saving" | "shown">("idle");
   const [reactionBreakdown, setReactionBreakdown] = useState({ bad: 0, average: 0, good: 0, masterpiece: 0, total: 0 });
   const [userLogHistory, setUserLogHistory] = useState<MovieLog[]>([]);
   const [friendLogs, setFriendLogs] = useState<MovieLogWithContent[]>([]);
@@ -115,6 +118,19 @@ export default function TVShowPage() {
   const [activeDetailTab, setActiveDetailTab] = useState<TVDetailTab>("cast");
   const [showStats, setShowStats] = useState({ totalLogs: 0, totalWatched: 0 });
   const [resolvedShowPath, setResolvedShowPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!show?.id || !user?.id) return;
+    let cancelled = false;
+    void getLogsForUser(user.id).then((logs) => {
+      if (cancelled) return;
+      const existing = logs.find((log) => log.content_type === "tv" && log.content_id === show.id && log.watch_later);
+      setWatchlistLogId(existing?.id || null);
+      setCountdownState(existing?.countdown_date ? "shown" : "idle");
+      setWatchlistState(existing ? "saved" : "idle");
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [show?.id, user?.id]);
 
   const applyActivityPayload = (
     activity: {
@@ -392,6 +408,44 @@ export default function TVShowPage() {
     setShowAddToListModal(true);
   };
 
+  const handleTrackShow = async () => {
+    if (!user || !show) {
+      requireLoginForAction();
+      return;
+    }
+    if (watchlistState !== "idle") return;
+    setWatchlistState("saving");
+    try {
+      const trackedLog = await addToWatchlist(user.id, show.id, "tv", {
+        title: show.title || show.name,
+        poster_url: show.poster_url || null,
+        release_date: show.release_date || show.premiered || null,
+      });
+      setWatchlistLogId(trackedLog.id);
+      setCountdownState(trackedLog.countdown_date ? "shown" : "idle");
+      setWatchlistState("saved");
+    } catch (error) {
+      console.error("Could not add show to watchlist:", error);
+      setWatchlistState("idle");
+      setBannerMessage("Could not save this show. Try again.");
+    }
+  };
+
+  const handleToggleCountdown = async () => {
+    const releaseDate = show?.release_date || show?.premiered || "";
+    if (!watchlistLogId || !releaseDate) return;
+    const nextState = countdownState === "shown" ? "idle" : "shown";
+    setCountdownState("saving");
+    try {
+      await setWatchlistCountdown(watchlistLogId, nextState === "shown" ? releaseDate : null);
+      setCountdownState(nextState);
+    } catch (error) {
+      console.error("Could not update countdown:", error);
+      setCountdownState(countdownState === "shown" ? "shown" : "idle");
+      setBannerMessage("Could not update the countdown. Try again.");
+    }
+  };
+
   const handleShareShow = () => {
     if (!user || !show) {
       requireLoginForAction();
@@ -414,6 +468,8 @@ export default function TVShowPage() {
   const crewPeople = useMemo(() => show?.crew_details || [], [show]);
   const showBackdropUrl = show?.backdrop_url || show?.backdrop_gallery_urls?.[0] || show?.poster_url || null;
   const hasWideBackdrop = Boolean(show?.backdrop_url || show?.backdrop_gallery_urls?.length);
+  const showReleaseDate = show?.release_date || show?.premiered || null;
+  const isUpcomingShow = Boolean(showReleaseDate && showReleaseDate > new Date().toISOString().slice(0, 10));
   const showFacts = [
     { label: "First aired", value: formatReleaseDate(show?.release_date || show?.premiered) },
     { label: "Episode", value: formatRuntime(show?.runtime) },
@@ -584,6 +640,14 @@ export default function TVShowPage() {
                     <Plus className="h-4 w-4" strokeWidth={1.8} />
                     Add to List
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleTrackShow()}
+                    disabled={watchlistState !== "idle"}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/15 bg-[#171717] px-4 text-sm font-medium text-[#f5f0de] transition-colors hover:border-white/30 hover:bg-[#222] disabled:opacity-50"
+                  >
+                    {watchlistState === "saved" ? <><Check className="h-4 w-4" strokeWidth={1.8} /> {isUpcomingShow ? "Tracking" : "Saved"}</> : <><Bookmark className="h-4 w-4" strokeWidth={1.8} /> {watchlistState === "saving" ? "Saving" : isUpcomingShow ? "Track" : "Watchlist"}</>}
+                  </button>
                   <Link
                     href={showSeasonsHref}
                     className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/15 bg-[#171717] px-4 text-sm font-medium text-[#f5f0de] transition-colors hover:border-white/30 hover:bg-[#222]"
@@ -591,6 +655,15 @@ export default function TVShowPage() {
                     Seasons
                   </Link>
                 </div>
+
+                {isUpcomingShow && watchlistState === "saved" && watchlistLogId ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                    <p className="text-xs text-white/65">{countdownState === "shown" ? "Countdown is on your home screen." : "Show a countdown on your home screen?"}</p>
+                    <button type="button" onClick={() => void handleToggleCountdown()} disabled={countdownState === "saving"} className="text-xs font-bold text-[#ff9b52] transition hover:text-[#ffc18f] disabled:opacity-50">
+                      {countdownState === "saving" ? "Saving…" : countdownState === "shown" ? "Remove countdown" : "Show countdown"}
+                    </button>
+                  </div>
+                ) : null}
 
                 {show.overview && (
                   <div className="mt-8">

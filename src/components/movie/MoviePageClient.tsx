@@ -13,7 +13,7 @@ import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { signOut as authSignOut } from "@/lib/auth";
-import { addToWatchlist, getLogsForUser, getVisibleLogNotes } from "@/lib/logs";
+import { addToWatchlist, getLogsForUser, getVisibleLogNotes, setWatchlistCountdown } from "@/lib/logs";
 import { buildLogUrl } from "@/lib/log-url";
 import { setPendingLoadingTitle } from "@/lib/loading-title";
 import { fetchContentActivity, type ContentActivityLog } from "@/lib/content-activity";
@@ -163,6 +163,8 @@ export default function MoviePage({ initialResolved }: {
   const [activeDetailTab, setActiveDetailTab] = useState<MovieDetailTab>("cast");
   const [showAllCast, setShowAllCast] = useState(false);
   const [watchlistState, setWatchlistState] = useState<"idle" | "saving" | "saved">("idle");
+  const [watchlistLogId, setWatchlistLogId] = useState<string | null>(null);
+  const [countdownState, setCountdownState] = useState<"idle" | "saving" | "shown">("idle");
   const [resolvedMoviePath, setResolvedMoviePath] = useState<string | null>(null);
 
   const applyActivityPayload = (
@@ -385,8 +387,10 @@ export default function MoviePage({ initialResolved }: {
     let cancelled = false;
     void getLogsForUser(watchlistUserId).then((logs) => {
       if (cancelled) return;
-      const exists = logs.some((log) => log.content_type === "movie" && log.content_id === watchlistMovieId && log.watch_later);
-      setWatchlistState((current) => current === "saving" ? current : exists ? "saved" : "idle");
+      const existing = logs.find((log) => log.content_type === "movie" && log.content_id === watchlistMovieId && log.watch_later);
+      setWatchlistLogId(existing?.id || null);
+      setCountdownState(existing?.countdown_date ? "shown" : "idle");
+      setWatchlistState((current) => current === "saving" ? current : existing ? "saved" : "idle");
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [watchlistMovieId, watchlistUserId]);
@@ -463,16 +467,32 @@ export default function MoviePage({ initialResolved }: {
     if (watchlistState !== "idle") return;
     setWatchlistState("saving");
     try {
-      await addToWatchlist(user.id, movie.id, "movie", {
+      const trackedLog = await addToWatchlist(user.id, movie.id, "movie", {
         title: movie.title,
         poster_url: movie.poster_url,
         release_date: movie.release_date,
       });
+      setWatchlistLogId(trackedLog.id);
+      setCountdownState(trackedLog.countdown_date ? "shown" : "idle");
       setWatchlistState("saved");
     } catch (error) {
       console.error("Could not add movie to watchlist:", error);
       setWatchlistState("idle");
       setBannerMessage("Could not save this movie. Try again.");
+    }
+  };
+
+  const handleToggleCountdown = async () => {
+    if (!watchlistLogId || !movie?.release_date) return;
+    const nextState = countdownState === "shown" ? "idle" : "shown";
+    setCountdownState("saving");
+    try {
+      await setWatchlistCountdown(watchlistLogId, nextState === "shown" ? movie.release_date : null);
+      setCountdownState(nextState);
+    } catch (error) {
+      console.error("Could not update countdown:", error);
+      setCountdownState(countdownState === "shown" ? "shown" : "idle");
+      setBannerMessage("Could not update the countdown. Try again.");
     }
   };
 
@@ -710,6 +730,14 @@ export default function MoviePage({ initialResolved }: {
                   </button>
                 </div>
                 {isUpcomingMovie ? <p className="mt-2 text-xs text-white/45">Track it for a release reminder and save it to your Watchlist.</p> : null}
+                {isUpcomingMovie && watchlistState === "saved" && watchlistLogId ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                    <p className="text-xs text-white/65">{countdownState === "shown" ? "Countdown is on your home screen." : "Show a countdown on your home screen?"}</p>
+                    <button type="button" onClick={() => void handleToggleCountdown()} disabled={countdownState === "saving"} className="text-xs font-bold text-[#ff9b52] transition hover:text-[#ffc18f] disabled:opacity-50">
+                      {countdownState === "saving" ? "Saving…" : countdownState === "shown" ? "Remove countdown" : "Show countdown"}
+                    </button>
+                  </div>
+                ) : null}
 
                 {movie.overview && (
                   <div className="mt-8">
