@@ -76,17 +76,17 @@ function RatingDistribution({ stats, onStatClick }: { stats: DetailedUserStats; 
 function TopGenres({ items, onItemClick }: { items: StatDistributionItem[]; onItemClick?: (value: string) => void }) {
   const top = items.slice(0, 5);
   return <div className={`${CARD} ${SURFACE.orange} col-span-2 flex min-h-64 flex-col p-3 sm:min-h-72 sm:p-7`}>
-    <h3 className="text-lg font-black tracking-tight text-[#0e0d0b] sm:text-2xl">Top genres</h3>
+    <h3 className="text-base font-black tracking-tight text-[#0e0d0b] sm:text-xl">Top genres</h3>
     {top.length ? <div className="mt-5 flex flex-1 items-center">
       <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-2 sm:gap-8">
         <button type="button" onClick={onItemClick ? () => onItemClick(top[0].label) : undefined} className="min-w-0 text-left focus-visible:outline-2 focus-visible:outline-[#c45b2a]">
-          <span className="block break-words text-2xl font-black leading-tight text-[#0e0d0b] sm:text-4xl">{top[0].label}</span>
-          <span className="mt-2 block text-4xl font-black leading-none tracking-normal text-[#0e0d0b] sm:text-6xl">{top[0].percentage}%</span>
+          <span className="block break-words text-xl font-black leading-tight text-[#0e0d0b] sm:text-3xl">{top[0].label}</span>
+          <span className="mt-2 block text-3xl font-black leading-none tracking-normal text-[#0e0d0b] sm:text-5xl">{top[0].percentage}%</span>
         </button>
         <div className="space-y-2 sm:space-y-3">
           {top.slice(1).map((item) => <button key={item.label} type="button" onClick={onItemClick ? () => onItemClick(item.label) : undefined} className="flex w-full items-center justify-between gap-1 text-left focus-visible:outline-2 focus-visible:outline-[#c45b2a] sm:gap-3">
-            <span className="min-w-0 break-words text-[11px] font-bold leading-tight text-[#0e0d0b]/85 sm:text-lg">{item.label}</span>
-            <span className="shrink-0 text-base font-bold leading-none tracking-normal text-[#0e0d0b] sm:text-3xl">{item.percentage}%</span>
+            <span className="min-w-0 break-words text-[10px] font-bold leading-tight text-[#0e0d0b]/85 sm:text-base">{item.label}</span>
+            <span className="shrink-0 text-sm font-bold leading-none tracking-normal text-[#0e0d0b] sm:text-2xl">{item.percentage}%</span>
           </button>)}
         </div>
       </div>
@@ -97,8 +97,8 @@ function TopGenres({ items, onItemClick }: { items: StatDistributionItem[]; onIt
 function SmallMetric({ label, value, tone }: { label: string; value: string | number; tone: StatsTone }) {
   const isLight = tone === "orange" || tone === "cream";
   return <div className={`${CARD} ${SURFACE[tone]} flex min-h-32 flex-col items-center justify-center p-3 text-center sm:p-5`}>
-    <p className={isLight ? "text-[10px] font-black uppercase tracking-[0.2em] text-[#0e0d0b]/60 sm:text-xs" : LABEL}>{label}</p>
-    <p className={`mt-3 text-2xl font-black leading-none tracking-normal sm:text-4xl ${isLight ? "text-[#0e0d0b]" : "text-[#d46b35]"}`}>{value}</p>
+    <p className={`text-[9px] font-black uppercase tracking-[0.14em] sm:text-[10px] sm:tracking-[0.18em] ${isLight ? "text-[#0e0d0b]/60" : "text-[#f5f0de]/50"}`}>{label}</p>
+    <p className={`mt-3 text-3xl font-black leading-none tracking-[0.08em] sm:text-5xl ${isLight ? "text-[#0e0d0b]" : "text-[#d46b35]"}`}>{value}</p>
   </div>;
 }
 
@@ -224,7 +224,7 @@ export default function StatsInsights({ stats, onStatClick, onTasteClick, filter
   const watchTime = stats.runtimeCoverage
     ? `${formatWatchDuration(stats.estimatedWatchTimeMinutes)}${stats.runtimeCoverage < stats.watchedCount ? "+" : ""}`
     : "—";
-  return <section className={`${styles.storyFont} mb-10 rounded-2xl bg-[#0e0d0b] px-3 py-4 sm:px-5 sm:py-6`} aria-labelledby="profile-stats-heading">
+  return <section className={`${styles.screenStory} mb-10 rounded-2xl bg-[#0e0d0b] px-3 py-4 sm:px-5 sm:py-6`} aria-labelledby="profile-stats-heading">
     <div className="mb-5 flex items-center justify-between gap-3"><h2 id="profile-stats-heading" className="text-xl font-black tracking-[-0.04em] text-[#f5f0de] sm:text-2xl">Your screen story</h2>{filterAction}</div>
     <div className="grid grid-cols-3 gap-2 sm:gap-4">
       <MetricCard label="Total logs" value={stats.totalLogged} tone="carbon" onClick={onStatClick ? () => onStatClick("all") : undefined} />

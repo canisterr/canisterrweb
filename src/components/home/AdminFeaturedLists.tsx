@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from "react";
 import Image from "@/components/AppImage";
 import Link from "next/link";
 import type { FeaturedList } from "@/lib/featured-lists";
@@ -25,6 +26,9 @@ export default function AdminFeaturedLists() {
   const [lists, setLists] = useState<FeaturedList[]>([]);
   const [movieStills, setMovieStills] = useState<Record<number, string>>({});
   const [activeIndex, setActiveIndex] = useState(0);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const lastWheelChange = useRef(0);
+  const suppressSwipeClick = useRef(false);
   useEffect(() => {
     let cancelled = false;
     void loadFeaturedLists().then((next) => {
@@ -56,11 +60,37 @@ export default function AdminFeaturedLists() {
 
   useEffect(() => {
     if (lists.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(() => {
+    const timer = window.setTimeout(() => {
       if (!document.hidden) setActiveIndex((current) => (current + 1) % lists.length);
     }, 20_000);
-    return () => window.clearInterval(timer);
-  }, [lists.length]);
+    return () => window.clearTimeout(timer);
+  }, [lists.length, activeIndex]);
+
+  const moveList = (direction: number) => {
+    if (lists.length < 2) return;
+    setActiveIndex((current) => (current + direction + lists.length) % lists.length);
+  };
+
+  const handleTouchEnd = (event: ReactTouchEvent<HTMLElement>) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start) return;
+    const dx = event.changedTouches[0].clientX - start.x;
+    const dy = event.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
+    moveList(dx < 0 ? 1 : -1);
+    suppressSwipeClick.current = true;
+    window.setTimeout(() => { suppressSwipeClick.current = false; }, 400);
+  };
+
+  const handleWheel = (event: ReactWheelEvent<HTMLElement>) => {
+    if (lists.length < 2) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    const now = Date.now();
+    if (Math.abs(delta) < 8 || now - lastWheelChange.current < 650) return;
+    lastWheelChange.current = now;
+    moveList(delta > 0 ? 1 : -1);
+  };
 
   if (!lists.length) return null;
   const list = lists[activeIndex % lists.length];
@@ -81,9 +111,10 @@ export default function AdminFeaturedLists() {
           <div className="grid grid-cols-3 gap-1.5 bg-black">
           {covers.map((item) => {
             const still = item.media_type === "movie" ? movieStills[item.media_id] : undefined;
-            const image = item.frame_url || still || item.poster_url;
+            const frame = item.frame_url || still;
+            const image = frame || item.poster_url;
             return <Link key={`${item.media_type}:${item.media_id}`} href={listHref} prefetch={false} aria-label={`Open ${featured.title}`} className="group/still relative aspect-video min-w-0 overflow-hidden bg-[#1a1917]">
-              {image ? <Image src={image} alt={item.title} fill sizes="250px" className="object-cover transition duration-300 group-hover/still:scale-[1.04]"/> : <span className="grid h-full place-items-center p-2 text-center text-xs text-white/50">{item.title}</span>}
+              {image ? <Image src={image} alt={item.title} fill sizes="250px" className={frame ? "object-cover transition duration-300 group-hover/still:scale-[1.04]" : "object-contain"}/> : <span className="grid h-full place-items-center p-2 text-center text-xs text-white/50">{item.title}</span>}
             </Link>;
           })}
           {Array.from({ length: Math.max(0, 3 - covers.length) }, (_, index) => <div key={`empty-${index}`} className="aspect-video bg-[#171614]" />)}
@@ -93,7 +124,7 @@ export default function AdminFeaturedLists() {
       </div>
     </article>;
   };
-  return <section className="mb-5" aria-label="Featured lists">
+  return <section className="mb-5" aria-label="Featured lists" onTouchStart={(event) => { touchStart.current = { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY }; }} onTouchEnd={handleTouchEnd} onWheel={handleWheel} onClickCapture={(event) => { if (suppressSwipeClick.current) { event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false; } }}>
     {list && renderList(list)}
     {lists.length > 1 && <nav className="mt-2 flex items-center justify-center gap-2" aria-label="Choose a featured list">
       {lists.map((item, index) => <button key={item.id} type="button" onClick={() => setActiveIndex(index)} aria-label={`Show list ${index + 1}: ${item.title}`} aria-current={activeIndex === index ? "true" : undefined} className={`h-1.5 rounded-full transition-all duration-300 ${activeIndex === index ? "w-5 bg-[#ff7a1a]" : "w-1.5 bg-white/30 hover:bg-white/60"}`} />)}

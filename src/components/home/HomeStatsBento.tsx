@@ -199,7 +199,7 @@ function StatCard({ label, value, href }: { label: string; value: number | strin
   return (
     <Link href={href} className="group flex h-24 flex-col items-center justify-center p-2 text-center transition-colors hover:text-[#c45b2a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c45b2a] sm:h-28 sm:p-3 lg:h-32">
       <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#f5f0de]/45 sm:text-[10px] sm:tracking-[0.18em]">{label}</p>
-      <p className={`mt-2 text-3xl font-black leading-none tracking-[0.08em] transition-colors sm:mt-3 sm:text-5xl ${isAccent ? "text-[#d46b35] group-hover:text-[#f5f0de]" : "text-[#f5f0de] group-hover:text-[#d46b35]"}`}>{value}</p>
+      <p className={`mt-2 text-2xl font-black leading-none tracking-[0.08em] transition-colors sm:mt-3 sm:text-4xl ${isAccent ? "text-[#d46b35] group-hover:text-[#f5f0de]" : "text-[#f5f0de] group-hover:text-[#d46b35]"}`}>{value}</p>
     </Link>
   );
 }
@@ -385,7 +385,7 @@ export default function HomeStatsBento({ user, logs }: { user: User; logs: Movie
   );
 
   return (
-    <section className={`${styles.storyFont} mb-10`} aria-labelledby="home-stats-heading">
+    <section className={`${styles.screenStory} mb-10`} aria-labelledby="home-stats-heading">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <h2 id="home-stats-heading" className="text-xl font-black tracking-[-0.04em] text-[#f5f0de] sm:text-2xl">Your screen story</h2>
@@ -398,17 +398,19 @@ export default function HomeStatsBento({ user, logs }: { user: User; logs: Movie
           <div className="relative m-4 aspect-[2/3] w-24 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-white/5 shadow-2xl sm:m-5 sm:w-32">
             {recent?.posterUrl ? <Image src={recent.posterUrl} alt="" fill sizes="128px" className="object-cover" placeholder="blur" blurDataURL={getBlurDataUrl()} /> : <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-widest text-white">No poster</span>}
           </div>
-          <div className="relative flex min-w-0 flex-1 flex-col justify-between gap-3 py-6 pl-4 pr-4 sm:pl-6 sm:pr-8">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-white">Recently watched</p>
-            <h3 className="break-words text-2xl font-black leading-tight tracking-normal text-white sm:text-5xl">{logs === null ? "Loading your diary…" : recent?.title || (recent ? "Your latest log" : "Your next watch starts here")}</h3>
+          <div className="relative flex min-w-0 flex-1 flex-col justify-between gap-4 py-5 pl-4 pr-4 sm:py-6 sm:pl-6 sm:pr-8">
+            <div className="flex min-w-0 flex-col items-start gap-2">
+              <p className={styles.recentEyebrow}>Recently watched</p>
+              <div className="mt-3 flex w-full flex-col items-start gap-2 sm:mt-4">
+                <h3 className={`${styles.recentTitle} break-words text-white`}>{logs === null ? "Loading your diary…" : recent?.title || (recent ? "Your latest log" : "Your next watch starts here")}</h3>
+                {recent && <p className={styles.recentMeta}>{recent.log.content_type === "tv" ? "TV show" : "Movie"}{recent.releaseYear ? ` · ${recent.releaseYear}` : ""}</p>}
+              </div>
+            </div>
             {recent ? (
-              <>
-                <p className="text-base font-semibold text-white">{recent.log.content_type === "tv" ? "TV show" : "Movie"}{recent.releaseYear ? ` · ${recent.releaseYear}` : ""}</p>
-                <div className="flex flex-wrap items-center gap-2 text-base leading-none text-white sm:gap-3 sm:text-lg">
-                  {verdict ? <span className="relative -left-2 inline-flex h-10 items-center justify-center rounded-full border border-white/30 bg-white/10 px-3.5 font-bold leading-none text-white">{verdict}</span> : null}
-                  <span className="inline-flex h-10 items-center font-semibold leading-none">{recentDate}</span>
-                </div>
-              </>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                {verdict ? <span className={styles.recentBadge}>{verdict}</span> : null}
+                <span className={styles.recentDate}>{recentDate}</span>
+              </div>
             ) : <p className="text-sm text-white">Log a movie or show to begin your story.</p>}
           </div>
         </Link>
@@ -423,17 +425,17 @@ export default function HomeStatsBento({ user, logs }: { user: User; logs: Movie
         <div className="contents">
           {topGenres.length > 0 && (
           <div className={`${CARD} ${SURFACE.orange} col-span-2 row-span-2 flex min-h-0 flex-col p-3 sm:p-7`}>
-            <h3 className="text-lg font-black tracking-tight text-[#0e0d0b] sm:text-2xl">Top genres</h3>
+            <h3 className="text-sm font-black tracking-tight text-[#0e0d0b] sm:text-lg">Top genres</h3>
               <div className="mt-5 flex flex-1 flex-col justify-center">
                 <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-2 sm:gap-8">
                   <div className="min-w-0 text-left">
-                    <p className="break-words text-3xl font-black leading-tight tracking-[-0.04em] text-[#0e0d0b] sm:text-5xl">{topGenres[0][0]}</p>
-                    <p className="mt-2 text-5xl font-black leading-none tracking-[-0.04em] text-[#0e0d0b] sm:text-7xl">{Math.round(topGenres[0][1] / genreTotal * 100)}<span className="text-[0.62em]">%</span></p>
+                    <p className="break-words text-2xl font-black leading-tight tracking-[-0.04em] text-[#0e0d0b] sm:text-4xl">{topGenres[0][0]}</p>
+                    <p className="mt-2 text-4xl font-black leading-none tracking-[-0.04em] text-[#0e0d0b] sm:text-6xl">{Math.round(topGenres[0][1] / genreTotal * 100)}<span className="text-[0.62em]">%</span></p>
                   </div>
                   <div className="space-y-3 border-l border-[#0e0d0b]/20 pl-3 sm:space-y-5 sm:pl-6">
                     {topGenres.slice(1).map(([genre, count]) => <div key={genre} className="flex items-center justify-between gap-1 sm:gap-3">
-                      <span className="min-w-0 truncate text-sm font-bold text-[#0e0d0b]/85 sm:text-xl">{genre}</span>
-                      <span className="shrink-0 text-xl font-black tabular-nums text-[#0e0d0b] sm:text-3xl">{Math.round(count / genreTotal * 100)}%</span>
+                      <span className="min-w-0 truncate text-xs font-bold text-[#0e0d0b]/85 sm:text-lg">{genre}</span>
+                      <span className="shrink-0 text-lg font-black tabular-nums text-[#0e0d0b] sm:text-2xl">{Math.round(count / genreTotal * 100)}%</span>
                     </div>)}
                   </div>
                 </div>
@@ -443,14 +445,14 @@ export default function HomeStatsBento({ user, logs }: { user: User; logs: Movie
           <div className="contents">
             {runtimeCoverage > 0 && (
             <div className={`${CARD} ${SURFACE.charcoal} flex min-h-32 flex-col items-center justify-center p-2 text-center sm:p-4`}>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#f5f0de]/55">Watch time</p>
-              <p className="mt-3 text-2xl font-black tracking-[0.06em] text-[#f5f0de] sm:text-4xl">{watchHours}{watchTimeIsPartial ? "+" : ""}<span className="ml-2 text-[10px] tracking-normal text-[#f5f0de]/45 sm:text-base">hrs</span></p>
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#f5f0de]/55 sm:text-[10px] sm:tracking-[0.18em]">Watch time</p>
+              <p className="mt-3 text-xl font-black leading-none tracking-normal text-[#f5f0de] sm:text-3xl">{watchHours}{watchTimeIsPartial ? "+" : ""}<span className="ml-1 text-[9px] tracking-normal text-[#f5f0de]/45 sm:text-[10px]">hrs</span></p>
               <p className="mt-2 text-[10px] text-[#f5f0de]/45 sm:text-xs">{watchTimeIsPartial ? "At least" : "About"} {watchDays} days</p>
             </div>
             )}
             <div className={`${CARD} ${SURFACE.cream} flex min-h-32 flex-col items-center justify-center gap-3 p-2 text-center sm:gap-4 sm:p-4`}>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#0e0d0b]/60 sm:text-sm">Rewatches</p>
-              <p className="text-4xl font-black leading-none tracking-[0.04em] text-[#0e0d0b] sm:text-6xl">{rewatchCount}</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#0e0d0b]/60 sm:text-[10px] sm:tracking-[0.18em]">Rewatches</p>
+              <p className="text-xl font-black leading-none tracking-normal text-[#0e0d0b] sm:text-3xl">{rewatchCount}</p>
             </div>
           </div>
         </div>
@@ -462,7 +464,7 @@ export default function HomeStatsBento({ user, logs }: { user: User; logs: Movie
             <p className="relative z-10 text-[10px] font-black uppercase tracking-[0.22em] text-white">Most watched film</p>
           </button>}
           {topCountries.length > 0 && <Link href="/passport" className={`${CARD} ${SURFACE.charcoal} group col-span-2 flex min-h-48 flex-col items-center justify-center p-2 text-center transition hover:border-[#c45b2a]/60 focus-visible:outline-2 focus-visible:outline-[#c45b2a] sm:p-6 lg:min-h-0`}>
-            <h3 className="text-xl font-black leading-tight tracking-[-0.04em] text-[#f5f0de] sm:text-3xl">Your most watched countries</h3>
+            <h3 className="text-lg font-black leading-tight tracking-[-0.04em] text-[#f5f0de] sm:text-2xl">Most watched countries</h3>
             <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#d46b35] sm:text-xs">Explore your Cine Passport →</p>
               <div className="mt-4 flex w-full max-w-xl justify-center sm:mt-6">
                 {topCountries.map(([country, count]) => {
